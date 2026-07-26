@@ -34,3 +34,6 @@ Thumbs.db
 
 # Docker
 *.pid
+
+# Claude Code local state
+.claude/
