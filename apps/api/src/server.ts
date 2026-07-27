@@ -1,4 +1,5 @@
 import { ConfigError, loadConfig } from "@verixa/config";
+import { createLogger } from "@verixa/shared-kernel";
 
 import { buildApp } from "./app.js";
 
@@ -16,7 +17,8 @@ try {
   throw error;
 }
 
-const app = buildApp();
+const logger = createLogger({ name: "verixa-api", level: config.LOG_LEVEL });
+const app = buildApp(logger);
 
 app.listen({ port: config.PORT, host: config.HOST }).catch((error: unknown) => {
   app.log.error(error);
