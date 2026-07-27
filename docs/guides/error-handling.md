@@ -15,9 +15,7 @@ operation and the caller is supposed to handle it.
 `Result<T, E>` puts that failure back in the signature:
 
 ```ts
-function registerUser(
-  input: RegisterUserInput,
-): Result<User, DuplicateEmailError | ValidationError>;
+function registerUser(input: RegisterUserInput): Result<User, ConflictError | ValidationError>;
 ```
 
 Now the compiler forces the caller to deal with both outcomes — there's no
@@ -56,6 +54,46 @@ exceptions everywhere:
 The rule of thumb: if you'd write a paragraph in the API docs explaining
 "this can fail if...", it's a `Result`. If it would only ever happen because
 of a bug, it's a thrown error.
+
+## The `E` in `Result<T, E>`: the domain error hierarchy
+
+`packages/shared-kernel/domain/errors.ts` defines the base `E` types every
+use case's `Result` should use instead of ad hoc error shapes:
+
+```ts
+abstract class DomainError extends Error {
+  abstract readonly code: string; // stable, machine-readable
+  abstract readonly httpStatusHint: number; // what the interface layer should map to
+}
+
+class ValidationError extends DomainError; // code: "VALIDATION_ERROR", 400
+class NotFoundError extends DomainError; // code: "NOT_FOUND", 404
+class ConflictError extends DomainError; // code: "CONFLICT", 409
+```
+
+### Why a `code`, not just a `message`
+
+`message` is for humans reading logs — it can change wording at any time
+without breaking anything. `code` is a contract: client code branches on it
+(`if (error.code === "CONFLICT")`), and it's what gets translated for
+internationalized user-facing text instead of hardcoding English strings into
+comparisons. Changing a `message` should never be a breaking change; changing
+a `code` should be treated like changing an API response field, because
+somewhere a client is almost certainly matching on it.
+
+`httpStatusHint` exists so the interface layer (Phase 12) doesn't need a
+switch statement mapping error classes to status codes — the error already
+knows the _right default_, even though a specific route can still override it
+for a case with different semantics.
+
+### Serialization
+
+`DomainError` overrides `toJSON()` because `Error.prototype.message` is a
+non-enumerable own property in V8 — `JSON.stringify(new Error("x"))` produces
+`{}`, not `{"message":"x"}`, which is a common surprise the first time
+someone logs a raw error object and finds nothing useful in it. Every
+`DomainError` instead serializes predictably to `{ code, message,
+httpStatusHint, ...subclass-specific fields }`.
 
 ## API
 
