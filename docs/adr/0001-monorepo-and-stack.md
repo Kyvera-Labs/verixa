@@ -31,8 +31,7 @@ API, while staying approachable for contributors learning backend engineering.
 
 - Contributors need Node.js + pnpm locally; no other prerequisite for the
   foundational scaffold.
-- Package boundaries are enforced by workspace structure and (starting Phase
-  02) lint rules against deep imports — internal layering discipline is a
+- Package boundaries are enforced by workspace structure and (starting Phase 02) lint rules against deep imports — internal layering discipline is a
   first-class concern, not an afterthought.
 - A modular monolith is easier to reason about for newcomers than
   microservices, while the package boundaries keep the door open to extracting

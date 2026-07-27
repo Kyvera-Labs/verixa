@@ -1,5 +1,6 @@
-import { describe, expect, it, afterAll } from "vitest";
 import supertest from "supertest";
+import { describe, expect, it, afterAll } from "vitest";
+
 import { buildApp } from "./app.js";
 
 describe("GET /health", () => {

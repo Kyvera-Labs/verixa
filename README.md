@@ -64,7 +64,12 @@ Other useful commands, run from the repo root:
 pnpm build       # build all workspace packages
 pnpm typecheck   # typecheck all workspace packages
 pnpm test        # run all unit/integration tests
+pnpm lint        # lint the whole workspace
+pnpm format      # auto-fix formatting with Prettier
 ```
+
+See [`docs/guides/code-style.md`](docs/guides/code-style.md) for what the
+linter checks and why.
 
 ## Contributing
 
