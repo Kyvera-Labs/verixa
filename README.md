@@ -74,9 +74,10 @@ linter checks and why.
 ## Contributing
 
 Verixa isn't yet open for external contribution — the initial architecture and
-foundational tooling are still being laid down. A `CONTRIBUTING.md`,
-`CODE_OF_CONDUCT.md`, and issue/PR templates will land as part of the roadmap
-before the project accepts outside contributions.
+foundational tooling are still being laid down. See
+[`CONTRIBUTING.md`](CONTRIBUTING.md) for the local developer workflow so far.
+A `CODE_OF_CONDUCT.md` and issue/PR templates will land as part of the
+roadmap before the project accepts outside contributions.
 
 ## License
 
