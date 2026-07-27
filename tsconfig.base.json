@@ -15,10 +15,6 @@
     "declarationMap": true,
     "sourceMap": true,
     "isolatedModules": true,
-    "resolveJsonModule": true,
-    "baseUrl": ".",
-    "paths": {
-      "@verixa/*": ["packages/*/index.ts"]
-    }
+    "resolveJsonModule": true
   }
 }

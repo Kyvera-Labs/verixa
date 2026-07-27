@@ -45,14 +45,41 @@ strict.
   patterns (like re-exporting a `const enum`) that only work with full
   program knowledge.
 
-## Path aliases
+## Cross-package imports: plain package resolution, not `paths`
 
-`tsconfig.base.json` declares `@verixa/*` → `packages/*/index.ts`, so once a
-bounded-context package exists under `packages/<context>/`, other packages
-import its curated public surface as `@verixa/<context>` rather than a
-relative path reaching across the monorepo. This also gives the
-deep-import-prevention ESLint rule (introduced in Phase 02) a clean pattern to
-enforce against.
+One package imports another's curated public surface as `@verixa/<context>`
+(e.g. `import { loadConfig } from "@verixa/config"`), but there is
+deliberately **no custom `paths` mapping** for this in `tsconfig.base.json`.
+It resolves through the ordinary mechanism: pnpm symlinks each workspace
+package into every other package's `node_modules`, and TypeScript (like
+Node at runtime) reads that package's `package.json` `main`/`types` fields —
+currently `dist/index.js` / `dist/index.d.ts`.
+
+An earlier version of this config _did_ add
+`"paths": { "@verixa/*": ["packages/*/index.ts"] }` to get free cross-package
+imports without a build step. It was reverted after Issue 007 hit two real
+problems with it:
+
+1. **`paths` redirects module resolution to the raw `.ts` source file**,
+   which TypeScript then includes directly in the importing project's
+   compilation unit. That source file lives outside the importing package's
+   `rootDir`, which TypeScript rejects (`TS6059: File is not under 'rootDir'`)
+   the moment a package actually imports another one.
+2. Even if that were worked around, type-checking against a dependency's
+   _source_ while Node loads its _built output_ at runtime is a real
+   footgun: the two can silently diverge (a source-only fix that hasn't been
+   built yet looks "correct" to the type checker but isn't what actually
+   runs).
+
+The upshot: a package must be built (`pnpm --filter <dependency> run build`,
+or `pnpm build` for everything) before something that imports it will
+typecheck or run. `pnpm -r run build`/`typecheck` already do this in the
+right order automatically — pnpm's recursive runner topologically sorts by
+workspace dependency, so a dependency's script always runs before its
+dependents'. The root `dev` script does the same explicitly
+(`pnpm --filter @verixa/api^... run build`, i.e. "build api's dependencies,
+but not api itself" — api runs via `tsx`, which doesn't need a build step for
+its own code) before starting the watcher.
 
 ## Per-package configuration
 
@@ -66,8 +93,3 @@ Each package's `tsconfig.json` extends the root config and only overrides
   "include": ["src"]
 }
 ```
-
-Note that relative paths inside `paths` in the base config resolve relative
-to the base config's own directory (the repo root), not the extending
-package's directory — this is what lets one `paths` map work for every
-package without duplication.
