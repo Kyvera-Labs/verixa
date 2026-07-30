@@ -5,7 +5,7 @@
   "description": "Open-source infrastructure for authentication, authorization, identity, verification, audit logging, security, and governance.",
   "license": "MIT",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.13"
   },
   "packageManager": "pnpm@11.17.0",
   "scripts": {

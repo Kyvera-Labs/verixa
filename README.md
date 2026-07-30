@@ -41,8 +41,8 @@ verixa/
 
 ## Prerequisites
 
-- [Node.js](https://nodejs.org/) 20 or later
-- [pnpm](https://pnpm.io/) 9 or later (`npm install -g pnpm`)
+- [Node.js](https://nodejs.org/) 22.13 or later (required by pnpm 11)
+- [pnpm](https://pnpm.io/) 11 or later (`npm install -g pnpm`)
 
 ## Quickstart
 
