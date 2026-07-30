@@ -72,11 +72,29 @@ problems with it:
    runs).
 
 The upshot: a package must be built (`pnpm --filter <dependency> run build`,
-or `pnpm build` for everything) before something that imports it will
-typecheck or run. `pnpm -r run build`/`typecheck` already do this in the
-right order automatically — pnpm's recursive runner topologically sorts by
-workspace dependency, so a dependency's script always runs before its
-dependents'. The root `dev` script does the same explicitly
+or `pnpm build` for everything) before something that imports it will **run**
+— Node needs the real `dist/index.js` at the `main`/`types` path, full stop.
+
+Interestingly, `tsc --noEmit` (i.e. `typecheck`) turns out to tolerate a
+missing build: when a dependency's declared `main`/`types` target doesn't
+exist on disk yet, TypeScript's `NodeNext` resolution falls back to the
+package root's `index.ts` (the same directory-index fallback Node itself
+uses when a package's declared entry file is missing), and — because that
+fallback-resolved file isn't part of the _importing_ package's own
+`include`/rootDir, TypeScript type-checks it without trying to emit it, so
+the rootDir violation from before doesn't recur. **Don't rely on this** — it's
+an implementation detail of how missing-file resolution happens to behave,
+not a documented guarantee, and it doesn't help `build` (which still needs
+real declaration files to consume) or `test` (Vitest doesn't transform
+`node_modules` packages, so a test importing an unbuilt dependency fails with
+`ERR_MODULE_NOT_FOUND` at runtime, immediately). Always build dependencies
+first regardless.
+
+`pnpm -r run build`/`typecheck`/`test` already do this in the right order
+automatically — pnpm's recursive runner topologically sorts by workspace
+dependency, so a dependency's script always runs before its dependents'
+(and CI runs `build` before `typecheck`/`test` explicitly — see
+`docs/guides/ci-cd.md`). The root `dev` script does the same explicitly
 (`pnpm --filter @verixa/api^... run build`, i.e. "build api's dependencies,
 but not api itself" — api runs via `tsx`, which doesn't need a build step for
 its own code) before starting the watcher.
