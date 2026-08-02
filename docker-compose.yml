@@ -1,0 +1,81 @@
+# Local development stack: apps/api + Postgres + Redis, with source mounted
+# for hot-reload. This is deliberately NOT built from apps/api/Dockerfile —
+# that image is a slim, non-root *production* artifact with no source and no
+# dev tooling, which makes hot-reload impossible. Dev and prod share the same
+# base image and package manager, but not the same container shape; see
+# docs/guides/docker.md for why that's still "dev/prod parity" and not a
+# contradiction of it.
+#
+# Postgres and Redis aren't used by application code yet (they're wired up
+# starting Phase 03 and Phase 05 of the roadmap) — for now this validates
+# that all three containers start, stay healthy, and can reach each other.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: verixa
+      POSTGRES_PASSWORD: verixa
+      POSTGRES_DB: verixa
+    ports:
+      - "5432:5432"
+    volumes:
+      - verixa-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U verixa -d verixa"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - verixa-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    image: node:22-alpine
+    working_dir: /repo
+    command: >
+      sh -c "corepack enable &&
+             pnpm install --frozen-lockfile &&
+             pnpm --filter @verixa/api^... run build &&
+             pnpm --filter @verixa/api run dev"
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      HOST: 0.0.0.0
+      LOG_LEVEL: info
+      DATABASE_URL: postgres://verixa:verixa@postgres:5432/verixa
+      REDIS_URL: redis://redis:6379
+    volumes:
+      - .:/repo
+      # Named volumes for every node_modules directory in the workspace:
+      # node_modules must not be the host bind mount (Linux-built native
+      # binaries like esbuild are not portable to/from a Windows or macOS
+      # host, and bind-mounted node_modules I/O is painfully slow on both).
+      - verixa-node-modules:/repo/node_modules
+      - verixa-api-node-modules:/repo/apps/api/node_modules
+      - verixa-config-node-modules:/repo/packages/config/node_modules
+      - verixa-shared-kernel-node-modules:/repo/packages/shared-kernel/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  verixa-postgres-data:
+  verixa-redis-data:
+  verixa-node-modules:
+  verixa-api-node-modules:
+  verixa-config-node-modules:
+  verixa-shared-kernel-node-modules:

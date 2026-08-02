@@ -58,6 +58,17 @@ curl http://localhost:3000/health
 # {"status":"ok"}
 ```
 
+Prefer one command and don't want Node/pnpm installed locally at all? Run the
+full stack (API + Postgres + Redis) in Docker instead:
+
+```bash
+docker compose up
+```
+
+See [`docs/guides/docker.md`](docs/guides/docker.md) for details, including
+the production image (`apps/api/Dockerfile`), which is a separate,
+intentionally different thing from the dev compose stack.
+
 Other useful commands, run from the repo root:
 
 ```bash
