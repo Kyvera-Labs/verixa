@@ -35,3 +35,39 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -f apps/api/Dockerfile -t verixa-api:ci .
+
+      - name: Run container
+        run: docker run -d --name verixa-api -p 3000:3000 verixa-api:ci
+
+      - name: Wait for /health
+        run: |
+          for _ in $(seq 1 20); do
+            if curl -sf http://localhost:3000/health; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::verixa-api did not become healthy in time"
+          docker logs verixa-api
+          exit 1
+
+      - name: Verify the container does not run as root
+        run: |
+          user="$(docker exec verixa-api whoami)"
+          echo "Container user: $user"
+          if [ "$user" = "root" ]; then
+            echo "::error::apps/api container must not run as root"
+            exit 1
+          fi
+
+      - name: Stop container
+        if: always()
+        run: docker rm -f verixa-api || true

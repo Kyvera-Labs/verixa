@@ -1,0 +1,14 @@
+node_modules
+**/node_modules
+**/dist
+**/coverage
+.git
+.github
+.husky
+.vscode
+planning
+docs
+*.md
+.env
+.env.*
+!.env.example
