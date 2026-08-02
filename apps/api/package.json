@@ -4,6 +4,13 @@
   "private": true,
   "type": "module",
   "main": "dist/server.js",
+  "exports": {
+    ".": "./dist/server.js",
+    "./app": {
+      "types": "./dist/app.d.ts",
+      "default": "./dist/app.js"
+    }
+  },
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",

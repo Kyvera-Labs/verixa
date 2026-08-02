@@ -90,6 +90,17 @@ real declaration files to consume) or `test` (Vitest doesn't transform
 `ERR_MODULE_NOT_FOUND` at runtime, immediately). Always build dependencies
 first regardless.
 
+The fallback also only covers a package's main entry point (`main`/`types`
+at the package root) — it does **not** apply to `package.json` `exports`
+subpaths (e.g. `apps/api`'s `"./app"` export, added in Issue 015). Resolution
+through `exports` is exact: if the declared file is missing, resolution
+fails outright, and depending on the tool that can surface as something far
+more confusing than "module not found" — ESLint's type-aware rules, for
+example, silently degrade an unresolved import to `any` and then report a
+cascade of unrelated-looking `no-unsafe-*` errors on every line that touches
+it, which is a much harder failure to recognize as "you forgot to build a
+dependency" than a clean resolution error would be.
+
 `pnpm -r run build`/`typecheck`/`test` already do this in the right order
 automatically — pnpm's recursive runner topologically sorts by workspace
 dependency, so a dependency's script always runs before its dependents'

@@ -21,14 +21,21 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Every workspace package must be built before anything that imports
+      # it can be reliably linted, typechecked, or tested — see
+      # docs/guides/typescript-conventions.md and docs/guides/ci-cd.md for
+      # why this isn't just belt-and-suspenders: package.json "exports"
+      # subpaths (unlike "main") have no fallback when the target file is
+      # missing, so type-aware linting fails outright, not gracefully, on
+      # an unbuilt dependency.
+      - name: Build
+        run: pnpm build
+
       - name: Lint
         run: pnpm lint
 
       - name: Check formatting
         run: pnpm format:check
-
-      - name: Build
-        run: pnpm build
 
       - name: Typecheck
         run: pnpm typecheck

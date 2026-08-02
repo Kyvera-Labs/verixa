@@ -40,8 +40,8 @@ directory (git-ignored, regenerated on every `test:coverage` run).
   isolation — pure functions, a single class, a use case against in-memory
   fakes. These are the vast majority of tests in this repo and should run in
   milliseconds with no I/O.
-- **Integration tests** (`tests/integration/` at the repo root, once
-  Issue 015 adds the first one) exercise a real boundary — an HTTP route
+- **Integration tests** (`tests/integration/`, its own workspace package —
+  `@verixa/integration-tests`) exercise a real boundary — an HTTP route
   through Fastify's actual routing/serialization, or (starting Phase 03) a
   repository against a real database via Testcontainers. Slower than unit
   tests, but they catch bugs unit tests structurally can't: wrong content
@@ -61,6 +61,58 @@ belongs in a unit test next to the validator; "does this route return the
 right status code for a duplicate email" belongs in an integration test
 that goes through real HTTP; "can a user actually register end-to-end" is
 the rare case that justifies an e2e test.
+
+## The HTTP integration test harness
+
+`tests/integration/helpers/http-client.ts` boots a real `apps/api` Fastify
+instance in-process and hands back a [Supertest](https://github.com/ladjs/supertest)
+agent bound to it:
+
+```ts
+import { createHttpTestClient, type HttpTestClient } from "./helpers/http-client.js";
+
+describe("GET /health", () => {
+  let client: HttpTestClient | undefined;
+
+  afterEach(async () => {
+    await client?.close(); // always close, even on failure
+    client = undefined;
+  });
+
+  it("responds with 200 over real HTTP", async () => {
+    client = await createHttpTestClient();
+    const response = await client.request.get("/health");
+    expect(response.status).toBe(200);
+  });
+});
+```
+
+It imports `@verixa/api/app` — a dedicated `exports` subpath
+(`apps/api/package.json`) that resolves to just `buildApp()` — rather than
+`@verixa/api` itself, which is `server.ts`: that module calls `loadConfig()`
+and `app.listen()` as side effects of being imported, which is exactly what
+a test harness must not trigger (it wants a fresh, unstarted app instance
+per test, not the one real server instance racing to bind a port).
+
+### Why go through real HTTP instead of calling the route handler directly
+
+It would be faster to import `buildApp`'s route handler function and call it
+like a plain function. That's tempting, and wrong for integration tests:
+calling the handler directly skips everything Fastify does _around_ it —
+request parsing, schema validation, serialization of the response back to
+JSON, content-type headers, error-handler middleware. A bug in any of those
+(a route that returns the right object but forgets to `JSON.stringify`-compatible
+types, so serialization silently drops a field) is invisible to a test that
+calls the handler function directly, because that layer never ran. Routing
+the test through `supertest(app.server)` — real HTTP, over a local socket —
+exercises the exact same code path a real client hits.
+
+### Clean teardown
+
+`client.close()` calls Fastify's `app.close()`, which shuts down the
+underlying HTTP server and closes it cleanly — the `afterEach` hook always
+calls it, including when the test itself fails (`afterEach` still runs), so
+a failing assertion never leaks an open server handle into the next test.
 
 ## Sample tests as a template, not a target
 

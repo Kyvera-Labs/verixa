@@ -1,6 +1,7 @@
 packages:
   - "apps/*"
   - "packages/*"
+  - "tests"
 # Copies workspace dependencies' real files into node_modules instead of
 # symlinking them — required for `pnpm deploy` (used to build the apps/api
 # Docker image, Issue 012) to produce a self-contained, node_modules-portable
