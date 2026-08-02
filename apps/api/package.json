@@ -10,6 +10,7 @@
     "start": "node dist/server.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "lint": "eslint ."
   },
   "dependencies": {
@@ -19,8 +20,9 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
-    "supertest": "^7.0.0",
     "@types/supertest": "^6.0.2",
+    "@vitest/coverage-v8": "^2.1.9",
+    "supertest": "^7.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
