@@ -70,3 +70,14 @@ top of it:
 
 See [`docs/guides/conventional-commits.md`](docs/guides/conventional-commits.md)
 — commit messages are linted locally and in CI.
+
+## Issue and PR templates
+
+Opening a PR pre-fills [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md)
+(linked issue, description, testing notes, a pre-merge checklist); opening an
+issue offers [`.github/ISSUE_TEMPLATE/bug_report.md`](.github/ISSUE_TEMPLATE/bug_report.md).
+These exist to front-load the information a maintainer needs to triage or
+review — without them, that information gets pulled out one comment at a
+time, which costs more of a maintainer's time, in public, than asking for it
+up front in a template. [`.github/CODEOWNERS`](.github/CODEOWNERS) defines
+who's automatically requested for review.

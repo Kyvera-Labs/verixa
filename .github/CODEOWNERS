@@ -1,0 +1,5 @@
+# Default owners for everything in the repo, unless a later, more specific
+# pattern overrides it. See https://docs.github.com/articles/about-codeowners
+# for how GitHub matches these patterns (last match wins).
+
+*       @Kyvera-Labs/verixa-maintainers
