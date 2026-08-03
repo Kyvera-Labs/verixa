@@ -1,5 +1,7 @@
 # Verixa
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Verixa is open-source infrastructure for **authentication, authorization,
 identity, verification, audit logging, security, and governance** — built to be
 production-ready and, at the same time, a complete educational resource for
