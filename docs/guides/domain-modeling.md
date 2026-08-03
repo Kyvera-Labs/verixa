@@ -78,3 +78,139 @@ Every aggregate gets its own id brand named after the entity, e.g. `UserId`,
 `OrganizationId`, `SessionId`. These are declared alongside the entity itself
 (starting with `User` in Phase 02), not centrally in `shared-kernel` — the
 shared kernel only owns the generic `Id<Brand>` mechanism.
+
+## Value objects
+
+`packages/identity/domain/value-objects/` (`Email`, `DisplayName`,
+`PersonName`) are the first concrete example of a recurring pattern: wrap a
+primitive that has domain-specific validity rules in a small immutable class
+with a private constructor, so the _only_ way to get an instance is through a
+static factory that enforces those rules:
+
+```ts
+class Email {
+  private constructor(readonly value: string) {}
+
+  static create(raw: string): Result<Email, ValidationError> {
+    // normalize + validate, return Result.err on failure
+  }
+}
+```
+
+This is the same "primitive obsession" problem branded IDs solve (see above),
+applied to values rather than identifiers: a bare `string` field for an email
+address lets every layer that touches it re-derive (or forget to derive)
+"is this actually valid," and lets an unrelated string be passed where an
+email was expected. An `Email` value can only exist already-validated —
+there is no code path that produces one without going through `create()`.
+
+Two value objects are equal if their normalized values are equal, not if
+they're the same object reference (`equals()`, not `===`) — value objects
+are compared by value, which is the property that gives them their name.
+
+### What belongs in a value object vs. a plain field
+
+Not every field needs to be a value object — the bar is "does this have
+validation or normalization rules that would otherwise be duplicated or
+forgotten." `Organization`'s `slug` has real validation rules (URL-safe,
+length-bounded) but is currently kept as a validated `string` field on the
+entity rather than its own `Slug` class, since (unlike `Email`) nothing else
+in the domain needs to construct or compare a slug independently of an
+`Organization`. Promote a field to its own value object once a second
+independent use appears — not preemptively.
+
+### Internationalization pitfalls in name validation
+
+`PersonName` deliberately does not require a `familyName`, and doesn't
+restrict either name part to a Latin charset. Two common mistakes this
+avoids: assuming every person has both a given and a family name (many
+cultures use a single mononym, or list family name first with no separator
+Western code tends to assume), and validating names against an ASCII/Latin
+pattern (which silently rejects real names containing accented characters,
+CJK characters, or other non-Latin scripts). `DisplayName` follows the same
+principle — it constrains length, not charset.
+
+## Aggregates and invariant enforcement
+
+`User`, `Organization`, and `OrganizationMembership`
+(`packages/identity/domain/entities/`) are **aggregate roots**: entities with
+their own identity (a branded `Id`) and lifecycle, constructed only through a
+static factory (`register`/`create`) that enforces every invariant the type
+system alone can't — a `User` cannot exist with an invalid status, an
+`Organization` cannot exist without exactly one owner, an
+`OrganizationMembership` cannot be created as a duplicate active membership
+for the same user+organization pair.
+
+### Status transitions as an explicit table, not scattered `if`s
+
+`User.ALLOWED_TRANSITIONS` names every legal status change up front
+(`pending → active`, `active → suspended`, `suspended → active`,
+any-non-deleted `→ deleted`) rather than relying on each transition method
+independently checking "am I allowed to do this right now." This makes an
+illegal transition (reactivating a `deleted` user) a property of the table,
+checkable and testable in one place, instead of a rule that could be
+correctly enforced in one method and forgotten in the next one added later.
+
+### Why entities are immutable
+
+`User`, `Organization`, and `OrganizationMembership` never mutate their own
+fields — `activate()`/`suspend()`/`revoke()` all return either a new instance
+(via `Result<T, E>`, since a transition can fail) or, for the idempotent
+`revoke()` case, the same instance unchanged. This mirrors the value-object
+pattern above and for the same underlying reason: a reference to a `User`
+can't silently go stale or get mutated out from under other code holding the
+same reference — every state change is a new, explicit value.
+
+### Why other contexts reference `UserId`, not `User`
+
+Only the identity context ever holds a `User` instance. Every other bounded
+context (audit, sessions, verification, ...) stores and passes around
+`UserId` alone. This is the same coupling argument as branded IDs generally,
+one level up: if the audit context held a live `User` reference, it could
+reach into identity's internals (or accidentally depend on invariants that
+only identity is responsible for maintaining) instead of going through
+identity's own public API when it actually needs user data. Referencing by
+ID keeps the dependency one-directional and explicit.
+
+### `register`/`create` vs. `reconstitute`
+
+Every aggregate has two construction paths: `register`/`create` (a _new_
+aggregate, which runs full validation and assigns a fresh ID) and
+`reconstitute` (rebuilding an aggregate from data that's already
+trusted — a database row, once Phase 03 adds persistence). `reconstitute`
+skips validation deliberately: the data it's given already represents a
+previously-valid state, so re-validating it as if it were new user input
+would be redundant at best and, for status transitions specifically, wrong
+(reconstituting a `deleted` user isn't "transitioning to deleted," it's
+loading a fact that's already true).
+
+### Multi-tenancy modeling: why `OrganizationMembership` is its own entity
+
+`OrganizationMembership` links a `UserId` to an `OrganizationId`, but it's
+modeled as its own entity with an ID and a status, not a plain
+`{ userId, organizationId }` pair — because membership itself has behavior
+(it can be revoked; a revoked membership doesn't block rejoining, but an
+active one blocks a duplicate) that a bare join table can't express without
+pushing that logic somewhere else. This previews the broader multi-tenancy
+question `planning/ARCHITECTURE.md` §8 discusses: organizations, membership,
+and (starting Phase 07) role assignment are kept as separate, composable
+concepts rather than one wide "user-org-role" record, so each can evolve
+independently.
+
+## Ports & adapters (hexagonal architecture)
+
+A later issue in this phase adds `packages/identity/application/ports/`,
+starting with a `UserRepository` interface (`findById`, `findByEmail`,
+`save`, `existsByEmail`) — a plain interface with no reference to Prisma,
+SQL, or any other implementation detail. That's the **port**: _what_ the
+application layer needs from persistence, decided before _how_ it's
+provided. The concrete implementation (Phase 03, Prisma-backed) will be an
+**adapter**: something that satisfies the port's contract using a specific
+technology.
+
+The dependency will point one way: `application` defines the port and
+depends on nothing else; `infrastructure` depends on `application` to
+implement the port, never the reverse. This is what makes the domain and
+application layers testable without a database (swap in an in-memory fake
+that satisfies the same interface) and what makes swapping persistence
+technology later a matter of writing a new adapter, not rewriting use cases.
