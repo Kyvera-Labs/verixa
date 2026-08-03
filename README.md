@@ -30,7 +30,9 @@ verification, audit, governance, notifications) lives in its own package.
 
 Full details: [`docs/adr/0001-monorepo-and-stack.md`](docs/adr/0001-monorepo-and-stack.md)
 records the stack decision; a broader architecture guide will grow under `docs/`
-as more contexts are built.
+as more contexts are built. Every non-trivial architectural decision from here
+on gets its own ADR — see [`docs/adr/0000-adr-process.md`](docs/adr/0000-adr-process.md)
+for the process.
 
 ```
 verixa/
@@ -94,4 +96,5 @@ roadmap before the project accepts outside contributions.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) — see [`NOTICE`](NOTICE) for third-party attributions and
+[`docs/guides/licensing.md`](docs/guides/licensing.md) for why MIT.
