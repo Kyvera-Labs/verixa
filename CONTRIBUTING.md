@@ -11,6 +11,17 @@ contribution guidelines before the project opens up.
 See the [README quickstart](README.md#quickstart) for prerequisites and the
 core `pnpm` commands (`build`, `typecheck`, `test`, `lint`, `format`).
 
+## Editor setup
+
+Opening the repo in VS Code prompts you to install the recommended
+extensions in `.vscode/extensions.json` (ESLint, Prettier, EditorConfig).
+`.editorconfig` normalizes indentation and line endings (LF) across editors
+and operating systems — without it, a contributor on an editor that defaults
+to CRLF or tabs produces diffs that are noisy with whitespace churn on every
+line they touch, obscuring the actual change. EditorConfig fixes this at the
+source (the editor itself respects it while you type) rather than relying on
+Prettier to clean it up after the fact.
+
 ## Local git hooks
 
 Running `pnpm install` sets up a `pre-commit` hook (via
