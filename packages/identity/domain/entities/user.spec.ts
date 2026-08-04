@@ -1,6 +1,8 @@
 import { Result } from "@verixa/shared-kernel";
 import { describe, expect, it } from "vitest";
 
+import { UserRegistered } from "../events/user-registered.js";
+import { UserStatusChanged } from "../events/user-status-changed.js";
 import { DisplayName } from "../value-objects/display-name.js";
 import { Email } from "../value-objects/email.js";
 
@@ -98,5 +100,42 @@ describe("User", () => {
     });
 
     expect(rebuilt.status).toBe("deleted");
+  });
+
+  it("records a UserRegistered event on registration", () => {
+    const user = makeUser();
+    const events = user.pullDomainEvents();
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toBeInstanceOf(UserRegistered);
+    expect(events[0]?.aggregateId).toBe(user.id);
+  });
+
+  it("records a UserStatusChanged event on a successful transition", () => {
+    const activated = makeUser().activate();
+    if (!Result.isOk(activated)) throw new Error("fixture setup failed");
+    const events = activated.value.pullDomainEvents();
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toBeInstanceOf(UserStatusChanged);
+    if (events[0] instanceof UserStatusChanged) {
+      expect(events[0].previousStatus).toBe("pending");
+      expect(events[0].newStatus).toBe("active");
+    }
+  });
+
+  it("reconstitute does not carry forward any pending domain events", () => {
+    const original = makeUser();
+    const rebuilt = User.reconstitute({
+      id: original.id,
+      email: original.email,
+      displayName: original.displayName,
+      personName: original.personName,
+      status: original.status,
+      createdAt: original.createdAt,
+      updatedAt: original.updatedAt,
+    });
+
+    expect(rebuilt.pullDomainEvents()).toHaveLength(0);
   });
 });

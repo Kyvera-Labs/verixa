@@ -1,5 +1,13 @@
-import { createId, type Id, Result, ValidationError } from "@verixa/shared-kernel";
+import {
+  createId,
+  type DomainEvent,
+  type Id,
+  Result,
+  ValidationError,
+} from "@verixa/shared-kernel";
 
+import { UserRegistered } from "../events/user-registered.js";
+import { UserStatusChanged } from "../events/user-status-changed.js";
 import type { DisplayName } from "../value-objects/display-name.js";
 import type { Email } from "../value-objects/email.js";
 import type { PersonName } from "../value-objects/person-name.js";
@@ -29,6 +37,7 @@ interface UserProps {
   readonly status: UserStatus;
   readonly createdAt: Date;
   readonly updatedAt: Date;
+  readonly domainEvents?: readonly DomainEvent[];
 }
 
 /**
@@ -47,6 +56,7 @@ export class User {
   readonly status: UserStatus;
   readonly createdAt: Date;
   readonly updatedAt: Date;
+  private readonly domainEvents: readonly DomainEvent[];
 
   private constructor(props: UserProps) {
     this.id = props.id;
@@ -56,23 +66,26 @@ export class User {
     this.status = props.status;
     this.createdAt = props.createdAt;
     this.updatedAt = props.updatedAt;
+    this.domainEvents = props.domainEvents ?? [];
   }
 
-  /** Creates a brand-new user in `pending` status (not yet email-verified). */
+  /** Creates a brand-new user in `pending` status (not yet email-verified). Records a {@link UserRegistered} event. */
   static register(params: {
     email: Email;
     displayName: DisplayName;
     personName?: PersonName | undefined;
   }): User {
     const now = new Date();
+    const id = createId<"UserId">();
     return new User({
-      id: createId<"UserId">(),
+      id,
       email: params.email,
       displayName: params.displayName,
       personName: params.personName,
       status: "pending",
       createdAt: now,
       updatedAt: now,
+      domainEvents: [new UserRegistered(id, params.email.value)],
     });
   }
 
@@ -81,9 +94,12 @@ export class User {
    * back by a repository in Phase 03). Unlike {@link register}, this does not
    * go through status-transition validation — the data is assumed to already
    * represent a previously-valid state, not a new transition being made now.
+   * Never carries pending domain events: a rehydrated aggregate represents
+   * history that has already happened (and, if it was ever going to be
+   * published, already was), not a new fact to report.
    */
   static reconstitute(props: UserProps): User {
-    return new User(props);
+    return new User({ ...props, domainEvents: [] });
   }
 
   private transitionTo(next: UserStatus): Result<User, ValidationError> {
@@ -95,7 +111,15 @@ export class User {
       );
     }
 
-    return Result.ok(new User({ ...this, status: next, updatedAt: new Date() }));
+    const previousStatus = this.status;
+    return Result.ok(
+      new User({
+        ...this,
+        status: next,
+        updatedAt: new Date(),
+        domainEvents: [new UserStatusChanged(this.id, previousStatus, next)],
+      }),
+    );
   }
 
   /** Marks a `pending` or `suspended` user as `active` (e.g. after email verification, or after a suspension is lifted). */
@@ -111,5 +135,17 @@ export class User {
   /** Marks the user as `deleted`. Terminal — see {@link ALLOWED_TRANSITIONS}. */
   delete(): Result<User, ValidationError> {
     return this.transitionTo("deleted");
+  }
+
+  /**
+   * Returns the domain event(s) produced by the action that created this
+   * specific `User` instance (registration, or the one status transition
+   * that produced it) — see `docs/guides/domain-events.md` for why this
+   * queue holds only the latest action's events rather than an
+   * accumulated history, given `User`'s immutable, returns-a-new-instance
+   * design.
+   */
+  pullDomainEvents(): readonly DomainEvent[] {
+    return this.domainEvents;
   }
 }
