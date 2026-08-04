@@ -10,3 +10,13 @@ injectWorkspacePackages: true
 allowBuilds:
   esbuild: true
   unrs-resolver: true
+# fast-uri is a transitive dependency (via fastify's ajv-compiler chain and
+# commitlint's ajv chain), pulled in at vulnerable version ranges in some of
+# those paths (GHSA-8jxf-...: host confusion via a backslash authority
+# introducer). Neither is a direct dependency, so the fix has to be an
+# override; pinning to a single known-patched version (rather than a
+# range-conditional override per vulnerable range) is simpler and equally
+# effective here since nothing in this repo depends on fast-uri's API
+# directly across a major version boundary.
+overrides:
+  fast-uri: ">=4.1.2"
