@@ -199,18 +199,38 @@ independently.
 
 ## Ports & adapters (hexagonal architecture)
 
-A later issue in this phase adds `packages/identity/application/ports/`,
-starting with a `UserRepository` interface (`findById`, `findByEmail`,
-`save`, `existsByEmail`) — a plain interface with no reference to Prisma,
-SQL, or any other implementation detail. That's the **port**: _what_ the
-application layer needs from persistence, decided before _how_ it's
-provided. The concrete implementation (Phase 03, Prisma-backed) will be an
-**adapter**: something that satisfies the port's contract using a specific
-technology.
+`packages/identity/application/ports/` defines three interfaces —
+`UserRepository` (`findById`, `findByEmail`, `save`, `existsByEmail`),
+`OrganizationRepository`, and `OrganizationMembershipRepository` — with no
+reference to Prisma, SQL, or any other implementation detail. That's the
+**port**: _what_ the application layer needs from persistence, decided
+before _how_ it's provided. The concrete implementation (Phase 03,
+Prisma-backed) will be an **adapter**: something that satisfies the port's
+contract using a specific technology.
 
-The dependency will point one way: `application` defines the port and
-depends on nothing else; `infrastructure` depends on `application` to
-implement the port, never the reverse. This is what makes the domain and
+The dependency points one way: `application` defines the ports and depends
+on nothing else; `infrastructure` (once it exists) depends on `application`
+to implement them, never the reverse. This is what makes the domain and
 application layers testable without a database (swap in an in-memory fake
-that satisfies the same interface) and what makes swapping persistence
-technology later a matter of writing a new adapter, not rewriting use cases.
+that satisfies the same interface — see `register-user.spec.ts` for the
+first example, and Issue 031 for the reusable version) and what makes
+swapping persistence technology later a matter of writing a new adapter, not
+rewriting use cases.
+
+### Interface segregation: three ports, not one
+
+Membership persistence (`OrganizationMembershipRepository`) is its own
+interface rather than a few extra methods on `OrganizationRepository`,
+following the **interface segregation principle**: a consumer that only
+needs to check or list memberships shouldn't have to depend on (or, in
+tests, fake out) an interface that also exposes organization
+creation/lookup it never calls. Keeping ports narrow and focused makes each
+one easier to fake completely in a test and easier to reason about in
+isolation — the cost is more files, not more coupling.
+
+## Use cases
+
+The first concrete use case, `RegisterUser`
+(`packages/identity/application/use-cases/register-user.ts`), establishes
+the application layer's command-handler pattern: see
+`docs/guides/use-cases.md` for the full shape and rationale.
