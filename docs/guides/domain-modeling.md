@@ -228,6 +228,32 @@ creation/lookup it never calls. Keeping ports narrow and focused makes each
 one easier to fake completely in a test and easier to reason about in
 isolation — the cost is more files, not more coupling.
 
+## Designing forward-compatible domain models
+
+`Invitation` (`packages/identity/domain/entities/invitation.ts`, Issue 035)
+models a complete lifecycle — issued, single-use via a status transition
+with no way back to `pending`, time-limited via `expiresAt` — for a feature
+whose actual delivery mechanism (emailing the invitation) doesn't exist
+until Phase 14. This is a deliberate technique, not scope creep: capture the
+domain _intent_ (what an invitation is, what states it can be in, what
+"accepting" means) as soon as enough is known to model it correctly, even
+before every consumer of that model exists.
+
+The alternative — waiting until Phase 14 to design `Invitation` alongside
+the email adapter — risks shaping the domain model around the delivery
+mechanism's constraints (e.g. treating an invitation as barely more than "an
+email that got sent") instead of around what an invitation actually _is_.
+Modeling it now, driven by Phase 02's org-membership concerns, keeps the
+domain model the primary design driver; Phase 14 then only has to plug a
+`send(invitation)` step into an already-correct lifecycle, not redesign one.
+
+The tell for when this technique applies: you can already answer "what are
+the valid states, and what causes each transition" with confidence, even if
+"what happens when a transition fires" (send an email, call a webhook) isn't
+built yet. If you can't yet answer the states/transitions question either,
+that's a sign the feature isn't understood well enough to model — build the
+simple version first.
+
 ## Use cases
 
 The first concrete use case, `RegisterUser`
