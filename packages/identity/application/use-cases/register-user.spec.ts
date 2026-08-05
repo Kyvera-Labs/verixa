@@ -1,39 +1,10 @@
 import { Result } from "@verixa/shared-kernel";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import type { User, UserId } from "../../domain/entities/user.js";
 import { Email } from "../../domain/value-objects/email.js";
-import type { UserRepository } from "../ports/user-repository.js";
+import { InMemoryUserRepository } from "../../infrastructure/testing/in-memory-user-repository.js";
 
 import { RegisterUser } from "./register-user.js";
-
-/**
- * Minimal in-memory `UserRepository` fake, local to this test file. Issue
- * 031 formalizes reusable fakes (with a shared contract test suite) for use
- * across every future use case's tests — this one exists only to prove
- * `RegisterUser` works against something satisfying the port, without
- * waiting on that broader infrastructure.
- */
-class InMemoryUserRepository implements UserRepository {
-  private readonly usersById = new Map<UserId, User>();
-
-  async findById(id: UserId): Promise<User | undefined> {
-    return Promise.resolve(this.usersById.get(id));
-  }
-
-  async findByEmail(email: Email): Promise<User | undefined> {
-    return Promise.resolve([...this.usersById.values()].find((user) => user.email.equals(email)));
-  }
-
-  async save(user: User): Promise<void> {
-    this.usersById.set(user.id, user);
-    return Promise.resolve();
-  }
-
-  async existsByEmail(email: Email): Promise<boolean> {
-    return Promise.resolve([...this.usersById.values()].some((user) => user.email.equals(email)));
-  }
-}
 
 describe("RegisterUser", () => {
   let repository: InMemoryUserRepository;

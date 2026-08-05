@@ -114,6 +114,42 @@ underlying HTTP server and closes it cleanly — the `afterEach` hook always
 calls it, including when the test itself fails (`afterEach` still runs), so
 a failing assertion never leaks an open server handle into the next test.
 
+## Contract testing: one suite, multiple implementations
+
+`packages/identity/infrastructure/testing/` (Issue 031) holds two things
+that work together:
+
+- **In-memory fakes** (`InMemoryUserRepository`,
+  `InMemoryOrganizationRepository`,
+  `InMemoryOrganizationMembershipRepository`, `InMemoryInvitationRepository`)
+  — real implementations of the application-layer repository ports, backed
+  by a plain `Map` instead of a database. Every use case's tests construct
+  one of these and pass it to the use case under test, so testing
+  `RegisterUser` or `CreateOrganization` never needs a running database.
+- **Contract test suites** (`infrastructure/testing/contracts/*.contract.ts`)
+  — a reusable function per port (e.g. `userRepositoryContract`) that takes
+  a factory (`() => UserRepository`) and runs a fixed set of behavioral
+  assertions against whatever it returns: does `findById` return `undefined`
+  for a never-saved id, does `save` behave as an idempotent upsert, does
+  `existsByEmail` actually reflect what's been saved.
+
+`repository-contract.spec.ts` runs each contract against its in-memory
+implementation today. The reason the contract lives in its own
+non-`.spec.ts` file, exported as a plain function, is Phase 03: when the
+Prisma-backed adapters are built, their test file imports the _same_
+`userRepositoryContract` function and calls it with a factory that returns
+a real, database-backed repository instead. Both implementations are
+proven to satisfy the exact same behavioral contract — not just "compiles
+against the same TypeScript interface," which says nothing about whether
+`findByEmail` on the Prisma adapter actually does the same case-insensitive
+match the in-memory one does by construction (`Email.equals`).
+
+This only works because the contract asserts on _observable behavior_
+(what `find`/`save`/`exists` return), never on implementation details like
+"is backed by a `Map`" — a contract that leaked implementation details
+couldn't run unmodified against a second implementation, which defeats the
+point.
+
 ## Sample tests as a template, not a target
 
 Every package that exists purely as foundational tooling right now (there
