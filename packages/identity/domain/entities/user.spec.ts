@@ -1,6 +1,7 @@
 import { Result } from "@verixa/shared-kernel";
 import { describe, expect, it } from "vitest";
 
+import { UserProfileUpdated } from "../events/user-profile-updated.js";
 import { UserRegistered } from "../events/user-registered.js";
 import { UserStatusChanged } from "../events/user-status-changed.js";
 import { DisplayName } from "../value-objects/display-name.js";
@@ -137,5 +138,21 @@ describe("User", () => {
     });
 
     expect(rebuilt.pullDomainEvents()).toHaveLength(0);
+  });
+
+  it("updates the display name and records a UserProfileUpdated event", () => {
+    const user = makeUser();
+    const newDisplayName = DisplayName.create("Alicia");
+    if (!Result.isOk(newDisplayName)) throw new Error("fixture setup failed");
+
+    const updated = user.updateProfile({
+      displayName: newDisplayName.value,
+      personName: user.personName,
+    });
+
+    expect(updated.displayName.value).toBe("Alicia");
+    const events = updated.pullDomainEvents();
+    expect(events).toHaveLength(1);
+    expect(events[0]).toBeInstanceOf(UserProfileUpdated);
   });
 });

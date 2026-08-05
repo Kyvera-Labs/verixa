@@ -86,3 +86,83 @@ as-is, events attached. Wiring actual event publishing (via
 introduces the first publisher adapter and an interface-layer caller that's
 responsible for the pull-then-publish step after a successful use case
 call.
+
+## Partial updates: `UpdateUserProfile`
+
+`UpdateUserProfile` (Issue 032) is the same pattern applied to a different
+shape: a command where every field except the id is optional
+(`displayName?`, `givenName?`, `familyName?`), and only the fields actually
+present get validated and changed. The use case loads the current `User`,
+then for each optional field that _is_ present, validates it and tracks a
+replacement value; fields absent from the command keep the aggregate's
+current value untouched. This is a deliberate alternative to accepting a
+`Partial<UpdateUserProfileCommand>` and merging it blindly: a field that's
+`undefined` because the caller didn't send it, and a field explicitly being
+cleared, are different intents (the same distinction `exactOptionalPropertyTypes`
+enforces at the type level — see `docs/guides/typescript-conventions.md`).
+
+### Aggregating multiple field errors
+
+Where `RegisterUser` returns on the _first_ validation failure,
+`UpdateUserProfile` collects field errors from every invalid field in the
+command before returning — an update with both an invalid `displayName` and
+an invalid `familyName` should tell the caller about both at once, not force
+a fix-resubmit-fix-resubmit cycle to discover the second error. The current
+implementation merges each field-level `ValidationError`'s `fieldErrors`
+into one map by hand; Issue 036 introduces a shared aggregation helper so
+every multi-field use case does this the same way instead of each
+reimplementing the merge.
+
+## Admin actions requiring a reason: `SuspendUser` / `ReactivateUser`
+
+`SuspendUser` and `ReactivateUser` (Issue 033) wrap `User.suspend()` /
+`User.activate()` — which take an _optional_ reason — with a use-case-level
+rule that the reason is _required_. This is a good example of where a
+constraint belongs at the use-case layer rather than the domain layer: it's
+not that a `User` can't be suspended without a reason (the aggregate itself
+has no opinion), it's that _this specific administrative action_ shouldn't
+be triggerable without one, for audit accountability (Phase 10). Domain
+layer: what's structurally possible. Use case layer: what's allowed for
+this particular caller/flow.
+
+`ReactivateUser` also shows a use case narrowing a domain rule that's
+technically broader than what the action should mean: `User.activate()`
+legally permits `pending → active` (email verification) as well as
+`suspended → active` (lifting a suspension), because both are valid states
+for `active` to follow. But "reactivate" as an admin action only makes
+sense for a user who was actually suspended — so the use case checks
+`user.status === "suspended"` itself before calling `activate()`, rejecting
+a `pending` user even though the domain layer alone would have allowed it.
+
+## Multi-aggregate transactions: `CreateOrganization`
+
+Every use case up to this point touches one aggregate. `CreateOrganization`
+(Issue 034) touches two: it creates an `Organization` _and_ the owner's
+initial `OrganizationMembership`, and both must succeed or neither should
+persist. This is where the use case's orchestration role earns its keep —
+"an organization always has its owner as an active member" is a rule that
+spans both aggregates, so it can't live inside `Organization.create` (which
+has no way to also create an unrelated `OrganizationMembership`) or inside
+`OrganizationMembership.create` (which doesn't construct organizations).
+Only the use case sees both, so only the use case can enforce it.
+
+There's no real database transaction wrapping the two `save` calls yet —
+there's no database until Phase 03. What exists today is the _boundary_:
+the use case defines exactly which operations must be atomic together, so
+when the Prisma-backed adapters land, wrapping this specific sequence in
+`db.$transaction(...)` is a mechanical follow-up, not a redesign.
+
+## Domain skeletons ahead of their delivery mechanism: `InviteUserToOrganization`
+
+`InviteUserToOrganization` and the `Invitation` entity it creates
+(Issue 035) model a complete invitation lifecycle — issued, single-use,
+expiring — before any code exists to actually email an invitation. That's
+intentional: Phase 14 (Notifications) needs a correct, already-tested domain
+concept to hook a delivery adapter onto, not a redesign of identity's
+org-membership model to accommodate email sending. The use case validates
+input, creates the `Invitation` (which records its own
+`OrganizationInvitationCreated` event, `token`, and `expiresAt`), and
+persists it — the "send the email with this token" step is simply not
+implemented anywhere yet, which is a different thing from being designed
+wrong. See `docs/guides/domain-modeling.md` for the general principle this
+follows.

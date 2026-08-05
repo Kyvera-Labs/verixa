@@ -100,9 +100,16 @@ arises, rather than generalizing for it now.
 
 ## Event catalog
 
-| Event               | Aggregate | Recorded when                                                                                 |
-| ------------------- | --------- | --------------------------------------------------------------------------------------------- |
-| `UserRegistered`    | `User`    | `User.register()` — a brand-new user is created                                               |
-| `UserStatusChanged` | `User`    | Any successful `activate()`/`suspend()`/`delete()` — carries `previousStatus` and `newStatus` |
+| Event                           | Aggregate    | Recorded when                                                                                                 |
+| ------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------- |
+| `UserRegistered`                | `User`       | `User.register()` — a brand-new user is created                                                               |
+| `UserStatusChanged`             | `User`       | Any successful `activate()`/`suspend()`/`delete()` — carries `previousStatus`, `newStatus`, optional `reason` |
+| `UserProfileUpdated`            | `User`       | `User.updateProfile()` — display name and/or person name changed                                              |
+| `OrganizationInvitationCreated` | `Invitation` | `Invitation.create()` — a new pending organization invitation is issued                                       |
+
+`UserStatusChanged.reason` is `undefined` for self-service transitions
+(e.g. activation via email verification) and set for admin-triggered ones
+(`SuspendUser`/`ReactivateUser`, Issue 033, which require a reason for the
+audit trail — see `docs/guides/use-cases.md`).
 
 This table grows as later issues add events for other aggregates.

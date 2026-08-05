@@ -6,6 +6,7 @@ import {
   ValidationError,
 } from "@verixa/shared-kernel";
 
+import { UserProfileUpdated } from "../events/user-profile-updated.js";
 import { UserRegistered } from "../events/user-registered.js";
 import { UserStatusChanged } from "../events/user-status-changed.js";
 import type { DisplayName } from "../value-objects/display-name.js";
@@ -102,7 +103,7 @@ export class User {
     return new User({ ...props, domainEvents: [] });
   }
 
-  private transitionTo(next: UserStatus): Result<User, ValidationError> {
+  private transitionTo(next: UserStatus, reason?: string): Result<User, ValidationError> {
     if (!ALLOWED_TRANSITIONS[this.status].has(next)) {
       return Result.err(
         new ValidationError(`Cannot transition user from "${this.status}" to "${next}".`, {
@@ -117,24 +118,48 @@ export class User {
         ...this,
         status: next,
         updatedAt: new Date(),
-        domainEvents: [new UserStatusChanged(this.id, previousStatus, next)],
+        domainEvents: [new UserStatusChanged(this.id, previousStatus, next, reason)],
       }),
     );
   }
 
-  /** Marks a `pending` or `suspended` user as `active` (e.g. after email verification, or after a suspension is lifted). */
-  activate(): Result<User, ValidationError> {
-    return this.transitionTo("active");
+  /**
+   * Marks a `pending` or `suspended` user as `active` (e.g. after email
+   * verification, or after a suspension is lifted). `reason` is optional and
+   * recorded on the resulting {@link UserStatusChanged} event — admin-
+   * triggered reactivation (`ReactivateUser`) always supplies one; self-
+   * service email verification doesn't.
+   */
+  activate(reason?: string): Result<User, ValidationError> {
+    return this.transitionTo("active", reason);
   }
 
   /** Marks an `active` user as `suspended` (e.g. a moderation or security action). */
-  suspend(): Result<User, ValidationError> {
-    return this.transitionTo("suspended");
+  suspend(reason?: string): Result<User, ValidationError> {
+    return this.transitionTo("suspended", reason);
   }
 
   /** Marks the user as `deleted`. Terminal — see {@link ALLOWED_TRANSITIONS}. */
-  delete(): Result<User, ValidationError> {
-    return this.transitionTo("deleted");
+  delete(reason?: string): Result<User, ValidationError> {
+    return this.transitionTo("deleted", reason);
+  }
+
+  /**
+   * Updates display name and/or person name. Unlike {@link transitionTo},
+   * this can't fail: `displayName`/`personName` are already-validated value
+   * objects by the time they reach here (validating raw strings is the
+   * calling use case's job — see `UpdateUserProfile` — because "invalid
+   * partial update" is about aggregating multiple field errors for an API
+   * response, not an aggregate invariant `User` itself needs to enforce).
+   */
+  updateProfile(params: { displayName: DisplayName; personName: PersonName | undefined }): User {
+    return new User({
+      ...this,
+      displayName: params.displayName,
+      personName: params.personName,
+      updatedAt: new Date(),
+      domainEvents: [new UserProfileUpdated(this.id)],
+    });
   }
 
   /**
