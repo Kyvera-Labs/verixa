@@ -43,6 +43,14 @@ jobs:
       - name: Test
         run: pnpm test
 
+      # packages/identity is the first fully-built bounded context, and
+      # carries a per-package coverage floor (see vitest.config.ts) as the
+      # template for future contexts — enforced here, separately from the
+      # plain `pnpm test` above, since coverage collection isn't free and
+      # doesn't need to run for every package on every push yet.
+      - name: Identity coverage gate
+        run: pnpm --filter @verixa/identity run test:coverage
+
   docker:
     runs-on: ubuntu-latest
     steps:

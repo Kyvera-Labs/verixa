@@ -150,6 +150,41 @@ This only works because the contract asserts on _observable behavior_
 couldn't run unmodified against a second implementation, which defeats the
 point.
 
+## Coverage as a floor, not a target
+
+`packages/identity/vitest.config.ts` (Issue 037) sets coverage thresholds —
+90% statements/lines, 85% functions/branches — enforced by a dedicated
+"Identity coverage gate" CI step (`pnpm --filter @verixa/identity run
+test:coverage`), separate from the plain `pnpm test` step so coverage
+collection (slower than a plain test run) doesn't run for every package on
+every push, only for the context that's declared its floor.
+
+**A coverage number is a floor, not a target.** 90% line coverage means "at
+most 10% of lines have never executed during a test run" — it says nothing
+about whether the assertions on the lines that _did_ run actually check the
+right thing. A test that calls a function and asserts nothing meaningful
+inflates coverage without proving anything; a coverage gate can't tell that
+test apart from a real one. What it _does_ reliably catch: an entire branch,
+function, or file that no test touches at all — dead-in-practice code, or a
+new code path someone forgot to test entirely. Treat a coverage drop as
+"something plausibly untested landed," worth investigating, not as "the
+suite is now worse" — and don't chase 100%, which mostly rewards testing
+trivial getters and defensive branches that can't actually happen, at the
+cost of time better spent on tests that assert real behavior.
+
+The interface-only files under `application/ports/` are excluded from the
+denominator entirely (`coverage.exclude` in `vitest.config.ts`), not just
+left uncovered — a TypeScript `interface` compiles to nothing at all, so
+there is no statement there for a test to ever execute; including it would
+either always show 0% for a file with zero total statements, or silently
+inflate the ratio depending on how the reporter handles an empty
+denominator. Excluding it is the accurate statement of intent: "this file
+has no runtime behavior to measure," not "this file is untested."
+
+This package's setup (thresholds + CI gate + a documented exclusion
+policy for genuinely uncoverable files) is the template every future
+bounded-context package should copy once it's similarly complete.
+
 ## Sample tests as a template, not a target
 
 Every package that exists purely as foundational tooling right now (there
