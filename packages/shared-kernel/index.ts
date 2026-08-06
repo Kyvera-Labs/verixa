@@ -1,3 +1,4 @@
+export { ValidationErrorAggregator } from "./application/validation.js";
 export { asId, createId } from "./domain/branded-id.js";
 export type { Branded, Id } from "./domain/branded-id.js";
 export { BaseDomainEvent } from "./domain/domain-event.js";

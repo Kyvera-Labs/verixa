@@ -95,6 +95,41 @@ someone logs a raw error object and finds nothing useful in it. Every
 `DomainError` instead serializes predictably to `{ code, message,
 httpStatusHint, ...subclass-specific fields }`.
 
+## Aggregating field errors across multiple checks: `ValidationErrorAggregator`
+
+A single `ValidationError` carries a `fieldErrors` map (`Record<string,
+readonly string[]>`) so an API response can point at exactly which fields
+were wrong, not just that "something" was invalid. That's straightforward
+when only one field is being validated — return on the first `Result.err`
+— but a use case validating several independent fields at once
+(`UpdateUserProfile`, Issue 032) needs to report _all_ of them together: a
+caller who fixes one typo shouldn't have to resubmit and discover the next
+error one at a time.
+
+`ValidationErrorAggregator` (`packages/shared-kernel/application/validation.ts`,
+Issue 036) is that merge, extracted into a reusable helper instead of every
+use case hand-rolling it:
+
+```ts
+const errors = new ValidationErrorAggregator();
+const email = errors.collect(Email.create(command.email));
+const displayName = errors.collect(DisplayName.create(command.displayName));
+
+if (errors.hasErrors()) {
+  return errors.toResult(undefined, "Registration is invalid.");
+}
+// email and displayName are the validated values here
+```
+
+`collect` runs one field's `Result`: on success it returns the value: on
+failure it merges that field's errors into the aggregate and returns
+`undefined`, so a validation failure never short-circuits the remaining
+checks. Internally it stores errors in a `Map`, not a plain object indexed
+by the field name — indexing a plain object with a dynamically-derived key
+is exactly the shape ESLint's `security/detect-object-injection` rule flags
+(a prototype-pollution-adjacent pattern), so the `Map` sidesteps that
+category of risk entirely rather than suppressing the warning.
+
 ## API
 
 ```ts

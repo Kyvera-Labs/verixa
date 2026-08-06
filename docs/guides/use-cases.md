@@ -107,11 +107,11 @@ Where `RegisterUser` returns on the _first_ validation failure,
 `UpdateUserProfile` collects field errors from every invalid field in the
 command before returning — an update with both an invalid `displayName` and
 an invalid `familyName` should tell the caller about both at once, not force
-a fix-resubmit-fix-resubmit cycle to discover the second error. The current
-implementation merges each field-level `ValidationError`'s `fieldErrors`
-into one map by hand; Issue 036 introduces a shared aggregation helper so
-every multi-field use case does this the same way instead of each
-reimplementing the merge.
+a fix-resubmit-fix-resubmit cycle to discover the second error. It does this
+via `ValidationErrorAggregator` (`@verixa/shared-kernel`, Issue 036) — see
+`docs/guides/error-handling.md` — rather than merging each field-level
+`ValidationError`'s `fieldErrors` by hand, so every future multi-field use
+case aggregates errors the same way instead of reimplementing the merge.
 
 ## Admin actions requiring a reason: `SuspendUser` / `ReactivateUser`
 

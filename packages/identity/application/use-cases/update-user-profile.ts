@@ -1,4 +1,9 @@
-import { NotFoundError, Result, ValidationError } from "@verixa/shared-kernel";
+import {
+  NotFoundError,
+  Result,
+  ValidationError,
+  ValidationErrorAggregator,
+} from "@verixa/shared-kernel";
 
 import type { User, UserId } from "../../domain/entities/user.js";
 import { DisplayName } from "../../domain/value-objects/display-name.js";
@@ -32,30 +37,26 @@ export class UpdateUserProfile {
       return Result.err(new NotFoundError(`No user found with id "${command.userId}".`));
     }
 
-    const fieldErrors: Record<string, string[]> = {};
+    const errors = new ValidationErrorAggregator();
     let nextDisplayName = user.displayName;
     let nextPersonName = user.personName;
 
     if (command.displayName !== undefined) {
-      const displayNameResult = DisplayName.create(command.displayName);
-      if (Result.isErr(displayNameResult)) {
-        Object.assign(fieldErrors, displayNameResult.error.fieldErrors);
-      } else {
-        nextDisplayName = displayNameResult.value;
+      const validated = errors.collect(DisplayName.create(command.displayName));
+      if (validated !== undefined) {
+        nextDisplayName = validated;
       }
     }
 
     if (command.givenName !== undefined) {
-      const personNameResult = PersonName.create(command.givenName, command.familyName);
-      if (Result.isErr(personNameResult)) {
-        Object.assign(fieldErrors, personNameResult.error.fieldErrors);
-      } else {
-        nextPersonName = personNameResult.value;
+      const validated = errors.collect(PersonName.create(command.givenName, command.familyName));
+      if (validated !== undefined) {
+        nextPersonName = validated;
       }
     }
 
-    if (Object.keys(fieldErrors).length > 0) {
-      return Result.err(new ValidationError("User profile update is invalid.", fieldErrors));
+    if (errors.hasErrors()) {
+      return Result.err(errors.toError("User profile update is invalid."));
     }
 
     const updated = user.updateProfile({
