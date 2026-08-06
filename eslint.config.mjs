@@ -41,5 +41,29 @@ export default tseslint.config(
       "import-x/no-unresolved": "off",
     },
   },
+  {
+    // Package boundary enforcement: everything outside a context package
+    // must go through its curated index.ts, never a deep path into its
+    // domain/application internals — see docs/guides/domain-modeling.md
+    // ("Package encapsulation"). Scoped to exclude packages/identity itself,
+    // since its own internal files legitimately import each other by
+    // relative path; this rule targets deep imports from *other* packages.
+    files: ["**/*.ts"],
+    ignores: ["packages/identity/**"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@verixa/identity/*"],
+              message:
+                "Import from the package root (`@verixa/identity`), not a deep path — its domain/application internals are not part of the public API. See docs/guides/domain-modeling.md.",
+            },
+          ],
+        },
+      ],
+    },
+  },
   eslintConfigPrettier,
 );

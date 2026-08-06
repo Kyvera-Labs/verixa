@@ -254,6 +254,34 @@ built yet. If you can't yet answer the states/transitions question either,
 that's a sign the feature isn't understood well enough to model — build the
 simple version first.
 
+## Package encapsulation as an enforced boundary, not just convention
+
+`packages/identity/index.ts` (Issue 038) is the package's entire public
+surface: every entity, value object, event, port, and use case another
+package is meant to consume, curated by hand into one file. Nothing outside
+`packages/identity` is meant to import a deep path like
+`@verixa/identity/domain/entities/user.js` — only the barrel,
+`@verixa/identity`.
+
+A barrel file alone is a convention, not a boundary: nothing stops a
+different package from reaching past it with a deep relative-looking import,
+and conventions that aren't enforced tend to erode the first time someone's
+in a hurry. `eslint.config.mjs` makes it a real boundary with a
+`no-restricted-imports` rule (scoped to every file _except_
+`packages/identity/**` itself, since the package's own internals legitimately
+import each other by relative path) that blocks the `@verixa/identity/*`
+pattern outright — attempting it is a lint error, not a review comment.
+
+This matters architecturally, not just stylistically: it's what makes
+`packages/identity/domain/entities/user.ts` genuinely internal. As long as
+every external consumer goes through `index.ts`, that file's exports are
+the _only_ contract other code depends on — internal refactoring (renaming
+an internal helper, restructuring how `User` stores its fields) can never
+break a consumer, because a consumer was never able to depend on internals
+that weren't exported in the first place. Remove something from `index.ts`
+and the compiler (and this lint rule) will tell you exactly what broke,
+which is a much stronger guarantee than "we agreed not to do that."
+
 ## Use cases
 
 The first concrete use case, `RegisterUser`
