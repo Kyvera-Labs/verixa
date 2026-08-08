@@ -6,9 +6,12 @@
 # docs/guides/docker.md for why that's still "dev/prod parity" and not a
 # contradiction of it.
 #
-# Postgres and Redis aren't used by application code yet (they're wired up
-# starting Phase 03 and Phase 05 of the roadmap) — for now this validates
-# that all three containers start, stay healthy, and can reach each other.
+# DATABASE_URL flows through @verixa/config (Issue 041) but no repository
+# reads from Postgres yet (that starts with Issue 046); Redis isn't used by
+# application code at all yet (wired up starting Phase 05). For now this
+# validates that all three containers start, stay healthy, reach each
+# other, and — for Postgres — that a plain TCP connection actually succeeds
+# (see scripts/db-wait.mjs and tests/integration/database.spec.ts).
 
 services:
   postgres:
@@ -21,6 +24,10 @@ services:
       - "5432:5432"
     volumes:
       - verixa-postgres-data:/var/lib/postgresql/data
+      # Provisions a second `verixa_test` database on first start, isolated
+      # from the `verixa` dev database above — see infra/postgres/init-test-db.sh
+      # and docs/guides/database.md for why tests need their own database.
+      - ./infra/postgres/init-test-db.sh:/docker-entrypoint-initdb.d/init-test-db.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U verixa -d verixa"]
       interval: 5s

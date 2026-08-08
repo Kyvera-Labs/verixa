@@ -9,6 +9,7 @@ describe("loadConfig", () => {
       PORT: "8080",
       HOST: "127.0.0.1",
       LOG_LEVEL: "warn",
+      DATABASE_URL: "postgres://user:pass@db.example.com:5432/verixa",
     });
 
     expect(config).toEqual({
@@ -16,6 +17,7 @@ describe("loadConfig", () => {
       PORT: 8080,
       HOST: "127.0.0.1",
       LOG_LEVEL: "warn",
+      DATABASE_URL: "postgres://user:pass@db.example.com:5432/verixa",
     });
   });
 
@@ -34,6 +36,7 @@ describe("loadConfig", () => {
       PORT: 3000,
       HOST: "0.0.0.0",
       LOG_LEVEL: "info",
+      DATABASE_URL: "postgres://verixa:verixa@localhost:5432/verixa",
     });
   });
 
@@ -65,5 +68,9 @@ describe("loadConfig", () => {
 
   it("rejects a port outside the valid TCP range", () => {
     expect(() => loadConfig({ PORT: "70000" })).toThrowError(ConfigError);
+  });
+
+  it("rejects a malformed DATABASE_URL", () => {
+    expect(() => loadConfig({ DATABASE_URL: "not-a-url" })).toThrowError(ConfigError);
   });
 });

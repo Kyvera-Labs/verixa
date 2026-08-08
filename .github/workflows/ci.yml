@@ -8,6 +8,29 @@ on:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    services:
+      # Backs tests/integration/database.spec.ts (Issue 041) — a real
+      # Postgres, not a mock, so "can the app actually reach a database"
+      # is answered by an actual TCP-level connection, not an assumption.
+      # GitHub Actions runs service containers alongside the job on the
+      # same runner, reachable at localhost from job steps (this job isn't
+      # itself containerized) — no networking setup needed beyond the port
+      # mapping below.
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: verixa
+          POSTGRES_PASSWORD: verixa
+          POSTGRES_DB: verixa_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U verixa -d verixa_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      TEST_DATABASE_URL: postgres://verixa:verixa@localhost:5432/verixa_test
     steps:
       - uses: actions/checkout@v4
 

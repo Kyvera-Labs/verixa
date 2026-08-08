@@ -10,6 +10,7 @@
   "packageManager": "pnpm@11.17.0",
   "scripts": {
     "prepare": "husky",
+    "db:wait": "node scripts/db-wait.mjs",
     "build": "pnpm -r run build",
     "dev": "pnpm --filter @verixa/api^... run build && pnpm --filter @verixa/api run dev",
     "typecheck": "pnpm -r run typecheck",

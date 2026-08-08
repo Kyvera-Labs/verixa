@@ -8,7 +8,18 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["**/dist/**", "**/coverage/**", "**/node_modules/**", "**/*.config.*", "planning/**"],
+    // scripts/** holds standalone Node scripts that aren't part of any
+    // workspace package's tsconfig project (see docs/guides/database.md) —
+    // type-aware linting needs a project to check against, which these
+    // deliberately don't have.
+    ignores: [
+      "**/dist/**",
+      "**/coverage/**",
+      "**/node_modules/**",
+      "**/*.config.*",
+      "planning/**",
+      "scripts/**",
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,

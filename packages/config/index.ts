@@ -5,6 +5,11 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().max(65535).default(3000),
   HOST: z.string().min(1).default("0.0.0.0"),
   LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal", "silent"]).default("info"),
+  // Not yet read by any repository (that starts with Issue 046) — present
+  // now so it flows through the same validated, fail-fast config loading
+  // as everything else, and so tooling like scripts/db-wait.mjs has one
+  // canonical place to get it from instead of reading process.env directly.
+  DATABASE_URL: z.string().url().default("postgres://verixa:verixa@localhost:5432/verixa"),
 });
 
 /** The fully validated, immutable application configuration. */
