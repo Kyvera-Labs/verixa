@@ -25,6 +25,11 @@ pnpm-debug.log*
 # Testing
 coverage/
 
+# Prisma's generated client — platform-specific (ships a compiled query-engine
+# binary for whichever OS generated it), so it must never be committed.
+# Regenerate with `pnpm db:generate`. See docs/guides/database.md.
+packages/database/generated/
+
 # Editor / OS
 .vscode/*
 !.vscode/extensions.json

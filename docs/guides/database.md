@@ -98,9 +98,102 @@ for it.
   networking setup. `TEST_DATABASE_URL` is set as a job-level `env` var
   pointing at it.
 
+## Prisma and the migration workflow
+
+`packages/database` (`@verixa/database`) owns the schema, the migration
+history, and the generated Prisma client. Everything database-related lives
+in that one package rather than at the repo root, for the same reason every
+other capability is a package: `apps/api` and the repository adapters
+declare an explicit dependency on it, and pnpm's strict `node_modules`
+resolution then guarantees the generated client is actually reachable from
+the packages that import it — which a root-level `prisma/` directory does
+not.
+
+There is **one** schema and **one** migration history for the whole system,
+not one per bounded context. That follows directly from
+`docs/adr/0002-multi-tenancy-model.md`: all tenants share the same tables,
+isolated by a row-level `organization_id` and Postgres RLS. Separate
+contexts own separate _tables_, but they live in the same database, so they
+migrate together.
+
+### Commands
+
+```bash
+pnpm db:generate         # regenerate the Prisma client from schema.prisma
+pnpm db:migrate          # create + apply a migration (development)
+pnpm db:migrate:deploy   # apply existing migrations (CI/production)
+pnpm db:migrate:status   # show which migrations have/haven't been applied
+```
+
+### The generated client is not committed
+
+`pnpm db:generate` writes the client into `node_modules`, and it ships a
+compiled query-engine binary specific to the platform that generated it — a
+client generated on Windows will not run on the Linux container in CI. It's
+git-ignored for that reason, which means **a fresh clone must run
+`pnpm db:generate` before anything that imports `@verixa/database` will
+build, typecheck, or run.** CI does this explicitly as its own step, before
+`pnpm build`, for exactly the same reason the build step runs before lint
+(see `docs/guides/ci-cd.md`).
+
+`packages/database/index.spec.ts` exists mostly to make that failure mode
+obvious: if generation was skipped, it fails on a plain assertion about the
+exported client rather than surfacing as a confusing type error somewhere
+several layers away.
+
+### `migrate dev` vs. `migrate deploy`
+
+- **`pnpm db:migrate` (`prisma migrate dev`)** is for development. It
+  diffs `schema.prisma` against the database, generates a new SQL migration
+  file, applies it, and regenerates the client. It can also **reset the
+  database** when it detects drift — which is fine locally and catastrophic
+  in production.
+- **`pnpm db:migrate:deploy` (`prisma migrate deploy`)** is for CI and
+  production. It only applies migration files that already exist, in order,
+  and never generates, edits, or resets anything. This is the one that runs
+  in the deploy pipeline.
+
+Using the wrong one in production is a genuinely destructive mistake, which
+is why they're separate named scripts here rather than one script with a
+flag.
+
+### Why migrations, not schema sync
+
+Prisma also offers `db push`, which shoves the current schema straight into
+the database with no migration file. It's faster while prototyping, and the
+wrong tool the moment anything real depends on the database.
+
+A migration file is a **record of a specific change, in order, that can be
+replayed**. That matters for three things `db push` can't do:
+
+1. **Reproducibility.** Every environment — a teammate's laptop, CI, staging,
+   production — arrives at the same schema by applying the same ordered list
+   of changes, rather than each independently syncing to whatever the schema
+   file happens to say today.
+2. **Review.** A migration is a diff a human can read in a pull request:
+   "this drops a column" is visible before it runs. Schema sync hides the
+   destructive step inside a tool's diffing logic, where nobody reviews it.
+3. **Data changes, not just structure.** Real schema changes often need
+   accompanying data changes — backfill a new non-null column before adding
+   the constraint, split one column into two. That's SQL that has to run
+   _between_ two structural states, which only exists in a migration-based
+   workflow.
+
+Verixa sets this workflow up in Issue 042, **before any table exists**,
+deliberately. Retrofitting migration history onto a database that was built
+by schema sync means reconstructing a history nobody recorded — so the
+cheapest possible moment to establish it is when there's nothing to
+reconstruct.
+
+Right now `packages/database/prisma/` contains a schema with a datasource
+and generator but no models, and therefore no migration files. The first
+real migration lands with the `users` table in Issue 043. CI still runs
+`db:migrate:deploy` today: with zero migrations it proves the pipeline
+connects and runs cleanly, and it starts catching real regressions the
+moment there's a migration to apply.
+
 ## What's next (Phase 03)
 
-- **Issue 042**: Prisma, `schema.prisma`, and the migration workflow.
 - **Issues 043–045**: tables for `User`, `Organization`/
   `OrganizationMembership`, and `Invitation`.
 - **Issue 046+**: real, Prisma-backed repositories satisfying the ports

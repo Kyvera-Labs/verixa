@@ -11,6 +11,10 @@
   "scripts": {
     "prepare": "husky",
     "db:wait": "node scripts/db-wait.mjs",
+    "db:generate": "pnpm --filter @verixa/database run db:generate",
+    "db:migrate": "pnpm --filter @verixa/database run db:migrate",
+    "db:migrate:deploy": "pnpm --filter @verixa/database run db:migrate:deploy",
+    "db:migrate:status": "pnpm --filter @verixa/database run db:migrate:status",
     "build": "pnpm -r run build",
     "dev": "pnpm --filter @verixa/api^... run build && pnpm --filter @verixa/api run dev",
     "typecheck": "pnpm -r run typecheck",

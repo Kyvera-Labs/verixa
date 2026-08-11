@@ -1,0 +1,25 @@
+// Verixa's database schema. One schema, one migration history, one database —
+// see docs/adr/0002-multi-tenancy-model.md: every tenant shares these tables,
+// isolated by a row-level `organization_id` plus Postgres RLS, rather than by
+// separate schemas or databases per tenant.
+//
+// No models are defined yet. Tables arrive in Issues 043-045 (users,
+// organizations/memberships, invitations), each as its own migration. This
+// file establishes the generator/datasource wiring and the migration workflow
+// first, deliberately: see docs/guides/database.md for why migration history
+// is set up before there's anything to migrate.
+
+// Generates to the default location (node_modules/.prisma/client, re-exported
+// by @prisma/client) rather than a custom `output` path inside this package.
+// That matters for the build: a custom output directory would be imported by
+// relative path from index.ts, which then breaks in the compiled dist/ output
+// because the generated files aren't copied there by tsc. Resolving through
+// node_modules works identically from source and from dist.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}

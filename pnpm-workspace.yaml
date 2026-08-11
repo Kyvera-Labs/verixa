@@ -7,8 +7,17 @@ packages:
 # Docker image, Issue 012) to produce a self-contained, node_modules-portable
 # bundle instead of one full of symlinks back into the monorepo.
 injectWorkspacePackages: true
+# Prisma's install scripts download the platform-specific query engine
+# binaries it needs to run at all, and @prisma/client's postinstall runs
+# `prisma generate`. Both are required for Prisma to function, so they're
+# allowed here rather than left blocked (pnpm blocks all install scripts by
+# default — a good default, since an install script is arbitrary code
+# execution from a dependency; each entry here is a deliberate exception).
 allowBuilds:
+  "@prisma/client": true
+  "@prisma/engines": true
   esbuild: true
+  prisma: true
   unrs-resolver: true
 # fast-uri is a transitive dependency (via fastify's ajv-compiler chain and
 # commitlint's ajv chain), pulled in at vulnerable version ranges in some of

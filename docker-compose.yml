@@ -72,6 +72,8 @@ services:
       - verixa-node-modules:/repo/node_modules
       - verixa-api-node-modules:/repo/apps/api/node_modules
       - verixa-config-node-modules:/repo/packages/config/node_modules
+      - verixa-database-node-modules:/repo/packages/database/node_modules
+      - verixa-identity-node-modules:/repo/packages/identity/node_modules
       - verixa-shared-kernel-node-modules:/repo/packages/shared-kernel/node_modules
     depends_on:
       postgres:
@@ -85,4 +87,6 @@ volumes:
   verixa-node-modules:
   verixa-api-node-modules:
   verixa-config-node-modules:
+  verixa-database-node-modules:
+  verixa-identity-node-modules:
   verixa-shared-kernel-node-modules:
