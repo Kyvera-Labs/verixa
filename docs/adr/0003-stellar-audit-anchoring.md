@@ -32,11 +32,11 @@ anchoring a Merkle/hash-chain root to a public blockchain).
 A public ledger is a reasonable anchoring target because it's
 append-only, globally witnessed, and cheap to write a small commitment to.
 Stellar specifically fits well on the mechanics: sub-5-second transaction
-finality, negligible fees, and a purpose-built `memo` field (up to 28
-bytes, enough for a hash) for attaching arbitrary data to a transaction —
-no smart-contract layer or token economics required, since the only thing
-being used is "an append-only public ledger that will timestamp a hash
-for a fraction of a cent."
+finality, negligible fees, and a `MEMO_HASH` memo field that is exactly 32
+bytes — precisely the size of a SHA-256 digest, so the chain-tip hash fits
+without truncation or encoding tricks. No smart-contract layer or token
+economics are required, since the only thing being used is "an append-only
+public ledger that will timestamp a hash for a fraction of a cent."
 
 ## Decision
 
