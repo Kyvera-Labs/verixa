@@ -2,11 +2,25 @@
 
 ## Status
 
-Proposed — targeted for Phase 10 (Audit Logging), alongside Issue 190
-(tamper-evident hash chaining). Not yet implemented; recorded now because
-the decision and its rationale are already settled, and writing it down at
-decision time (not reconstructed later) is this project's own documented
-ADR policy (`docs/adr/0000-adr-process.md`).
+Accepted — the anchoring mechanism is implemented and tested against the
+live Stellar testnet in `packages/stellar-anchor` (`@verixa/stellar-anchor`).
+See `docs/guides/stellar-anchoring.md`.
+
+What exists: the `HashAnchor` port, the `StellarHashAnchor` adapter
+(`MEMO_HASH` commitment plus Horizon-based verification), an
+`InMemoryHashAnchor` fake that doubles as the anchoring-disabled option, a
+shared behavioral contract both implementations pass, and a CLI for
+anchoring and independently verifying a hash.
+
+What does not exist yet: the consumer. `packages/audit` arrives in Phase 10,
+so nothing currently produces a hash chain to anchor. The scheduled job that
+periodically anchors a chain tip, and the extension of `VerifyAuditChain`
+(Issue 191) to check anchors, land with that phase — tracked as Issue 190A.
+
+Built ahead of its consumer deliberately: the mechanism is independently
+useful and independently verifiable, and proving the Stellar mechanics work
+against a real ledger is worth doing before an audit subsystem depends on
+them.
 
 ## Context
 
