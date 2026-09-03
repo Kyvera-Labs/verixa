@@ -3,11 +3,9 @@
 // isolated by a row-level `organization_id` plus Postgres RLS, rather than by
 // separate schemas or databases per tenant.
 //
-// No models are defined yet. Tables arrive in Issues 043-045 (users,
-// organizations/memberships, invitations), each as its own migration. This
-// file establishes the generator/datasource wiring and the migration workflow
-// first, deliberately: see docs/guides/database.md for why migration history
-// is set up before there's anything to migrate.
+// Tables arrive one issue at a time, each as its own migration: users (043),
+// organizations/memberships (044), invitations (045). See
+// docs/guides/database.md for the migration workflow.
 
 // Generates to the default location (node_modules/.prisma/client, re-exported
 // by @prisma/client) rather than a custom `output` path inside this package.
@@ -16,10 +14,86 @@
 // because the generated files aren't copied there by tsc. Resolving through
 // node_modules works identically from source and from dist.
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  // `postgresqlExtensions` is what lets the datasource below declare `citext`,
+  // so Prisma emits the CREATE EXTENSION into the migration rather than
+  // requiring every developer to run it by hand against their local database.
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [citext]
+}
+
+/// Lifecycle states a user can occupy. Mirrors the `UserStatus` union in
+/// packages/identity/domain/entities/user.ts — the domain owns which
+/// transitions between these are legal (`ALLOWED_TRANSITIONS`); the database
+/// only guarantees the column holds one of the four, never an arbitrary
+/// string. Values are lowercase to match the domain's union exactly, so no
+/// mapping layer is needed in either direction.
+enum UserStatus {
+  pending
+  active
+  suspended
+  deleted
+
+  @@map("user_status")
+}
+
+/// The identity aggregate's persisted form. Maps to the `User` entity in
+/// packages/identity/domain/entities/user.ts.
+model User {
+  /// Assigned by the domain (`createId<"UserId">()`), never by the database —
+  /// deliberately no `@default(uuid())`. An aggregate owns its own identity:
+  /// `User.register()` produces a fully-formed, valid User *before* anything
+  /// touches persistence, which is what lets the domain layer be tested and
+  /// reasoned about without a database at all. A database-generated id would
+  /// invert that, making an entity only partially real until it was saved.
+  id String @id @db.Uuid
+
+  /// `citext` (case-insensitive text) rather than `text`, so the unique index
+  /// treats Alice@Example.com and alice@example.com as the same address at the
+  /// database level.
+  ///
+  /// The domain already lowercases in `Email.create()`, so in normal operation
+  /// every value here is already lowercase and citext changes nothing. It
+  /// earns its place as the second line of defense: a raw SQL insert, a data
+  /// migration, a bulk import, or a future code path that bypasses
+  /// `Email.create()` would otherwise be able to create a duplicate account
+  /// differing only in case — which is an account-takeover-adjacent bug, not a
+  /// cosmetic one.
+  ///
+  /// The common alternative is `text` plus a functional unique index on
+  /// `LOWER(email)`. That works for uniqueness but is a well-known footgun:
+  /// the index is only used when a query's WHERE clause matches its
+  /// expression exactly, so `WHERE email = $1` silently falls back to a
+  /// sequential scan while `WHERE LOWER(email) = LOWER($1)` uses the index.
+  /// Every query site then has to remember the LOWER() wrapper, and the one
+  /// that forgets is both slow and case-sensitive. citext moves that
+  /// correctness into the column type, where it can't be forgotten.
+  email String @unique @db.Citext
+
+  /// The name shown throughout the product. Always present.
+  displayName String @map("display_name")
+
+  /// Optional structured legal name. Both parts are nullable because
+  /// `PersonName` itself is optional on a User; see the entity for why
+  /// `familyName` is optional even when a person name is present.
+  givenName  String? @map("given_name")
+  familyName String? @map("family_name")
+
+  status UserStatus
+
+  /// `timestamptz`, not `timestamp`. Postgres's `timestamp` (which is Prisma's
+  /// default for DateTime) stores no timezone and silently reinterprets values
+  /// against whatever the session timezone happens to be — a classic source of
+  /// hour-shifted timestamps that only appear when a server, a developer
+  /// laptop, and a CI runner disagree about local time. Audit and identity
+  /// records need an unambiguous instant.
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @map("updated_at") @db.Timestamptz(3)
+
+  @@map("users")
 }

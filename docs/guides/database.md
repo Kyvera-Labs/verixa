@@ -46,9 +46,12 @@ being bolted on later.
 `TEST_DATABASE_URL` is deliberately **not** part of `@verixa/config` — the
 running application server never needs to know about the test database, so
 adding it to the app's config schema would be scope creep onto a
-test-infrastructure concern. Test code that needs it reads
-`process.env["TEST_DATABASE_URL"]` directly (see
-`tests/integration/database.spec.ts`).
+test-infrastructure concern. Test code reads it through
+`tests/integration/helpers/database.ts`, which also builds the Prisma
+client for tests with that URL passed **explicitly** rather than relying on
+the ambient `DATABASE_URL` the schema reads. That matters: a suite that
+deletes rows should never be one environment variable away from doing it to
+a developer's own development database.
 
 ## Waiting for Postgres to be ready
 
@@ -81,14 +84,11 @@ for it.
 
 ### Running it
 
-- **Locally**, this test requires `docker compose up postgres` to be
-  running first — it will fail (not skip) if nothing is listening on
-  `TEST_DATABASE_URL`'s port, the same way any other integration test fails
-  when its dependency isn't available. This document doesn't currently run
-  in an environment with Docker available to verify that path directly, so
-  it was verified structurally (typecheck, lint, and a deliberate
-  unreachable-port run confirming the assertion fails the way it should)
-  and then verified for real via CI.
+- **Locally**, this test **skips** when nothing is listening on
+  `TEST_DATABASE_URL`'s port, so `pnpm test` passes on a fresh clone with
+  no Docker running. Start `docker compose up postgres` to actually run it.
+  See "Database-backed tests" below for why skipping is the local default
+  and how CI prevents that from hiding missing coverage.
 - **In CI**, `.github/workflows/ci.yml`'s `ci` job runs a `postgres:16-alpine`
   GitHub Actions **service container** (`services: postgres:`) — a
   lighter-weight mechanism than `docker compose` for CI specifically:
@@ -185,17 +185,109 @@ by schema sync means reconstructing a history nobody recorded — so the
 cheapest possible moment to establish it is when there's nothing to
 reconstruct.
 
-Right now `packages/database/prisma/` contains a schema with a datasource
-and generator but no models, and therefore no migration files. The first
-real migration lands with the `users` table in Issue 043. CI still runs
-`db:migrate:deploy` today: with zero migrations it proves the pipeline
-connects and runs cleanly, and it starts catching real regressions the
-moment there's a migration to apply.
+CI runs `db:migrate:deploy` on every push, applying every migration in
+order against a fresh Postgres service container — so a migration that
+doesn't apply cleanly fails the build rather than surfacing on someone's
+machine later.
+
+## Schema
+
+### `users` (Issue 043)
+
+The persisted form of the `User` aggregate
+(`packages/identity/domain/entities/user.ts`).
+
+| Column         | Type             | Notes                                          |
+| -------------- | ---------------- | ---------------------------------------------- |
+| `id`           | `uuid` PK        | Assigned by the domain, never by the database  |
+| `email`        | `citext` UNIQUE  | Case-insensitive; see below                    |
+| `display_name` | `text`           | Always present                                 |
+| `given_name`   | `text` NULL      | Optional structured name                       |
+| `family_name`  | `text` NULL      | Optional even when a given name exists         |
+| `status`       | `user_status`    | Enum: `pending`/`active`/`suspended`/`deleted` |
+| `created_at`   | `timestamptz(3)` |                                                |
+| `updated_at`   | `timestamptz(3)` |                                                |
+
+Three decisions in that table are worth explaining, because each one has a
+common alternative that's subtly worse.
+
+**The id is not database-generated.** There's deliberately no
+`@default(uuid())`. `User.register()` produces a complete, valid `User` —
+identity included — before anything touches persistence, which is what
+makes the domain layer testable without a database at all. Letting the
+database mint the id would invert that: an entity would only become fully
+real once saved, and every test would need a database to produce one.
+
+**`email` is `citext`, not `text`.** The domain already lowercases in
+`Email.create()`, so in normal operation every stored value is already
+lowercase and `citext` changes nothing. It earns its place as the second
+line of defense — a raw SQL insert, a data migration, a bulk import, or a
+future code path that skips `Email.create()` could otherwise create two
+accounts differing only in case, which is an account-takeover-adjacent bug
+rather than a cosmetic one. This is the same defense-in-depth principle
+applied throughout: enforce an invariant in the domain _and_ in the
+database, because the two protect against different failure modes.
+
+The usual alternative is `text` plus a functional unique index on
+`LOWER(email)`. That achieves uniqueness and is a well-known footgun:
+Postgres only uses a functional index when a query's `WHERE` clause matches
+its expression exactly. So `WHERE email = $1` silently falls back to a
+sequential scan while `WHERE LOWER(email) = LOWER($1)` uses the index —
+meaning every query site has to remember the wrapper, and the one that
+forgets is both slow _and_ case-sensitive. `citext` moves that correctness
+into the column type, where it can't be forgotten. `users-table.spec.ts`
+tests both halves: that a case-differing duplicate is rejected, and that a
+plain equality lookup matches case-insensitively.
+
+**Timestamps are `timestamptz`, not `timestamp`.** Prisma's default for
+`DateTime` on Postgres is `timestamp` — no timezone — which silently
+reinterprets values against whatever the session timezone happens to be.
+That produces hour-shifted timestamps that only appear once a server, a
+developer laptop, and a CI runner disagree about local time. Identity and
+audit records need an unambiguous instant.
+
+**One known gap.** `given_name` and `family_name` are independently
+nullable, so the database permits a family name with no given name — a
+state the domain's `PersonName` cannot represent. Closing it needs a
+`CHECK` constraint, which Prisma's schema language can't express and which
+would have to be hand-written into a migration. That's deferred rather than
+guessed at: this environment has no local Postgres to verify how Prisma's
+drift detection treats a constraint it can't model, and adding an
+unverifiable hand-edit to the migration history could break `migrate dev`
+for every contributor. It's a real gap, worth closing once it can be
+tested against a live database.
+
+## Database-backed tests
+
+Tests needing a real Postgres live in `tests/integration/` and follow one
+pattern:
+
+```ts
+const available = await databaseAvailability();
+
+describe.skipIf(!available)("users table", () => { ... });
+```
+
+They **skip** when no database is reachable, so `pnpm test` passes on a
+fresh clone with nothing running — a contributor's first command shouldn't
+fail for reasons unrelated to their change.
+
+The obvious hazard is that skipping hides missing coverage: a misconfigured
+CI service container would make every database test skip and still report
+green. CI therefore sets `REQUIRE_DATABASE_TESTS=1`, which turns an
+unreachable database into a hard failure.
+
+That check runs at module top level rather than in `beforeAll`, and the
+reason is worth recording. Vitest skips a suite's hooks along with its
+tests, so an assertion inside the `beforeAll` of a `describe.skipIf`-ed
+block never executes — the first version of this guard silently did nothing
+in precisely the situation it existed to catch. Module evaluation always
+runs, so throwing there fails collection reliably.
 
 ## What's next (Phase 03)
 
-- **Issues 043–045**: tables for `User`, `Organization`/
-  `OrganizationMembership`, and `Invitation`.
+- **Issues 044–045**: tables for `Organization`/`OrganizationMembership`
+  and `Invitation`.
 - **Issue 046+**: real, Prisma-backed repositories satisfying the ports
   from Phase 02, validated against the contract test suite from Issue 031.
 - **Issue 047**: Testcontainers, replacing the shared `verixa_test`

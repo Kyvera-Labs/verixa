@@ -36,6 +36,12 @@ jobs:
       # in CI there's no separate dev database to keep migrations away from,
       # which is the whole reason the two URLs exist separately locally.
       DATABASE_URL: postgres://verixa:verixa@localhost:5432/verixa_test
+      # Database-backed tests skip themselves when no Postgres is reachable,
+      # so `pnpm test` passes on a fresh clone without Docker. That's the
+      # right default locally and the wrong one here: a misconfigured service
+      # container would make every such test skip and still report success.
+      # This flag turns "no database" into a hard failure in CI only.
+      REQUIRE_DATABASE_TESTS: "1"
     steps:
       - uses: actions/checkout@v4
 
