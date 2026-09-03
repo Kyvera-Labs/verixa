@@ -33,7 +33,13 @@ export function organizationRepositoryContract(
 
       await repository.save(organization);
 
-      await expect(repository.findById(organization.id)).resolves.toBe(organization);
+      const found = await repository.findById(organization.id);
+
+      // State, not identity — see the note in user-repository.contract.ts.
+      expect(found?.id).toBe(organization.id);
+      expect(found?.slug).toBe(organization.slug);
+      expect(found?.name).toBe(organization.name);
+      expect(found?.ownerId).toBe(organization.ownerId);
     });
 
     it("finds a saved organization by slug", async () => {
@@ -42,7 +48,10 @@ export function organizationRepositoryContract(
 
       await repository.save(organization);
 
-      await expect(repository.findBySlug("acme")).resolves.toBe(organization);
+      const found = await repository.findBySlug("acme");
+
+      expect(found?.id).toBe(organization.id);
+      expect(found?.slug).toBe("acme");
     });
 
     it("existsBySlug is true only after the matching organization is saved", async () => {

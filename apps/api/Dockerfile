@@ -2,7 +2,7 @@
 #
 # Build context is the monorepo root (`docker build -f apps/api/Dockerfile .`)
 # because pnpm workspaces need the whole workspace — apps/api can't be built
-# in isolation from packages/config and packages/shared-kernel.
+# in isolation from the packages it depends on.
 
 FROM node:22-alpine AS base
 RUN corepack enable
@@ -12,16 +12,27 @@ WORKDIR /repo
 FROM base AS deps
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY apps/api/package.json apps/api/package.json
-COPY packages/config/package.json packages/config/package.json
-COPY packages/shared-kernel/package.json packages/shared-kernel/package.json
+# Every package manifest, not an enumerated subset. An explicit list is
+# better for layer caching but silently breaks the build the moment a new
+# workspace dependency is added — which is exactly what happened when
+# apps/api gained @verixa/database and @verixa/identity (Issue 050): the
+# image failed with "Cannot find module" while every other check passed.
+# Copying the manifests wholesale trades a little cache granularity for a
+# build that can't rot out of sync with the dependency graph.
+COPY packages packages
 RUN pnpm install --frozen-lockfile
 
 # ---- build: compile apps/api and every package it depends on ----
 FROM deps AS build
 COPY tsconfig.base.json ./
 COPY apps/api apps/api
-COPY packages/config packages/config
-COPY packages/shared-kernel packages/shared-kernel
+
+# The Prisma client is generated, never committed (it ships a
+# platform-specific query engine), so it has to be generated inside the
+# image before anything importing @verixa/database can compile. Same
+# ordering rule CI follows — see docs/guides/database.md.
+RUN pnpm --filter @verixa/database run db:generate
+
 RUN pnpm --filter @verixa/api... run build
 
 # `pnpm deploy` bundles apps/api plus its resolved (not symlinked) workspace

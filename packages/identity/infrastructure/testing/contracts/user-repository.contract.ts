@@ -37,7 +37,18 @@ export function userRepositoryContract(createRepository: () => UserRepository): 
 
       await repository.save(user);
 
-      await expect(repository.findById(user.id)).resolves.toBe(user);
+      const found = await repository.findById(user.id);
+
+      // Asserts equality of *state*, not object identity. `toBe` would only
+      // ever pass for an implementation that hands back the very instance it
+      // was given — true of an in-memory Map, never true of anything that
+      // actually persists and rebuilds. A contract that asserts identity is
+      // testing one implementation's internals, not the behavior both must
+      // share.
+      expect(found?.id).toBe(user.id);
+      expect(found?.email.value).toBe(user.email.value);
+      expect(found?.displayName.value).toBe(user.displayName.value);
+      expect(found?.status).toBe(user.status);
     });
 
     it("finds a saved user by email", async () => {
@@ -46,7 +57,10 @@ export function userRepositoryContract(createRepository: () => UserRepository): 
 
       await repository.save(user);
 
-      await expect(repository.findByEmail(user.email)).resolves.toBe(user);
+      const found = await repository.findByEmail(user.email);
+
+      expect(found?.id).toBe(user.id);
+      expect(found?.email.value).toBe(user.email.value);
     });
 
     it("save is an idempotent upsert", async () => {

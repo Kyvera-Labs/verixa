@@ -36,9 +36,13 @@ export function organizationMembershipRepositoryContract(
 
       await repository.save(membership);
 
-      await expect(
-        repository.findActiveByUserAndOrganization(USER_ID, ORGANIZATION_ID),
-      ).resolves.toBe(membership);
+      const found = await repository.findActiveByUserAndOrganization(USER_ID, ORGANIZATION_ID);
+
+      // State, not identity — see the note in user-repository.contract.ts.
+      expect(found?.id).toBe(membership.id);
+      expect(found?.userId).toBe(USER_ID);
+      expect(found?.organizationId).toBe(ORGANIZATION_ID);
+      expect(found?.status).toBe("active");
     });
 
     it("does not return a revoked membership as active", async () => {
