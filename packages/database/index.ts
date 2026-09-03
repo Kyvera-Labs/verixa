@@ -8,9 +8,21 @@
 // compiled query-engine binary for the machine that generated it), so
 // `pnpm db:generate` must run after a fresh clone and any time the schema
 // changes. See docs/guides/database.md.
-export { Prisma, PrismaClient, UserStatus } from "@prisma/client";
+export {
+  InvitationStatus,
+  MembershipStatus,
+  OrganizationStatus,
+  Prisma,
+  PrismaClient,
+  UserStatus,
+} from "@prisma/client";
 
 // Row types for the models defined in prisma/schema.prisma. Repository
 // adapters (Issue 046 onward) map between these and the domain entities;
 // nothing outside an adapter should ever hold one.
-export type { User as UserRow } from "@prisma/client";
+export type {
+  Invitation as InvitationRow,
+  Organization as OrganizationRow,
+  OrganizationMembership as OrganizationMembershipRow,
+  User as UserRow,
+} from "@prisma/client";

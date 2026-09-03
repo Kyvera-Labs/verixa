@@ -11,7 +11,7 @@ export class InMemoryInvitationRepository implements InvitationRepository {
 
   findByToken(token: string): Promise<Invitation | undefined> {
     return Promise.resolve(
-      [...this.invitationsById.values()].find((invitation) => invitation.token === token),
+      [...this.invitationsById.values()].find((invitation) => invitation.matchesToken(token)),
     );
   }
 

@@ -5,9 +5,11 @@ import type { Invitation, InvitationId } from "../../domain/entities/invitation.
  * the general port/adapter contract conventions this mirrors.
  *
  * - `findById`/`findByToken` return `undefined` when nothing matches.
- * - `findByToken` is the lookup an invitation-acceptance flow (Phase 14)
- *   actually uses: the recipient has the token (from the invitation email),
- *   not the invitation's internal id.
+ * - `findByToken` takes the **raw** token, as the recipient presents it from
+ *   their invitation email — not a hash. Hashing is the adapter's job, since
+ *   only the adapter knows that the stored form is a hash at all. Callers
+ *   never see or construct a hash, which is what keeps it impossible to
+ *   accidentally query with the wrong one.
  * - `save` is an idempotent upsert.
  */
 export interface InvitationRepository {

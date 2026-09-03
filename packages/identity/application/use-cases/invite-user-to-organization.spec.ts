@@ -28,10 +28,14 @@ describe("InviteUserToOrganization", () => {
 
     expect(Result.isOk(result)).toBe(true);
     if (Result.isOk(result)) {
-      expect(result.value.status).toBe("pending");
-      expect(result.value.email.value).toBe("invitee@example.com");
-      await expect(repository.findById(result.value.id)).resolves.toBe(result.value);
-      await expect(repository.findByToken(result.value.token)).resolves.toBe(result.value);
+      expect(result.value.invitation.status).toBe("pending");
+      expect(result.value.invitation.email.value).toBe("invitee@example.com");
+      await expect(repository.findById(result.value.invitation.id)).resolves.toBe(
+        result.value.invitation,
+      );
+      await expect(repository.findByToken(result.value.token)).resolves.toBe(
+        result.value.invitation,
+      );
     }
   });
 
@@ -42,7 +46,7 @@ describe("InviteUserToOrganization", () => {
       invitedByUserId: INVITER_ID,
     });
 
-    expect(Result.isOk(result) && result.value.pullDomainEvents()).toHaveLength(1);
+    expect(Result.isOk(result) && result.value.invitation.pullDomainEvents()).toHaveLength(1);
   });
 
   it("rejects an invalid email without persisting anything", async () => {

@@ -2,22 +2,19 @@ import { asId, Result } from "@verixa/shared-kernel";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import type { UserId } from "../../domain/entities/user.js";
-import { InMemoryOrganizationMembershipRepository } from "../../infrastructure/testing/in-memory-organization-membership-repository.js";
-import { InMemoryOrganizationRepository } from "../../infrastructure/testing/in-memory-organization-repository.js";
+import { InMemoryUnitOfWork } from "../../infrastructure/testing/in-memory-unit-of-work.js";
 
 import { CreateOrganization } from "./create-organization.js";
 
 const OWNER_ID: UserId = asId("00000000-0000-0000-0000-000000000001");
 
 describe("CreateOrganization", () => {
-  let organizationRepository: InMemoryOrganizationRepository;
-  let membershipRepository: InMemoryOrganizationMembershipRepository;
+  let unitOfWork: InMemoryUnitOfWork;
   let createOrganization: CreateOrganization;
 
   beforeEach(() => {
-    organizationRepository = new InMemoryOrganizationRepository();
-    membershipRepository = new InMemoryOrganizationMembershipRepository();
-    createOrganization = new CreateOrganization(organizationRepository, membershipRepository);
+    unitOfWork = new InMemoryUnitOfWork();
+    createOrganization = new CreateOrganization(unitOfWork);
   });
 
   it("creates the organization and an active owner membership together", async () => {
@@ -35,8 +32,8 @@ describe("CreateOrganization", () => {
       expect(result.value.membership.status).toBe("active");
     }
 
-    await expect(organizationRepository.findBySlug("acme")).resolves.toBeDefined();
-    const memberships = await membershipRepository.findAllByOrganization(
+    await expect(unitOfWork.repositories.organizations.findBySlug("acme")).resolves.toBeDefined();
+    const memberships = await unitOfWork.repositories.memberships.findAllByOrganization(
       Result.isOk(result) ? result.value.organization.id : asId("unreachable"),
     );
     expect(memberships).toHaveLength(1);
@@ -70,6 +67,6 @@ describe("CreateOrganization", () => {
     });
 
     expect(Result.isErr(result)).toBe(true);
-    await expect(organizationRepository.existsBySlug("a")).resolves.toBe(false);
+    await expect(unitOfWork.repositories.organizations.existsBySlug("a")).resolves.toBe(false);
   });
 });

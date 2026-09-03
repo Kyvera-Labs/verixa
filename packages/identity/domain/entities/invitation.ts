@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 
 import {
   createId,
@@ -18,6 +18,16 @@ export type InvitationId = Id<"InvitationId">;
 
 export type InvitationStatus = "pending" | "accepted" | "revoked";
 
+/**
+ * An invitation plus the one-time raw token issued with it. The token is not
+ * a field on {@link Invitation} because it is never stored — see
+ * {@link Invitation.create}.
+ */
+export interface IssuedInvitation {
+  readonly invitation: Invitation;
+  readonly token: string;
+}
+
 const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 interface InvitationProps {
@@ -25,7 +35,7 @@ interface InvitationProps {
   readonly organizationId: OrganizationId;
   readonly email: Email;
   readonly invitedByUserId: UserId;
-  readonly token: string;
+  readonly tokenHash: string;
   readonly status: InvitationStatus;
   readonly createdAt: Date;
   readonly expiresAt: Date;
@@ -48,7 +58,7 @@ export class Invitation {
   readonly organizationId: OrganizationId;
   readonly email: Email;
   readonly invitedByUserId: UserId;
-  readonly token: string;
+  readonly tokenHash: string;
   readonly status: InvitationStatus;
   readonly createdAt: Date;
   readonly expiresAt: Date;
@@ -60,7 +70,7 @@ export class Invitation {
     this.organizationId = props.organizationId;
     this.email = props.email;
     this.invitedByUserId = props.invitedByUserId;
-    this.token = props.token;
+    this.tokenHash = props.tokenHash;
     this.status = props.status;
     this.createdAt = props.createdAt;
     this.expiresAt = props.expiresAt;
@@ -68,28 +78,41 @@ export class Invitation {
     this.domainEvents = props.domainEvents ?? [];
   }
 
+  /** SHA-256 of a raw token, hex-encoded. The only form ever persisted. */
+  static hashToken(token: string): string {
+    return createHash("sha256").update(token, "utf8").digest("hex");
+  }
+
   /**
-   * Issues a new pending invitation. `token` is a random, unguessable
-   * opaque string distinct from `id` — `id` is a normal database key that
-   * may appear in URLs/logs, while `token` is the actual bearer credential
-   * that proves whoever holds it was the intended recipient (mailed to
-   * `email`, once Phase 14 exists). Using the entity's own `id` as that
-   * secret would conflate an identifier with a credential.
+   * Issues a new pending invitation.
+   *
+   * Returns the raw token *alongside* the invitation rather than on it,
+   * because this is the only moment it will ever exist. The invitation
+   * itself stores only {@link tokenHash}, so once this return value is
+   * discarded the raw token is unrecoverable from the system — exactly as
+   * intended, since the only party who should hold it is the recipient it
+   * gets mailed to (Phase 14).
+   *
+   * The token is distinct from `id` on purpose: `id` is an ordinary database
+   * key that may appear in URLs and logs, while the token is a bearer
+   * credential. Using one as the other would conflate an identifier with a
+   * secret.
    */
   static create(params: {
     organizationId: OrganizationId;
     email: Email;
     invitedByUserId: UserId;
     ttlMs?: number;
-  }): Invitation {
+  }): IssuedInvitation {
     const now = new Date();
     const id = createId<"InvitationId">();
-    return new Invitation({
+    const token = randomUUID();
+    const invitation = new Invitation({
       id,
       organizationId: params.organizationId,
       email: params.email,
       invitedByUserId: params.invitedByUserId,
-      token: randomUUID(),
+      tokenHash: Invitation.hashToken(token),
       status: "pending",
       createdAt: now,
       expiresAt: new Date(now.getTime() + (params.ttlMs ?? DEFAULT_TTL_MS)),
@@ -98,6 +121,25 @@ export class Invitation {
         new OrganizationInvitationCreated(id, params.organizationId, params.email.value),
       ],
     });
+
+    return { invitation, token };
+  }
+
+  /**
+   * Whether `token` is the raw token this invitation was issued with.
+   *
+   * Compares with {@link timingSafeEqual} rather than `===`. String equality
+   * short-circuits at the first differing byte, so how long it takes leaks
+   * how much of a guess was correct — enough, across many attempts, to
+   * reconstruct a secret byte by byte. That attack is impractical against
+   * 128 bits of entropy behind a database round-trip, but timing-safe
+   * comparison is the correct habit for secret material and costs nothing
+   * here. Phase 11 covers this properly.
+   */
+  matchesToken(token: string): boolean {
+    const candidate = Buffer.from(Invitation.hashToken(token), "hex");
+    const actual = Buffer.from(this.tokenHash, "hex");
+    return candidate.length === actual.length && timingSafeEqual(candidate, actual);
   }
 
   /** Rebuilds an `Invitation` from already-trusted data (e.g. a database row). Never carries pending domain events — see `User.reconstitute`. */

@@ -10,6 +10,10 @@
     "./app": {
       "types": "./dist/app.d.ts",
       "default": "./dist/app.js"
+    },
+    "./composition-root": {
+      "types": "./dist/composition-root.d.ts",
+      "default": "./dist/composition-root.js"
     }
   },
   "scripts": {
@@ -23,6 +27,8 @@
   },
   "dependencies": {
     "@verixa/config": "workspace:*",
+    "@verixa/database": "workspace:*",
+    "@verixa/identity": "workspace:*",
     "@verixa/shared-kernel": "workspace:*",
     "fastify": "^5.2.0"
   },

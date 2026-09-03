@@ -257,6 +257,25 @@ unverifiable hand-edit to the migration history could break `migrate dev`
 for every contributor. It's a real gap, worth closing once it can be
 tested against a live database.
 
+### Objects Prisma does not manage
+
+Two kinds of database object in this schema exist only in migration SQL,
+because Prisma's schema language cannot express them:
+
+- The **partial unique index** on `organization_memberships` (Issue 044),
+  which constrains only rows where `status = 'active'`. Prisma's `@@unique`
+  has no `WHERE` clause. A plain composite unique would be wrong — it would
+  forbid rejoining an organization after leaving it.
+- Any **`CHECK` constraint**, including the one `users.given_name` /
+  `family_name` still wants (Issue 043).
+
+The consequence to be aware of: `prisma migrate dev` derives new migrations
+by diffing `schema.prisma` against migration history, and it cannot see
+these objects. They are applied by their migration and stay in the database,
+but Prisma will not recreate them if it ever regenerates the schema, and it
+will not warn you they exist. Treat them as append-only: add via raw SQL in
+a migration, never expect Prisma to manage them afterwards.
+
 ## Database-backed tests
 
 Tests needing a real Postgres live in `tests/integration/` and follow one

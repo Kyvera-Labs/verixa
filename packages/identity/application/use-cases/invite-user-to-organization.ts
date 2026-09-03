@@ -1,6 +1,6 @@
 import { Result, ValidationError } from "@verixa/shared-kernel";
 
-import { Invitation } from "../../domain/entities/invitation.js";
+import { Invitation, type IssuedInvitation } from "../../domain/entities/invitation.js";
 import type { OrganizationId } from "../../domain/entities/organization.js";
 import type { UserId } from "../../domain/entities/user.js";
 import { Email } from "../../domain/value-objects/email.js";
@@ -26,20 +26,20 @@ export class InviteUserToOrganization {
 
   async execute(
     command: InviteUserToOrganizationCommand,
-  ): Promise<Result<Invitation, InviteUserToOrganizationError>> {
+  ): Promise<Result<IssuedInvitation, InviteUserToOrganizationError>> {
     const emailResult = Email.create(command.email);
     if (Result.isErr(emailResult)) {
       return emailResult;
     }
 
-    const invitation = Invitation.create({
+    const issued = Invitation.create({
       organizationId: command.organizationId,
       email: emailResult.value,
       invitedByUserId: command.invitedByUserId,
     });
 
-    await this.invitationRepository.save(invitation);
+    await this.invitationRepository.save(issued.invitation);
 
-    return Result.ok(invitation);
+    return Result.ok(issued);
   }
 }

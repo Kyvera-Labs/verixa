@@ -19,6 +19,14 @@ allowBuilds:
   esbuild: true
   prisma: true
   unrs-resolver: true
+  # Transitive deps of @testcontainers/postgresql (Issue 047), all denied.
+  # cpu-features and ssh2 matter only for Docker-over-SSH connections, and we
+  # connect over the local socket; protobufjs's build step precompiles
+  # definitions it also resolves fine at runtime. Recorded explicitly so
+  # `pnpm install` doesn't stop to ask and the decision isn't re-litigated.
+  cpu-features: false
+  protobufjs: false
+  ssh2: false
 # fast-uri is a transitive dependency (via fastify's ajv-compiler chain and
 # commitlint's ajv chain), pulled in at vulnerable version ranges in some of
 # those paths (GHSA-8jxf-...: host confusion via a backslash authority

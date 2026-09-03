@@ -64,3 +64,16 @@ export type {
   UpdateUserProfileError,
 } from "./application/use-cases/update-user-profile.js";
 export { UpdateUserProfile } from "./application/use-cases/update-user-profile.js";
+
+// Infrastructure: Prisma-backed adapters. Exported so the composition root
+// (apps/api) can construct them — it is the one place allowed to know which
+// concrete implementation is in use.
+export { PrismaUserRepository } from "./infrastructure/persistence/prisma-user-repository.js";
+export {
+  PrismaOrganizationMembershipRepository,
+  PrismaOrganizationRepository,
+} from "./infrastructure/persistence/prisma-organization-repository.js";
+export { PrismaInvitationRepository } from "./infrastructure/persistence/prisma-invitation-repository.js";
+export { PrismaUnitOfWork } from "./infrastructure/persistence/prisma-unit-of-work.js";
+export type { IdentityRepositories, UnitOfWork } from "./application/ports/unit-of-work.js";
+export type { IssuedInvitation } from "./domain/entities/invitation.js";
