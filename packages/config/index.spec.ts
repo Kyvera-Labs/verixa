@@ -18,6 +18,8 @@ describe("loadConfig", () => {
       HOST: "127.0.0.1",
       LOG_LEVEL: "warn",
       DATABASE_URL: "postgres://user:pass@db.example.com:5432/verixa",
+      DATABASE_POOL_SIZE: 10,
+      DATABASE_POOL_TIMEOUT_SECONDS: 10,
     });
   });
 
@@ -37,6 +39,8 @@ describe("loadConfig", () => {
       HOST: "0.0.0.0",
       LOG_LEVEL: "info",
       DATABASE_URL: "postgres://verixa:verixa@localhost:5432/verixa",
+      DATABASE_POOL_SIZE: 10,
+      DATABASE_POOL_TIMEOUT_SECONDS: 10,
     });
   });
 
@@ -68,6 +72,23 @@ describe("loadConfig", () => {
 
   it("rejects a port outside the valid TCP range", () => {
     expect(() => loadConfig({ PORT: "70000" })).toThrowError(ConfigError);
+  });
+
+  it("coerces pool settings from strings and applies defaults", () => {
+    const config = loadConfig({ DATABASE_POOL_SIZE: "25" });
+
+    expect(config.DATABASE_POOL_SIZE).toBe(25);
+    expect(config.DATABASE_POOL_TIMEOUT_SECONDS).toBe(10);
+  });
+
+  it("rejects a pool size above a stock Postgres max_connections", () => {
+    // Above ~100 the failure mode changes from "requests queue" to
+    // "connections are refused outright", which is much harder to diagnose.
+    expect(() => loadConfig({ DATABASE_POOL_SIZE: "500" })).toThrowError(ConfigError);
+  });
+
+  it("rejects a non-positive pool size", () => {
+    expect(() => loadConfig({ DATABASE_POOL_SIZE: "0" })).toThrowError(ConfigError);
   });
 
   it("rejects a malformed DATABASE_URL", () => {

@@ -11,3 +11,8 @@ export { ConflictError, DomainError, NotFoundError, ValidationError } from "./do
 export { Result } from "./domain/result.js";
 export { createLogger } from "./infrastructure/logger.js";
 export type { CreateLoggerOptions, Logger } from "./infrastructure/logger.js";
+export {
+  assertValidTenantId,
+  TENANT_CONTEXT_MECHANISM,
+  TENANT_CONTEXT_SETTING,
+} from "./infrastructure/tenant-context.js";

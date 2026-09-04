@@ -1,3 +1,4 @@
+import { loadConfig } from "@verixa/config";
 import { PrismaClient } from "@verixa/database";
 import {
   CreateOrganization,
@@ -31,6 +32,34 @@ import {
  * complete type safety.
  */
 
+/**
+ * Applies pool settings to the connection string (Issue 053).
+ *
+ * Prisma has no constructor option for pool size — it reads
+ * `connection_limit` and `pool_timeout` from the URL query string. Building
+ * that here keeps the tuning knobs as ordinary validated config
+ * (`DATABASE_POOL_SIZE`, `DATABASE_POOL_TIMEOUT_SECONDS`) instead of
+ * requiring operators to hand-append query parameters to a URL and get the
+ * spelling right.
+ *
+ * Existing query parameters are preserved; explicit ones in `DATABASE_URL`
+ * win, so a deployment can still override per-environment without changing
+ * code.
+ */
+function pooledDatabaseUrl(): string {
+  const config = loadConfig();
+  const url = new URL(config.DATABASE_URL);
+
+  if (!url.searchParams.has("connection_limit")) {
+    url.searchParams.set("connection_limit", String(config.DATABASE_POOL_SIZE));
+  }
+  if (!url.searchParams.has("pool_timeout")) {
+    url.searchParams.set("pool_timeout", String(config.DATABASE_POOL_TIMEOUT_SECONDS));
+  }
+
+  return url.toString();
+}
+
 /** Every use case the application exposes, fully wired. */
 export interface IdentityUseCases {
   readonly registerUser: RegisterUser;
@@ -56,7 +85,8 @@ export interface Container {
  * from `DATABASE_URL`.
  */
 export function buildContainer(prismaClient?: PrismaClient): Container {
-  const prisma = prismaClient ?? new PrismaClient();
+  const prisma =
+    prismaClient ?? new PrismaClient({ datasources: { db: { url: pooledDatabaseUrl() } } });
 
   const users = new PrismaUserRepository(prisma);
   const invitations = new PrismaInvitationRepository(prisma);

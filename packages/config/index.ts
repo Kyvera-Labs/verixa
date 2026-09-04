@@ -10,6 +10,45 @@ const envSchema = z.object({
   // as everything else, and so tooling like scripts/db-wait.mjs has one
   // canonical place to get it from instead of reading process.env directly.
   DATABASE_URL: z.string().url().default("postgres://verixa:verixa@localhost:5432/verixa"),
+
+  /**
+   * Maximum Postgres connections this process will hold open (Issue 053).
+   *
+   * Sizing formula: `pool size ≈ (peak concurrent requests that touch the
+   * database) / (number of app instances)`, then round up modestly. It is
+   * deliberately *not* "as high as the database allows."
+   *
+   * Raising this is the reflexive fix for connection-pool timeouts and
+   * usually makes throughput worse. Every Postgres connection is a separate
+   * OS process with its own memory (work_mem is per-operation, per-connection),
+   * and past the point where active connections exceed available cores, they
+   * compete for CPU and lock contention rather than doing more work — so
+   * total throughput falls while every individual query gets slower. A pool
+   * that is "too small" and briefly queues requests generally beats one that
+   * lets a hundred connections thrash.
+   *
+   * Timeouts under load usually mean queries are too slow or held too long
+   * (a transaction awaiting a network call, a missing index), and the pool is
+   * just where the symptom appears. Fix the query before touching this.
+   *
+   * Capped at 100 because exceeding a stock Postgres `max_connections` (also
+   * 100) means connection *errors*, not slowness — and the failure is far
+   * more confusing than a queue. Multiple app instances share that budget:
+   * ten instances at 20 each is 200, and the eleventh connection past the
+   * limit fails outright.
+   */
+  DATABASE_POOL_SIZE: z.coerce.number().int().positive().max(100).default(10),
+
+  /**
+   * Seconds to wait for a free connection before giving up.
+   *
+   * Bounded on purpose. Waiting indefinitely turns pool exhaustion into a
+   * hang that looks like a dead process, and each waiting request keeps
+   * holding memory and an inbound socket — so an unbounded queue converts a
+   * slow database into a full outage. Failing fast sheds load and surfaces
+   * the real problem.
+   */
+  DATABASE_POOL_TIMEOUT_SECONDS: z.coerce.number().int().positive().max(300).default(10),
 });
 
 /** The fully validated, immutable application configuration. */

@@ -276,6 +276,87 @@ but Prisma will not recreate them if it ever regenerates the schema, and it
 will not warn you they exist. Treat them as append-only: add via raw SQL in
 a migration, never expect Prisma to manage them afterwards.
 
+## Seeding
+
+`pnpm db:seed` (from `packages/database`) loads deterministic development
+fixtures: three users, two organizations, four memberships.
+
+```bash
+pnpm --filter @verixa/database run db:seed
+```
+
+**It is idempotent.** Every record upserts against a fixed id, so re-running
+updates rather than duplicating. That is not a convenience — a seed you are
+afraid to re-run becomes a seed nobody runs, and the fixtures drift out of
+sync with the schema until they no longer work at all.
+
+Fixed ids also make fixtures _referenceable_: user
+`00000000-0000-4000-8000-000000000001` is Alice on every machine and after
+every reset, which is what makes a local bug report reproducible.
+
+Two deliberate choices in the data:
+
+- **Bob belongs to two organizations.** A user spanning tenants is the case
+  naive multi-tenancy designs get wrong, and it should be what a contributor
+  sees by default rather than something they construct by hand.
+- **No invitations are seeded.** An invitation is only usable alongside the
+  raw token mailed to its recipient, and that token is unrecoverable by
+  design — a seeded invitation would be a row nobody could ever accept.
+  Seeding a _known_ token would be worse: a working bearer credential
+  committed to version control. See
+  [token storage](../security/token-storage.md).
+
+### Seed data must never resemble a real secret
+
+Everything here uses `@example.com` (IANA-reserved, can never receive mail),
+obvious placeholder names, and no credentials of any kind.
+
+Seed files get copied, pasted into issues, and screenshotted in tutorials, so
+anything in one should be worthless if disclosed. The risk isn't a leaked
+seed password — it's that a realistic-looking one teaches the habit, and
+eventually gets pasted somewhere real. When passwords arrive in Phase 04,
+seeded accounts must use values that are visibly unusable outside local
+development.
+
+## Connection pooling
+
+Two settings, both validated through `@verixa/config`:
+
+| Variable                        | Default | Meaning                                 |
+| ------------------------------- | ------- | --------------------------------------- |
+| `DATABASE_POOL_SIZE`            | 10      | Max connections this process holds open |
+| `DATABASE_POOL_TIMEOUT_SECONDS` | 10      | How long to wait for a free connection  |
+
+The composition root appends these to the connection URL as Prisma's
+`connection_limit` and `pool_timeout` parameters, so operators tune ordinary
+validated config instead of hand-editing query strings.
+
+**Sizing:** `pool size ≈ (peak concurrent requests touching the database) /
+(number of app instances)`, rounded up modestly.
+
+### Why "just increase the pool size" usually makes things worse
+
+It is the reflexive fix for pool timeouts and it is usually wrong.
+
+Every Postgres connection is a **separate OS process** with its own memory
+(`work_mem` is per-operation, per-connection). Once active connections exceed
+available cores they stop doing more work and start competing — context
+switching, lock contention, buffer pressure. Total throughput _falls_ while
+every individual query gets slower. A pool that is "too small" and briefly
+queues requests generally beats one that lets a hundred connections thrash.
+
+A pool timeout almost always means queries are too slow or held too long — a
+missing index, or a transaction awaiting a network call. The pool is where
+the symptom appears, not where the problem is. Fix the query first.
+
+The cap of 100 exists because a stock Postgres `max_connections` is also 100,
+and crossing it changes the failure from "requests queue" to "connections
+refused" — much harder to diagnose. Remember instances share that budget: ten
+app instances at 20 each is 200, and everything past 100 fails outright.
+
+Load testing that would validate these defaults empirically is Phase 23; the
+numbers here are conservative starting points, not measured optima.
+
 ## Database-backed tests
 
 Tests needing a real Postgres live in `tests/integration/` and follow one

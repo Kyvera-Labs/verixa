@@ -77,3 +77,4 @@ export { PrismaInvitationRepository } from "./infrastructure/persistence/prisma-
 export { PrismaUnitOfWork } from "./infrastructure/persistence/prisma-unit-of-work.js";
 export type { IdentityRepositories, UnitOfWork } from "./application/ports/unit-of-work.js";
 export type { IssuedInvitation } from "./domain/entities/invitation.js";
+export { withTenantContext } from "./infrastructure/persistence/prisma-tenant-context.js";
