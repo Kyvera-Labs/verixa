@@ -119,3 +119,4 @@ Every new bearer token in Verixa should satisfy all of these:
 - [ ] Single-use where applicable, enforced by a status transition
 
 <!-- CI validation probe -->
+<!-- probe 2 -->
