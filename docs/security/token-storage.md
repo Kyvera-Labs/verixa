@@ -117,3 +117,5 @@ Every new bearer token in Verixa should satisfy all of these:
 - [ ] Comparison is timing-safe
 - [ ] Has an expiry, and expiry is enforced on read rather than assumed
 - [ ] Single-use where applicable, enforced by a status transition
+
+<!-- CI validation probe -->
