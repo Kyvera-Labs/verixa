@@ -31,6 +31,7 @@ import {
   SuspendUser,
   UpdateUserProfile,
 } from "@verixa/identity";
+import { NoopRateLimiter } from "@verixa/shared-kernel";
 import { StellarHashAnchor } from "@verixa/stellar-anchor";
 
 /**
@@ -158,8 +159,14 @@ export function buildContainer(prismaClient?: PrismaClient): Container {
   // exist now is what stops "invalidate sessions on password reset" becoming
   // a step someone has to remember to add later — the most commonly missed
   // part of a reset flow.
+  //
+  // `NoopRateLimiter` always allows requests — rate limiting is Phase 15.
+  // It is wired as the default adapter so use cases work before the real
+  // limiter exists. No changes to use cases required when the real one
+  // arrives — only a new adapter and a new wire in composition root.
   const credentialNotifier = new NullCredentialNotifier();
   const sessionRevoker = new NoSessionsRevoker();
+  const rateLimiter = new NoopRateLimiter();
 
   // Audit recording. Failures are logged and never propagated -- see
   // RecordAuditEvent on why a failed audit write must not fail the operation
@@ -196,22 +203,35 @@ export function buildContainer(prismaClient?: PrismaClient): Container {
       inviteUserToOrganization: new InviteUserToOrganization(invitations),
     },
     credentials: {
-      registerUserWithPassword: new RegisterUserWithPassword(credentialsUnitOfWork, passwordHasher),
+      registerUserWithPassword: new RegisterUserWithPassword(
+        credentialsUnitOfWork,
+        passwordHasher,
+        rateLimiter,
+      ),
       // Shares the hasher instance with registration deliberately. Beyond
       // avoiding a second allocation, the timing decoy that hides whether an
       // account exists is cached per hasher, so a second instance would build
       // its own on the first failed login.
-      authenticateWithPassword: new AuthenticateWithPassword(credentialsUnitOfWork, passwordHasher),
+      authenticateWithPassword: new AuthenticateWithPassword(
+        credentialsUnitOfWork,
+        passwordHasher,
+        rateLimiter,
+      ),
       requestEmailVerification: new RequestEmailVerification(
         credentialsUnitOfWork,
         credentialNotifier,
       ),
       confirmEmailVerification: new ConfirmEmailVerification(credentialsUnitOfWork),
-      requestPasswordReset: new RequestPasswordReset(credentialsUnitOfWork, credentialNotifier),
+      requestPasswordReset: new RequestPasswordReset(
+        credentialsUnitOfWork,
+        credentialNotifier,
+        rateLimiter,
+      ),
       confirmPasswordReset: new ConfirmPasswordReset(
         credentialsUnitOfWork,
         passwordHasher,
         sessionRevoker,
+        rateLimiter,
       ),
     },
     audit: {
