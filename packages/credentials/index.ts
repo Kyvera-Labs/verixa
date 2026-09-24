@@ -35,6 +35,7 @@ export {
   type PasswordPolicy,
   RawPassword,
 } from "./domain/value-objects/raw-password.js";
+export { PasswordChanged } from "./domain/events/password-changed.js";
 
 // Application: ports
 export {
@@ -54,6 +55,11 @@ export type {
 export type { PasswordHasher } from "./application/ports/password-hasher.js";
 
 // Application: use cases
+export {
+  ChangePassword,
+  type ChangePasswordCommand,
+  type ChangePasswordResult,
+} from "./application/use-cases/change-password.js";
 export {
   ConfirmEmailVerification,
   type ConfirmEmailVerificationCommand,
