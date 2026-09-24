@@ -155,6 +155,96 @@ parameter to shed load, "different parameters" would silently re-hash every
 password _down_ to the weaker setting on next login — degrading the entire
 system while looking like routine maintenance. Only increases propagate.
 
+## Password History / Reuse Prevention (Issue 072)
+
+### Policy
+
+The last `PASSWORD_HISTORY_DEPTH` (default: 5) password hashes are stored per
+credential. Reuse of any recent password is rejected on both change and reset
+flows, preventing trivial "change and change back" bypasses of the reset flow.
+
+### Rationale (NIST SP 800-63B)
+
+NIST SP 800-63B now deprioritizes forced password rotation but endorses reuse
+prevention as a real security control. N=5 balances security value (preventing
+the "change and change back" attack) against user friction — most users rotate
+passwords rarely enough that history never constrains them.
+
+### Implementation
+
+**Storage:**
+
+- `Credential.passwordHistory: string[]` — ordered list of previous hashes,
+  most recent first
+- Capped at `PASSWORD_HISTORY_DEPTH` entries; oldest entries are discarded
+- Each entry is a full argon2 hash, never plaintext
+
+**Mutation:**
+
+- `Credential.rotatePassword(newHash, policy)` is the **only way** to update
+  `passwordHash`
+- It atomically pushes the current hash to the front of history, sets the new
+  hash, caps history at policy depth, and clears any account lockout
+- Returns a new immutable `Credential` instance
+
+**Verification:**
+
+- `Credential.isPasswordReused(plaintext, comparePassword)` checks whether a
+  candidate password matches the current hash or any entry in history
+- Uses the injected `comparePassword` function (typically `PasswordHasher.verify`)
+- Short-circuits on the first match for performance
+- Asynchronous (returns `Promise<boolean>`)
+
+**Error:**
+
+- `PasswordReusedError` — a domain error thrown when reuse is detected
+- Caught by use cases and converted to `ValidationError` with a clear message
+  including the history depth and guidance ("choose a password not used in
+  your last N passwords")
+
+### Flows
+
+**Password Reset (Issue 070 — `ConfirmPasswordReset`):**
+
+1. Validate new password against policy (early, before token/hash work)
+2. Verify reset token
+3. **Check reuse against current + history** ← Issue 072
+4. Hash new password
+5. Call `credential.rotatePassword(newHash, policy)` ← maintains history
+6. Persist updated credential
+7. Revoke all existing sessions
+
+**Password Change (Issue 071 — `ChangePassword`):**
+
+1. Validate new password against policy (early)
+2. Re-authenticate with current password (step-up auth)
+3. **Check reuse against current + history** ← Issue 072
+4. Hash new password
+5. Call `credential.rotatePassword(newHash, policy)` ← maintains history
+6. Persist updated credential
+
+### Files
+
+- **Entity:** `packages/credentials/domain/entities/credential.ts`
+  - `passwordHistory: string[]` field
+  - `isPasswordReused()` method
+  - `rotatePassword()` method
+
+- **Policy:** `packages/credentials/domain/value-objects/password-history-policy.ts`
+  - `PasswordHistoryPolicy` interface
+  - `DEFAULT_PASSWORD_HISTORY_POLICY` (depth: 5)
+
+- **Error:** `packages/credentials/domain/errors/password-reused-error.ts`
+  - `PasswordReusedError` class
+
+- **Migration:** `packages/database/prisma/migrations/20260915130000_add_password_history/`
+  - Adds `password_history JSON` column (default `[]`)
+
+- **Tests:**
+  - Entity: `packages/credentials/domain/entities/credential.spec.ts` (19 tests)
+  - Reset: `packages/credentials/application/use-cases/password-reset.spec.ts` (5 tests)
+  - Change: `packages/credentials/application/use-cases/change-password.spec.ts` (28 tests)
+
 ## Things this layer does _not_ do
 
 Worth stating, because assuming otherwise is how gaps appear:

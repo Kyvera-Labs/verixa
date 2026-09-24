@@ -3,6 +3,10 @@ import { Result, ValidationError } from "@verixa/shared-kernel";
 
 import { Credential } from "../../domain/entities/credential.js";
 import { PasswordResetToken } from "../../domain/entities/password-reset-token.js";
+import {
+  type PasswordHistoryPolicy,
+  DEFAULT_PASSWORD_HISTORY_POLICY,
+} from "../../domain/value-objects/password-history-policy.js";
 import { type PasswordPolicy, RawPassword } from "../../domain/value-objects/raw-password.js";
 import type { CredentialsUnitOfWork } from "../ports/credentials-unit-of-work.js";
 import type { PasswordHasher } from "../ports/password-hasher.js";
@@ -56,6 +60,7 @@ export class ConfirmPasswordReset {
     private readonly passwordHasher: PasswordHasher,
     private readonly sessionRevoker: SessionRevoker,
     private readonly passwordPolicy?: PasswordPolicy,
+    private readonly passwordHistoryPolicy: PasswordHistoryPolicy = DEFAULT_PASSWORD_HISTORY_POLICY,
   ) {}
 
   async execute(
@@ -109,13 +114,24 @@ export class ConfirmPasswordReset {
       // but a credential deleted between request and confirmation would
       // otherwise strand a valid token against a missing row.
       const existing = await repositories.credentials.findByUserId(user.id);
+
+      // Check for password reuse before updating (Issue 072)
+      if (existing !== undefined) {
+        const isReused = await existing.isPasswordReused(command.newPassword, (plain, hash) =>
+          this.passwordHasher.verify(plain, hash),
+        );
+        if (isReused) {
+          return { kind: "password_reused" as const };
+        }
+      }
+
       const credential =
         existing === undefined
           ? Credential.create({ userId: user.id, passwordHash: newHash })
-          : // `withPasswordHash` also clears the lockout, which matters
-            // exactly here: the failures that locked the account were not the
-            // owner's, and after a reset they have no way to wait one out.
-            existing.withPasswordHash(newHash);
+          : // `rotatePassword` maintains history and clears the lockout, which
+            // matters exactly here: the failures that locked the account were not
+            // the owner's, and after a reset they have no way to wait one out.
+            existing.rotatePassword(newHash, this.passwordHistoryPolicy);
 
       await repositories.credentials.save(credential);
 
@@ -125,6 +141,15 @@ export class ConfirmPasswordReset {
     if (outcome.kind === "invalid") {
       return Result.err(
         new ValidationError("This reset link is not valid.", { token: ["invalid"] }),
+      );
+    }
+
+    if (outcome.kind === "password_reused") {
+      return Result.err(
+        new ValidationError(
+          `Password was recently used. Please choose a password not used in your last ${this.passwordHistoryPolicy.depth} passwords.`,
+          { password: ["reused"] },
+        ),
       );
     }
 
