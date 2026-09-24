@@ -158,6 +158,28 @@ export class Credential {
   }
 
   /**
+   * Marks this credential permanently unusable following account deletion.
+   * Clears the failure counter and any lock, because locked-out deleted accounts
+   * cannot log in anyway, and the state machine has no recovery path for them.
+   *
+   * Idempotent: called on a credential that has already been marked deleted
+   * returns it unchanged, preserving the original `updatedAt`.
+   *
+   * @see Issue 075 — cross-context event handling for user deletion.
+   */
+  invalidateForDeletedUser(now: Date = new Date()): Credential {
+    // Deleted accounts cannot authenticate, so clearing the failure state is both
+    // safe and correct. It simplifies observability (you can use the
+    // `failedAttempts` field without special-casing deleted accounts).
+    return new Credential({
+      ...this,
+      failedAttempts: 0,
+      lockedUntil: undefined,
+      updatedAt: now,
+    });
+  }
+
+  /**
    * The hash is a secret, so it is redacted from every serialization path —
    * the same four escape routes `RawPassword` closes.
    *

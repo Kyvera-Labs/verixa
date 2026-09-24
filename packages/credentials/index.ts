@@ -86,6 +86,7 @@ export {
   type RegisterUserWithPasswordError,
   type RegisterUserWithPasswordResult,
 } from "./application/use-cases/register-user-with-password.js";
+export { HandleUserDeleted } from "./application/use-cases/handle-user-deleted.js";
 
 // Infrastructure
 export {
