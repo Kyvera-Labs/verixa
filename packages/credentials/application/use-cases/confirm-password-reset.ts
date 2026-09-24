@@ -1,5 +1,6 @@
 import type { User } from "@verixa/identity";
 import { Result, ValidationError } from "@verixa/shared-kernel";
+import type { RateLimiter, RateLimitKey } from "@verixa/shared-kernel";
 
 import { Credential } from "../../domain/entities/credential.js";
 import { PasswordResetToken } from "../../domain/entities/password-reset-token.js";
@@ -40,6 +41,12 @@ export interface ConfirmPasswordResetResult {
  * comment saying "remember to revoke sessions when Phase 05 lands" — and that
  * is the comment nobody reads.
  *
+ * ## Rate limiting
+ *
+ * The rate limiter is consulted at the start via the {@link RateLimiter} port
+ * to prevent abuse of the confirmation endpoint. On successful confirmation,
+ * the limit is reset to allow the user to make another attempt if needed.
+ *
  * ## Ordering
  *
  * Token consumed → credential replaced → sessions revoked, all inside one
@@ -55,12 +62,27 @@ export class ConfirmPasswordReset {
     private readonly unitOfWork: CredentialsUnitOfWork,
     private readonly passwordHasher: PasswordHasher,
     private readonly sessionRevoker: SessionRevoker,
+    private readonly rateLimiter: RateLimiter,
     private readonly passwordPolicy?: PasswordPolicy,
   ) {}
 
   async execute(
     command: ConfirmPasswordResetCommand,
   ): Promise<Result<ConfirmPasswordResetResult, ValidationError>> {
+    // 1. Check rate limit BEFORE any other logic
+    const rateLimitKey: RateLimitKey = {
+      action: "password-reset",
+      identifier: command.token,
+    };
+
+    const limitResult = await this.rateLimiter.check(rateLimitKey);
+    if (!limitResult.allowed) {
+      throw new Error(
+        `Rate limit exceeded for ${rateLimitKey.action} on ${rateLimitKey.identifier}. ` +
+          `Resets at ${new Date(limitResult.resetAt).toISOString()}`,
+      );
+    }
+
     // Policy first, before the token is looked up and before anything is
     // hashed. A rejected password should not consume the user's one-time
     // link — otherwise choosing a too-short password burns the reset and
@@ -146,6 +168,9 @@ export class ConfirmPasswordReset {
         ),
       );
     }
+
+    // Reset rate limit counter on successful password reset confirmation
+    await this.rateLimiter.reset(rateLimitKey);
 
     return Result.ok({ user: outcome.user });
   }

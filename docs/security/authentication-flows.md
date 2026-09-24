@@ -188,6 +188,37 @@ The failure counter also keeps climbing _during_ a lock rather than freezing at
 the threshold. That is what makes the backoff exponential — each further
 attempt earns a longer next lock.
 
+## Rate Limiting
+
+All abuse-sensitive endpoints consult the `RateLimiter` port before executing:
+
+| Flow | Action Key | Identifier |
+|------|-----------|------------|
+| Login | `login` | email address |
+| Register | `register` | email address |
+| Password Reset Request | `password-reset` | email address |
+| Password Reset Confirmation | `password-reset` | reset token |
+| Email Verification | `email-verification` | email address |
+
+### Current Implementation
+
+A no-op adapter is wired until Phase 15 implements the real rate limiter.
+The no-op always allows requests — no actual limiting occurs yet.
+
+### Failure Behavior
+
+When the rate limit is exceeded, the use case throws an error containing
+`resetAt` (when the limit resets) and `limit` (the maximum allowed).
+The transport layer (HTTP controller) maps this to 429 Too Many Requests.
+
+### Adding Real Implementation (Phase 15)
+
+Implement the `RateLimiter` port and inject via DI container.
+No changes to use cases required — the seam is already wired.
+
+Follow existing patterns in this repo for ports, adapters,
+use cases, dependency injection, and testing.
+
 ## Transparent rehashing
 
 A successful login is the only moment the plaintext password exists in memory,
