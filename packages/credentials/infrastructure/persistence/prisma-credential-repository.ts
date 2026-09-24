@@ -6,7 +6,7 @@ import { Credential, type CredentialUserId } from "../../domain/entities/credent
 
 /** Row ↔ aggregate translation for `Credential`. */
 export const CredentialMapper = {
-  toDomain(row: CredentialRow): Credential {
+  toDomain(row: CredentialRow & { passwordHistory?: string[] }): Credential {
     return Credential.reconstitute({
       id: asId<"CredentialId">(row.id),
       userId: asId<"UserId">(row.userId),
@@ -17,18 +17,20 @@ export const CredentialMapper = {
       // what stops `null` leaking inward and forcing every call site to
       // handle both.
       lockedUntil: row.lockedUntil ?? undefined,
+      passwordHistory: (row.passwordHistory as string[]) ?? [],
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     });
   },
 
-  toRow(credential: Credential): CredentialRow {
+  toRow(credential: Credential): CredentialRow & { passwordHistory?: string[] } {
     return {
       id: credential.id,
       userId: credential.userId,
       passwordHash: credential.passwordHash,
       failedAttempts: credential.failedAttempts,
       lockedUntil: credential.lockedUntil ?? null,
+      passwordHistory: credential.passwordHistory,
       createdAt: credential.createdAt,
       updatedAt: credential.updatedAt,
     };
