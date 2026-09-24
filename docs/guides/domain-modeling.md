@@ -288,3 +288,112 @@ The first concrete use case, `RegisterUser`
 (`packages/identity/application/use-cases/register-user.ts`), establishes
 the application layer's command-handler pattern: see
 `docs/guides/use-cases.md` for the full shape and rationale.
+
+## Sessions and expiry policies (Phase 05, Issue 083)
+
+`Session` (packages/sessions/domain/entities/session.ts) is a stateful
+aggregate representing an authenticated user's active session — a logical
+unit distinct from the tokens issued from it. This separation of concerns
+matters: a session has a lifecycle (active, revoked), an expiry policy, and
+track records of activity (`lastSeenAt`), while tokens are the derived
+artifacts presented to prove the session is valid.
+
+### Why sessions exist separately from tokens
+
+Many systems conflate "session" with "JWT token": the token is the session,
+revocation is a deny-list, and activity tracking is implicit in token
+reissuance. This works at small scale but breaks under real-world constraints:
+
+- **Revocation latency:** A deny-list add takes time to propagate across a
+  cluster; a request that arrives before the update still sees the token as
+  valid. A stateful session loaded from a local (or locally-cached) database is
+  more reliably revoked.
+- **Multi-device accountability:** A user logs in on their phone, then again on
+  a laptop. Did they? Or did an attacker? A deny-list can't tell — both tokens
+  are equally revoked. A per-session record of device/IP/user-agent metadata
+  makes the difference visible.
+- **Concurrent-session limits:** "Let this user have at most 3 active sessions"
+  is trivial with a per-session row (count rows, evict the oldest on overflow).
+  It's complicated with tokens alone (no place to record which device is
+  "oldest").
+
+The architecture here separates the two: `Session` is the stateful record,
+tokens are short-lived artifacts. Revocation revokes the session; the token's
+deny-list is a short-lived performance optimization (a few minutes), not the
+source of truth.
+
+### Expiry policies and the sliding vs. absolute tradeoff
+
+`SessionExpiryPolicy` (packages/sessions/domain/value-objects/session-expiry-policy.ts)
+encodes the decision: does activity extend the expiry (`sliding`), or is there a
+hard cutoff regardless of activity (`absolute`)?
+
+- **Sliding:** A session with a 15-minute policy and one hour of continuous
+  activity is never expired — the expiry window slides forward with each
+  request. Seamless UX (no sudden logouts), but a compromised session token
+  can live arbitrarily long under continuous (automated) reuse.
+- **Absolute:** The session expires 24 hours after creation, regardless of
+  activity. Guarantees a maximum lifetime, but the user is logged out the
+  moment the window closes — mid-form, mid-API-call, with no recovery path.
+
+Real deployments use both: absolute expiry on the refresh token (7 days,
+hard boundary) and sliding expiry on the access token (15 minutes, extends
+on use). This bounds the worst-case exposure of a stolen token (7 days max)
+while keeping UX smooth (re-login only if idle 15+ minutes).
+
+**Why this is a domain concern:** The choice is not a database implementation
+detail; it's a security/UX policy that belongs to the session entity itself.
+The entity's `isExpired()` and `touch()` methods must know which mode they're
+in to compute correctly. This is why `SessionExpiryPolicy` is part of the
+domain layer, not infrastructure.
+
+**Why policies are not persisted:** The policy (mode and interval) is a
+configuration decision, not a per-session value — all refresh tokens use the
+same policy, all access tokens use the same policy. Storing it per-row wastes
+space and creates a maintenance hazard (if the policy changes, do we update
+stored rows?). Instead, it's supplied by the use case or composition root when
+reconstructing a session from the database.
+
+### Indexing strategy for "active sessions per user"
+
+The database schema includes two indexes:
+
+1. **(userId, expiresAt) composite:** Supports the core query pattern:
+   "fetch all non-revoked, non-expired sessions for a user" (used by "list
+   devices," concurrent-session-limit enforcement, "log out everywhere").
+   Sorted on both columns means the query avoids a secondary sort and uses
+   the index for both the user lookup and the expiry filter.
+
+2. **expiresAt alone:** Supports the background expiry sweep (not built until
+   later phases): "delete or archive all sessions where expiresAt < now()"
+   without a sequential table scan.
+
+These indexes were verified by `EXPLAIN ANALYZE` in the contract test suite
+(prisma-session-repository.spec.ts), confirming that both query patterns use
+index scans rather than sequential scans.
+
+### Row-Level Security
+
+Sessions belong to users, who belong to organizations. A session must never be
+readable by a user in a different organization. This is enforced by Postgres
+Row-Level Security (RLS) policies once Issue 052 is implemented. For now, it is
+documented as a constraint; the policy itself is added when the RLS
+infrastructure exists.
+
+### Why contract testing matters for sessions
+
+The `SessionRepository` port has two implementations: `InMemorySessionRepository`
+(for unit tests and the initial phase) and `PrismaSessionRepository` (for
+persistence). The same contract test suite (`session-repository.contract.ts`)
+runs against both, ensuring they behave identically. This catches subtle bugs:
+a query that accidentally includes revoked sessions, an expiry calculation that
+drifts by milliseconds, a revoke operation that doesn't update lastSeenAt when
+it should. The contract is the single source of truth about what "correct"
+behavior is.
+
+## Use cases
+
+The first concrete use case, `RegisterUser`
+(`packages/identity/application/use-cases/register-user.ts`), establishes
+the application layer's command-handler pattern: see
+`docs/guides/use-cases.md` for the full shape and rationale.
