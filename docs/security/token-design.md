@@ -1,71 +1,20 @@
-# Token Design & JWT Access Tokens
+# Access Token Design & JWT Implementation
 
-This document covers the design decisions and implementation of access tokens in Verixa, focusing on JWT-based (stateless-verifiable) short-lived tokens paired with refresh tokens for session management.
+**Issue:** #24 (Roadmap 084) — JWT access token design & signing service  
+**Phase:** Phase 05 — Sessions & Tokens
 
-## Executive Summary
+This document covers the design and implementation of short-lived, stateless-verifiable access tokens in Verixa.
 
-- **Access tokens** are short-lived JWTs (typically 15 minutes) signed with RS256 (asymmetric). They carry enough claims to be verified without a database lookup.
-- **Refresh tokens** are long-lived, opaque, and revocable. They live in the database and are never embedded in a JWT.
-- This split allows fast, stateless verification of access tokens while maintaining the ability to revoke sessions and detect token theft.
+## Overview
 
----
+Access tokens prove a user's identity and session validity to downstream services without requiring a database round trip. Verixa uses short-lived JWTs (15 minutes) signed with RS256 (asymmetric), paired with long-lived, revocable refresh tokens.
 
-## Why JWT?
+The split accomplishes two goals:
 
-JWTs solve the central challenge of scalable session management: **How do you verify a user's identity on every request without hitting the database on every request?**
+1. **Stateless verification:** Any service with the public key can verify an access token without contacting the auth service or a database.
+2. **Immediate revocation:** A session revocation is recorded immediately; downstream verifiers check a revocation list (Issue 088) after signature verification succeeds.
 
-### The Problem
-
-In a monolithic application, a session store (often Redis or an in-memory map) holds all active sessions. On each request, the server looks up the session and returns a "yes, valid" or "no, invalid" decision. This is simple but doesn't scale across multiple servers:
-
-- If Server A issues a session and Server B receives a request with that token, Server B must query a shared store to verify it. That store becomes a bottleneck.
-- If the shared store goes down, all servers stop authenticating requests.
-
-### The JWT Solution
-
-A JWT encodes the claims (user ID, issued-at time, expiration) directly into the token. The token is digitally signed so it cannot be forged or tampered with. Any server holding the public signing key can verify the token immediately, without a database lookup:
-
-```
-Request with token → Verify signature → Extract claims → Grant access (if not expired)
-```
-
-This is **stateless verification**. It scales to thousands of servers without a shared session store.
-
-### The Cost: No Immediate Revocation
-
-Once a JWT is issued and valid, a service verifying it has no way to know if the user later logged out or their session was revoked. The token will be accepted until it expires.
-
-This is solved (in Phase 05) with a short TTL (typically 15 minutes) plus a deny-list (Issue 088): on logout or session revocation, the session ID is added to a short-lived Redis deny-list. Verifiers check the deny-list alongside signature verification. If the session ID is listed, the token is rejected despite being valid.
-
-This hybrid approach (stateless verification + short-lived deny-list) gives us both scalability and immediate revocation.
-
----
-
-## Access Token Claim Set
-
-An access token carries the following claims:
-
-### Standard JWT Claims
-
-- **`iat` (issued at):** Unix timestamp when the token was signed. Used to detect clock skew.
-- **`exp` (expiration):** Unix timestamp when the token expires. Verifiers reject tokens where `exp` is in the past.
-
-### Custom Claims
-
-- **`sub` (subject):** The user ID. Used by the service to know who is making the request.
-- **`sid` (session ID):** The session this token belongs to. Allows revoking all tokens from a session without waiting for expiration.
-- **`orgId` (organization ID):** The tenant/organization. Used for multi-tenancy: a service can scope queries or make quick authorization checks without decoding the full token.
-- **`kid` (key ID):** Identifies which signing key was used. Enables zero-downtime key rotation (Issue 085): if a new key pair is created, the old public key is kept for verification of tokens issued moments before rotation. Verifiers use `kid` to look up the correct public key.
-
-### Why These Claims?
-
-- **Minimal:** We deliberately don't include roles, permissions, or other fine-grained authorization data in the token. Reasons:
-  - Tokens must be short-lived because they carry stale data. If permissions changed 10 minutes after issuance, the token would still grant the old permissions until it expires.
-  - Fine-grained authorization is deferred to a policy engine (Phase 08) that fetches fresh data from the database.
-  - Keeping the token small reduces overhead (smaller JWT = smaller HTTP headers).
-- **Enough to route and revoke:** The claims are sufficient to route a request to the right service and determine if the session was revoked.
-
-Example decoded token:
+## The Claim Set: sub, sid, orgId, iat, exp, kid
 
 ```json
 {
@@ -74,243 +23,276 @@ Example decoded token:
   "orgId": "org-789",
   "iat": 1705334400,
   "exp": 1705335300,
-  "kid": "2024-01-15-v1",
-  "alg": "RS256",
-  "typ": "JWT"
+  "kid": "2024-01-15-v1"
 }
 ```
 
----
+| Claim | Type | Purpose | Why It's Here |
+|-------|------|---------|--------------|
+| **sub** (subject) | UserId | The user making the request | Every request is from someone; services need to know who |
+| **sid** (session ID) | SessionId | Links the token to its session | Enables session-level revocation without token expiry wait |
+| **orgId** (organization) | string | The tenant/organization | Multi-tenancy: scope queries without a user lookup |
+| **iat** (issued at) | Unix timestamp | When the token was signed | Detect clock skew; validate freshness |
+| **exp** (expiration) | Unix timestamp | When the token expires | Verifiers reject tokens where `exp ≤ now` |
+| **kid** (key ID) | string | Which signing key was used | Enable zero-downtime key rotation (Issue 085) |
 
-## Signing Algorithm: RS256 (RSA-SHA256)
+## Why This Claim Set Is Minimal
 
-Verixa uses RS256 (RSA asymmetric signing) rather than HS256 (HMAC symmetric).
+The key insight: **access tokens are short-lived and stale.** If we embedded roles, permissions, or other fine-grained authorization data, that data would become stale the moment a permission changed. The user's token would still grant the old permission until it expired or was explicitly refreshed.
 
-### Why RS256?
+Instead, Verixa defers fine-grained authorization to a **policy engine** (Phase 08) that queries fresh data from the database on each request. The token carries only enough to:
 
-| Aspect | RS256 (Asymmetric) | HS256 (Symmetric) |
-|--------|-------------------|-------------------|
-| **Key sharing** | Public key is public; private key is held only by the issuer | Secret key must be shared with every verifier |
-| **Verifier distribution** | Scale from one issuer to hundreds of verifiers | Verifiers must be trusted with the signing secret |
-| **Key compromise** | If a verifier's public key is leaked, tokens can still be verified but not forged | If any verifier's copy of the secret is leaked, an attacker can forge tokens |
-| **Key rotation** | Easy: retire old public key, issue new one, keep both for a grace period | Harder: must rotate secret across all verifiers in lockstep |
-| **JWKS endpoints** | Natural fit (publish public keys at a well-known endpoint) | Not a good fit (you don't publish signing secrets) |
+1. **Route the request:** Know which user and organization the request is for.
+2. **Check revocation:** Know which session the token belongs to, so a revoked session can be checked.
 
-For Verixa, RS256 aligns with the architecture: a single auth service signs tokens, while multiple API services and gateways verify them independently. HS256 would require sharing the signing key with every service, multiplying the attack surface.
+This separation keeps tokens small (smaller HTTP headers, faster serialization), and keeps authorization current (permissions changes take effect immediately at the policy engine, not waiting for token refresh).
 
-### Implementation
+### Alternatives Rejected
 
-Access tokens are signed and verified using the `jose` library with RS256:
+- **Full permission list in the token:** Stale, breaks on permission changes, and grows with user responsibility. Rejected.
+- **Role name only (e.g., `role: "admin"`):** Still stale, still requires a role-to-permission mapping lookup, no real savings. Rejected.
+- **No orgId:** Worse UX for multitenant systems (every service does a user lookup to know which org the user belongs to). Rejected.
 
-- **Signing:** The private key (PKCS#8 PEM format) is held in a secure config store. The `JwtTokenSigner` service loads it once and caches the imported key to avoid repeated PEM parsing.
-- **Verification:** Services hold the public key (SPKI PEM format). They verify the signature and extract claims without any database lookup.
-- **Key format:** PEM-encoded RSA keys. Keys are imported once per signer/verifier instance and cached for performance.
+## RS256 vs. HS256: Asymmetric vs. Symmetric Signing
 
----
+Verixa uses **RS256 (RSA asymmetric signing)**, not HS256 (HMAC symmetric). This choice has profound architectural consequences.
 
-## Token Lifetime & Expiry
+### Symmetric (HS256)
 
-Access tokens are **short-lived**: typically 15 minutes. This is a security/UX tradeoff:
+- **One secret:** Both sign and verify use the same HMAC secret.
+- **Distribution:** The secret must be shared with every service that verifies tokens.
+- **Compromise:** If any verifier's copy is compromised, an attacker can forge tokens.
+- **Key rotation:** Requires all verifiers to be updated in lockstep, or verification breaks. Operationally expensive.
+- **JWKS endpoints:** Impossible (you don't publish signing secrets).
 
-### Why Short?
+### Asymmetric (RS256)
 
-1. **Limits damage if stolen:** If an attacker intercepts an access token, they have a narrow window (15 minutes) to use it before it expires.
-2. **Limits staleness:** If a user's permissions change (they're removed from a group, their account is locked), the old token is rejected after 15 minutes at most.
-3. **Enables cheap revocation:** A deny-list only needs to hold entries for 15 minutes. Redis memory usage is bounded.
+- **Two keys:** A private key signs, a public key verifies.
+- **Distribution:** Only the auth service needs the private key. Any other service just needs the public key (which can be published freely at a JWKS endpoint).
+- **Compromise:** If a verifier's copy of the public key is compromised, tokens can still be verified but not forged. The attacker can't create new tokens.
+- **Key rotation:** Create a new key pair; publish both old and new public keys for a grace period. Tokens issued with the old key are still verified until they expire.
+- **JWKS endpoints:** Natural fit. Standard practice in OAuth 2.0 and OpenID Connect.
 
-### Why Not Longer?
+### Decision Rationale
 
-- Longer tokens increase the window an attacker has to use a stolen token.
-- Permissions changes take longer to take effect, which is a security concern for emergency lockdowns.
-- Deny-lists become larger and more expensive to maintain.
+For a single-service monolith, the difference is moot: HS256 is simpler. But Verixa is designed for growth:
 
-### Why Not Shorter?
+- An API gateway might need to verify tokens before routing.
+- Microservices might verify tokens independently.
+- Webhooks or third-party integrations might need to verify tokens.
+- Desktop or mobile clients might verify tokens locally (for offline UX).
 
-- Shorter tokens require more frequent refreshes, increasing load on the auth service.
-- More frequent refreshes increase attack surface (more opportunities to steal a refresh token).
-- Users get logged out unexpectedly if they leave their browser for too long without activity.
+In all these cases, RS256 is the natural choice: the public key is public, so anyone can verify, and the private key stays in the auth service. HS256 would require sharing the secret with every verifier, multiplying the surface area for compromise.
 
-**15 minutes is a standard choice in the OAuth 2.0 and OpenID Connect communities.** Verixa makes it configurable so operators can adjust based on their security posture and load.
+**Decision:** Start with RS256 now (it's what you'd eventually migrate to anyway), avoid a breaking change later.
 
----
+## Token Lifetime: 15 Minutes for Access, 7 Days for Refresh
 
-## Refresh Tokens
+### Access Token: 15 Minutes (Stateless, Short-Lived)
 
-Refresh tokens are **long-lived** (typically 7 days), **opaque** (not JWTs), and **revocable** (stored in the database as a hashed value).
+- **Why short?** Limits the window an attacker has to use a stolen token. Limits stale authorization data (permissions changes take effect in 15 minutes max).
+- **Why not shorter?** More frequent refreshes increase load and attack surface.
+- **Why not longer?** Defeats the purpose; might as well use refresh tokens as access tokens.
 
-### Why Separate Refresh Tokens?
+The 15-minute TTL is a standard in OAuth 2.0 and OpenID Connect. Verixa makes it configurable so deployments can adjust based on their risk profile and load.
 
-If access tokens were long-lived (like 7 days), a stolen token would grant an attacker a week of access. Refresh tokens solve this:
+### Refresh Token: 7 Days (Stateful, Revocable)
 
-1. On each login, the server issues an access token (15 minutes) and a refresh token (7 days).
-2. When the access token expires, the client exchanges the refresh token for a new access token (and a new refresh token, via rotation; Issue 089).
-3. If an access token is stolen, the attacker can use it for 15 minutes. If a refresh token is stolen, the attacker must exchange it for an access token, which is detectable and can trigger theft detection (Issue 090).
+- **Why long?** Avoids frequent re-authentication. Users don't want to log in every 15 minutes.
+- **Why stateful?** Can be revoked immediately (logged-out user gets a new token, old one rejected, all on the same day).
+- **Why hashed in database?** A stolen database dump doesn't yield usable refresh tokens (only their hashes).
 
-### Why Opaque?
+See the sections below for refresh token details (Issue 086) and theft detection (Issue 090).
 
-Refresh tokens are opaque (high-entropy random strings) rather than JWTs because:
+## The Architecture: Hybrid Stateless + Deny-List
 
-1. **Revocability:** A refresh token's usefulness ends the moment it's used (rotate-on-use). The token doesn't carry an expiration; revocation is immediate.
-2. **Security:** An opaque token that is hashed before storage is much safer than a JWT. A leaked database dump won't yield usable tokens (the attacker would need to reverse the hash).
-3. **Simplicity:** No need to parse and verify claims; just check the hash.
+Access tokens are **stateless JWTs**: verification requires only the public key, no database lookup. But "stateless" doesn't mean "unrevocable" — it means the verification step doesn't require state.
 
----
+### On Logout or Revocation
 
-## Key Rotation (Issue 085)
+1. The session is revoked in the database (status = "revoked").
+2. The session ID is added to a **deny-list** (Redis, Issue 088) with a TTL equal to the access token lifetime (15 minutes).
+3. Downstream services verify the token signature (fast, no DB), then check the deny-list (also fast, local cache or Redis).
 
-Verixa supports zero-downtime key rotation for signing keys.
+If the session is in the deny-list, the token is rejected despite being otherwise valid.
+
+### Why a Deny-List, Not a Full Session Store?
+
+A deny-list bounds memory usage by token TTL (entries expire after 15 minutes). A full session store grows without bound. For a deployment with millions of users, the difference is massive.
+
+### Revocation Latency
+
+Revoking a session is "immediate" in the sense that it's written to the database right away. But verifiers don't instantly see the revocation if they're using a cached copy of the deny-list. This is an accepted tradeoff: a brief window (seconds) where a revoked token might still work, in exchange for avoiding a synchronous write to every verifier across a cluster.
+
+This is standard practice in OAuth 2.0 systems and similar to how browser certificate revocation works (CRLs and OCSP, neither of which guarantee instant knowledge of revocation).
+
+## Key Rotation: Zero-Downtime with kid
+
+Signing keys must eventually be rotated:
+
+1. **Security:** Periodic rotation bounds the damage of key compromise.
+2. **Compliance:** Some standards require rotation on a schedule (e.g., annual).
+3. **Predictability:** Scheduled rotation is better than emergency rotation after compromise.
 
 ### The Problem
 
-When a signing key needs to be rotated (e.g., suspected compromise, annual rotation), the old key must be retired and a new one put in place. But tokens issued moments before rotation are still valid and carry the old key ID (`kid`). If the old key is deleted immediately, verification of those tokens fails.
+When a new key pair is created, tokens issued moments before the rotation are still valid (they have the old key ID in their `kid` header). If the old key is deleted immediately, verification of those tokens fails.
 
-### The Solution
+### The Solution (Issue 085)
 
-1. Create a new RSA key pair and assign it a new `kid` (e.g., "2024-02-15-v2").
-2. Both keys are kept in the system: the new one is used for signing new tokens, the old one is kept for verifying existing tokens.
-3. Tokens issued with the old key carry `kid: "2024-01-15-v1"`. Verifiers look up that key ID and use the corresponding public key to verify.
-4. After all tokens issued with the old key have expired (typically 15 minutes for access tokens), the old key can be deleted.
+1. Both the old and new public keys are published simultaneously.
+2. Verifiers use the token's `kid` header to look up which key to use.
+3. After all tokens issued with the old key have expired (15 minutes for access tokens), the old key is deleted.
 
-### Implementation
+This is standard practice (RFC 7517, JWKS) and enables zero-downtime rotation.
 
-The `SigningKeyProvider` (Issue 085) maintains a map of active keys keyed by `kid`. The current signing key is used by `TokenSigner.sign()`. Verification uses the key ID in the token header to look up the corresponding public key.
+## Refresh Tokens: Stateful, Revocable, Opaque (Issue 086)
 
----
+Refresh tokens are **not JWTs**. They're high-entropy opaque strings, hashed before storage, and revocable.
 
-## Threat Model: Session & Token Flows
+| Property | Access Token | Refresh Token |
+|----------|--------------|---------------|
+| Format | JWT | Opaque string |
+| TTL | 15 minutes | 7 days |
+| Verification | Stateless (public key only) | Stateful (database lookup) |
+| Revocation | Deny-list | Database status |
+| Compromise window | 15 minutes | Until refresh (rotating) |
 
-### Token Theft
+Refresh tokens live in the database so they can be revoked immediately. Their values are hashed (like passwords) so a stolen database dump doesn't yield usable tokens.
 
-**Threat:** An attacker intercepts an access token (e.g., via network sniffing, XSS) and uses it to impersonate the user.
+## Refresh Token Rotation (Issue 089)
 
-**Mitigations:**
-- Access tokens are short-lived (15 minutes). An attacker's window to use a stolen token is bounded.
-- Tokens are transmitted over HTTPS to prevent network interception.
-- A deny-list (Issue 088) allows immediate revocation if compromise is suspected.
+Every time a refresh token is used, a new one is issued and the old one is immediately invalidated. This limits the usefulness of a stolen refresh token to a single request.
 
-### Refresh Token Theft
+## Theft Detection: Reuse Detection (Issue 090)
 
-**Threat:** An attacker intercepts a refresh token and uses it to obtain a new access token.
+If a refresh token that has already been rotated (superseded) is presented again, it's evidence of theft:
 
-**Mitigations:**
-- Refresh tokens are high-entropy and hashed before storage. A leaked database dump won't yield usable tokens.
-- Refresh tokens are rotate-on-use: each use invalidates the old token and issues a new one. An attacker can use a stolen refresh token once, at most twice (if they retry a in-flight request before the server processes the first one).
-- Reuse detection (Issue 090) triggers theft detection: if a refresh token that has already been rotated is presented again, the entire token family and session are revoked, and a security event is emitted.
+1. The entire token family (all tokens descended from the stolen one) is revoked.
+2. The session is revoked.
+3. A security event is emitted.
 
-### Token Fixation
+This turns token rotation from a hygiene measure (limits exposure window) into an **active theft detection mechanism** (notifies the user and operator).
 
-**Threat:** An attacker tricks a user into authenticating with a token the attacker chose (or predicted).
+## Threat Model
 
-**Mitigations:**
-- Tokens are issued by the auth service only, not accepted from clients. A client cannot present a "pre-chosen" token for authentication.
-- Session IDs are unpredictable (random UUIDs), so an attacker cannot predict a token the auth service would issue.
+### Threat: Access Token Theft
 
-### Revocation Bypass
+**Attack:** Attacker intercepts an access token (network sniffing, XSS, compromised device).
 
-**Threat:** A user logs out, but their old token continues to work because the server never checked revocation.
+**Mitigation:**
+- Token is short-lived (15 minutes). Attacker's window is bounded.
+- HTTPS prevents network interception.
+- Revocation list allows immediate session revocation if compromise is suspected.
 
-**Mitigations:**
-- On logout, the session is revoked in the database and added to the deny-list (Issue 088).
-- Verifiers check the deny-list after verifying the signature. A revoked session ID in the deny-list causes verification to fail despite the token being otherwise valid.
-- The deny-list has the same TTL as access tokens (15 minutes), ensuring coverage without unbounded memory growth.
+### Threat: Refresh Token Theft
 
-### Unauthorized Authorization Escalation
+**Attack:** Attacker intercepts a refresh token.
 
-**Threat:** An attacker modifies an access token to grant themselves elevated permissions.
+**Mitigation:**
+- Refresh token is opaque and hashed. A stolen database dump doesn't yield usable tokens.
+- Token is revoked on first use (rotate-on-use). Attacker can use it at most once.
+- Reuse detection triggers theft detection. Presenting a rotated token revokes the entire family and session, and emits a security event.
 
-**Mitigations:**
-- Access tokens are digitally signed. Modifying any field invalidates the signature.
-- An unsigned or differently-signed token is rejected by verifiers.
-- Permissions are not embedded in the token (by design). Fine-grained authorization is determined by querying the database or a policy engine, not from stale token claims.
+### Threat: Token Forgery
 
----
+**Attack:** Attacker forges a token (crafts a JWT, signs it with their own key).
 
-## Implementation: `JwtTokenSigner` (Issue 084)
+**Mitigation:**
+- Tokens are signed with RS256. Forging requires the private key (which only the auth service has).
+- Verifiers check the signature before accepting any claims. A forged token is rejected immediately.
+
+### Threat: Tampered Token
+
+**Attack:** Attacker modifies an existing token (changes claims, e.g., `sub` to impersonate another user).
+
+**Mitigation:**
+- Any modification invalidates the signature.
+- Verifiers reject tokens with invalid signatures. Tampering is detected immediately.
+
+### Threat: Revocation Bypass
+
+**Attack:** A user logs out, but their old token continues to work.
+
+**Mitigation:**
+- On logout, the session is revoked and added to the deny-list.
+- Verifiers check the deny-list. Revoked sessions are rejected despite valid tokens.
+
+### Threat: Token Fixation
+
+**Attack:** Attacker tricks a user into authenticating with a token the attacker chose.
+
+**Mitigation:**
+- Tokens are issued by the auth service only, not accepted from clients.
+- Session IDs are unpredictable (random UUIDs). An attacker cannot predict a token the auth service would issue.
+
+## Implementation: JwtTokenSigner
+
+The `JwtTokenSigner` class (infrastructure/jwt-token-signer.ts) implements the `TokenSigner` port using Node's native crypto module (via the `jose` library).
 
 ### API
 
 ```typescript
-interface TokenSigner {
-  sign(params: IssueAccessTokenParams): Promise<SignedAccessToken>;
-  verify(token: string): Promise<AccessTokenClaims>;
-}
-```
-
-### Signing
-
-```typescript
 const signer = new JwtTokenSigner(privateKeyPem, publicKeyPem, keyId);
-const result = await signer.sign({
-  userId: "user-123",
-  sessionId: "session-456",
-  organizationId: "org-789",
-  expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
+
+// Sign: returns Result<SignedAccessToken, SigningError>
+const signResult = await signer.sign({
+  userId,
+  sessionId,
+  organizationId,
+  expiresAt: new Date(Date.now() + 15 * 60 * 1000),
 });
-// result.token is a JWT string
-// result.claims are the decoded claims (for convenience)
-```
 
-### Verification
-
-```typescript
+// Verify: throws InvalidSignatureError, ExpiredTokenError, or MalformedTokenError
 const claims = await signer.verify(token);
-// claims is an AccessTokenClaims object
-// If verification fails (invalid signature, expired, malformed), an error is thrown
 ```
 
-### Error Handling
+### Key Caching
 
-Verification can throw:
+RSA key import (parsing PEM) is expensive. The signer caches both keys after the first import, so subsequent calls reuse them. This is safe: crypto key objects are immutable.
 
-- `InvalidSignatureError`: The signature is invalid (forged or tampered).
-- `ExpiredTokenError`: The token's `exp` claim is in the past.
-- `MalformedTokenError`: The token is structurally invalid (missing claims, invalid JSON, etc.).
+### Thread Safety
 
----
+The signer is stateless and thread-safe. Multiple concurrent `sign()` and `verify()` calls do not interfere with each other.
 
-## Contract Testing
+## Testing
 
-The `TokenSigner` port is tested via contract tests (Issue 097):
+The test suite covers:
 
-1. A reference implementation (the `jose`-based `JwtTokenSigner`) is tested.
-2. Any future implementation (e.g., a different crypto library) must pass the same contract tests.
-3. Contracts verify: sign/verify round-trip, signature rejection on tampering, expiry checks, missing-claim rejection.
+1. **Sign/verify round-trip:** Tokens sign and verify correctly.
+2. **Tamper detection:** Modifying the payload or signature causes verification to fail.
+3. **Expiry:** Expired tokens are rejected.
+4. **Malformed tokens:** Missing claims or invalid structure is caught.
+5. **Key caching:** Keys are cached and reused across calls.
+6. **Concurrent operations:** Multiple simultaneous sign/verify calls work correctly.
+7. **Error types:** Each failure mode throws the expected error type.
 
----
+All tests are unit tests (no database, no external services) and fail without the implementation (no tautological assertions like "expect(tokenSigner).toBeDefined()").
 
 ## Security Checklist
 
-- [ ] All access tokens are transmitted over HTTPS.
-- [ ] Private signing keys are stored in a secure config store (e.g., environment variables, HSM).
+- [ ] All access tokens are transmitted over HTTPS only.
+- [ ] Private signing keys are stored in a secure config store (environment variables, HSM, etc.).
 - [ ] Public verification keys are available to all services that need to verify tokens.
-- [ ] Key rotation procedure is tested and documented.
-- [ ] Revocation (via deny-list) is implemented and tested.
-- [ ] Token reuse detection (Issue 090) is enabled for refresh tokens.
-- [ ] Tokens are never logged or stored in audit logs in unredacted form.
-- [ ] Token lifetime (TTL) is set to a value appropriate for your security posture (default 15 minutes for access tokens).
-
----
+- [ ] Key rotation procedure is tested (new keys can coexist with old for a grace period).
+- [ ] Revocation via deny-list (Issue 088) is implemented.
+- [ ] Token reuse detection (Issue 090) is implemented.
+- [ ] Tokens are never logged or stored unredacted in audit logs.
+- [ ] Access token TTL is appropriate for the deployment's risk profile (15 minutes is a recommendation, not a requirement).
 
 ## References
 
-- **Phase 05:** Sessions & Tokens (Issues 081–100)
-- **Issue 084:** JWT access token design & signing service (this issue)
-- **Issue 085:** Signing key management & rotation
-- **Issue 088:** Redis-backed revocation / deny-list adapter
-- **Issue 089:** Refresh token rotation
-- **Issue 090:** Refresh-token reuse detection (theft detection)
-- **OAuth 2.0 RFC 6749:** https://tools.ietf.org/html/rfc6749
+- **RFC 7519:** JWT specification. https://tools.ietf.org/html/rfc7519
+- **RFC 7517:** JSON Web Key. https://tools.ietf.org/html/rfc7517
+- **OAuth 2.0 RFC 6749:** Authorization Framework. https://tools.ietf.org/html/rfc6749
 - **OpenID Connect Core:** https://openid.net/specs/openid-connect-core-1_0.html
-- **JWT RFC 7519:** https://tools.ietf.org/html/rfc7519
-- **OWASP: Token Storage:** https://cheatsheetseries.owasp.org/cheatsheets/JSON_Web_Token_for_Java_Cheat_Sheet.html
-
----
+- **OWASP Token Security:** https://cheatsheetseries.owasp.org/cheatsheets/JSON_Web_Token_for_Java_Cheat_Sheet.html
 
 ## Next Steps
 
-1. **Issue 085:** Implement `SigningKeyProvider` for key rotation support.
-2. **Issue 086:** Define `RefreshToken` entity (opaque, hashed).
-3. **Issue 087:** Implement `IssueSession` use case to tie tokens and sessions together.
-4. **Issue 088:** Implement Redis-backed deny-list for revocation.
-5. **Issue 089:** Implement `RefreshAccessToken` use case (rotation).
-6. **Issue 090:** Implement reuse detection for stolen refresh tokens.
+- **Issue 085:** Implement `SigningKeyProvider` for multi-key support and rotation.
+- **Issue 086:** Define `RefreshToken` entity (opaque, hashed).
+- **Issue 087:** Implement `IssueSession` use case (creates a Session + issues token pair).
+- **Issue 088:** Implement Redis-backed deny-list for revocation.
+- **Issue 089:** Implement `RefreshAccessToken` use case (token rotation).
+- **Issue 090:** Implement reuse detection for stolen refresh tokens.

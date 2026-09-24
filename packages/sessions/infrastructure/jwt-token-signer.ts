@@ -1,48 +1,54 @@
-import { SignJWT, jwtVerify, importPKCS8, importSPKI } from "jose";
+import { createPrivateKey, createPublicKey } from "node:crypto";
+import { SignJWT, jwtVerify } from "jose";
+
+import { ok, err, type Result } from "@verixa/shared-kernel";
 
 import type {
   AccessTokenClaims,
   IssueAccessTokenParams,
   SignedAccessToken,
-} from "../domain/value-objects/access-token.js";
+  TokenSigner,
+} from "../application/ports/token-signer.js";
 import {
   ExpiredTokenError,
   InvalidSignatureError,
   MalformedTokenError,
-  type TokenSigner,
+  SigningError,
 } from "../application/ports/token-signer.js";
 
 /**
- * JWT (RS256) implementation of the TokenSigner port.
+ * JWT access token signer using RS256 (RSA asymmetric signing).
  *
- * Uses asymmetric RSA signing (RS256) so that:
- * 1. The private key is held only by this service (the token issuer)
- * 2. Any service holding the public key can verify tokens independently
- *    without calling back to the issuer
- * 3. Key rotation is non-breaking (old keys are retired but continue to
- *    verify existing tokens until they expire)
+ * This implementation uses Node's native `crypto` module (via the `jose`
+ * library, which wraps it) to sign tokens with a private RSA key and verify
+ * them with a public RSA key. Both keys are expected in PEM format (PKCS#8
+ * for private keys, SPKI for public keys).
  *
- * RS256 is the standard choice for JWT-based access tokens in production
- * systems where multiple services need to verify tokens (e.g., API gateway,
- * microservices, webhooks). Symmetric signing (HS256) would require sharing
- * the signing key with every verifier, which is a larger attack surface and
- * doesn't scale well.
+ * **Key Caching:**
+ * RSA key import (parsing PEM, converting to the crypto API's internal format)
+ * is an expensive operation. On first use, this signer imports both keys and
+ * caches them, so subsequent calls reuse the cached versions. This is safe:
+ * crypto key objects are immutable.
  *
- * **Thread safety:**
- * This implementation is stateless and thread-safe. Multiple concurrent calls
- * to `sign()` and `verify()` are safe.
+ * **Thread Safety:**
+ * This implementation is stateless and thread-safe. Multiple concurrent
+ * sign() and verify() calls do not interfere with each other.
  */
 export class JwtTokenSigner implements TokenSigner {
-  private cachedPrivateKey: Awaited<ReturnType<typeof importPKCS8>> | null = null;
-  private cachedPublicKey: Awaited<ReturnType<typeof importSPKI>> | null = null;
+  private cachedPrivateKey: ReturnType<typeof createPrivateKey> | null = null;
+  private cachedPublicKey: ReturnType<typeof createPublicKey> | null = null;
 
   /**
    * Create a new JWT token signer.
    *
-   * @param privateKeyPem - The private RSA key in PEM format (PKCS#8). Used for signing.
-   * @param publicKeyPem - The public RSA key in PEM format (SPKI). Used for verifying.
-   * @param keyId - A short identifier for this key (e.g., "2024-01-15-v1"). Embedded
-   *   in the JWT header as the `kid` claim to support key rotation (Issue 085).
+   * @param privateKeyPem - RSA private key in PKCS#8 PEM format. Must contain
+   *   the "-----BEGIN PRIVATE KEY-----" and "-----END PRIVATE KEY-----" markers.
+   * @param publicKeyPem - RSA public key in SPKI PEM format. Must contain the
+   *   "-----BEGIN PUBLIC KEY-----" and "-----END PUBLIC KEY-----" markers.
+   * @param keyId - A short identifier for this key pair (e.g., "2024-01-15-v1").
+   *   Embedded in each token's header as the `kid` claim. Used for key rotation
+   *   (Issue 085): when a new key pair is created, this ID changes, but the old
+   *   public key is kept for verifying tokens issued moments before the rotation.
    */
   constructor(
     private readonly privateKeyPem: string,
@@ -51,115 +57,136 @@ export class JwtTokenSigner implements TokenSigner {
   ) {}
 
   /**
-   * Lazily import and cache the private key (async operation).
-   * This avoids repeated PEM parsing on every sign() call.
+   * Lazily import and cache the private key.
+   * Repeated calls return the same cached instance.
    */
-  private async getPrivateKey() {
+  private getPrivateKey(): ReturnType<typeof createPrivateKey> {
     if (!this.cachedPrivateKey) {
-      this.cachedPrivateKey = await importPKCS8(this.privateKeyPem, "RS256");
+      try {
+        this.cachedPrivateKey = createPrivateKey(this.privateKeyPem);
+      } catch (error) {
+        throw new SigningError(
+          `Failed to import private key: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }
     return this.cachedPrivateKey;
   }
 
   /**
-   * Lazily import and cache the public key (async operation).
-   * This avoids repeated PEM parsing on every verify() call.
+   * Lazily import and cache the public key.
+   * Repeated calls return the same cached instance.
    */
-  private async getPublicKey() {
+  private getPublicKey(): ReturnType<typeof createPublicKey> {
     if (!this.cachedPublicKey) {
-      this.cachedPublicKey = await importSPKI(this.publicKeyPem, "RS256");
+      try {
+        this.cachedPublicKey = createPublicKey(this.publicKeyPem);
+      } catch (error) {
+        throw new SigningError(
+          `Failed to import public key: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }
     return this.cachedPublicKey;
   }
 
-  async sign(params: IssueAccessTokenParams): Promise<SignedAccessToken> {
-    const issuedAt = Math.floor(Date.now() / 1000);
-    const expiresAt = Math.floor(params.expiresAt.getTime() / 1000);
-
-    // Validate that expiration is in the future
-    if (expiresAt <= issuedAt) {
-      throw new Error("Token expiration must be in the future");
-    }
-
-    const claims: AccessTokenClaims = {
-      sub: params.userId,
-      sid: params.sessionId,
-      orgId: params.organizationId,
-      iat: issuedAt,
-      exp: expiresAt,
-      kid: this.keyId,
-    };
-
+  async sign(
+    params: IssueAccessTokenParams,
+  ): Promise<Result<SignedAccessToken, SigningError>> {
     try {
-      const privateKey = await this.getPrivateKey();
+      const now = Math.floor(Date.now() / 1000);
+      const expiresAt = Math.floor(params.expiresAt.getTime() / 1000);
 
-      // Create and sign the JWT
+      // Reject if expiration is not in the future.
+      if (expiresAt <= now) {
+        return err(new SigningError("Token expiration must be in the future"));
+      }
+
+      const claims: AccessTokenClaims = {
+        sub: params.userId,
+        sid: params.sessionId,
+        orgId: params.organizationId,
+        iat: now,
+        exp: expiresAt,
+        kid: this.keyId,
+      };
+
+      const privateKey = this.getPrivateKey();
+
       const token = await new SignJWT(claims)
         .setProtectedHeader({ alg: "RS256", typ: "JWT", kid: this.keyId })
-        .setIssuedAt(issuedAt)
+        .setIssuedAt(now)
         .setExpirationTime(expiresAt)
         .sign(privateKey);
 
-      return {
+      return ok({
         token,
         claims,
         expiresAt: params.expiresAt,
-      };
+      });
     } catch (error) {
-      throw new Error(
-        `Failed to sign access token: ${error instanceof Error ? error.message : String(error)}`,
+      if (error instanceof SigningError) {
+        return err(error);
+      }
+      return err(
+        new SigningError(
+          `Failed to sign token: ${error instanceof Error ? error.message : String(error)}`,
+        ),
       );
     }
   }
 
   async verify(token: string): Promise<AccessTokenClaims> {
     try {
-      const publicKey = await this.getPublicKey();
+      const publicKey = this.getPublicKey();
 
-      // Verify the JWT signature and extract claims
-      // jose automatically checks expiration as part of verification
+      // jwtVerify checks signature and expiration.
       const result = await jwtVerify(token, publicKey);
       const payload = result.payload;
 
-      // Validate the presence of required claims
+      // Validate required claims are present.
       if (
         !payload.sub ||
         !payload.sid ||
         !payload.orgId ||
-        !payload.iat ||
-        !payload.exp ||
+        typeof payload.iat !== "number" ||
+        typeof payload.exp !== "number" ||
         !payload.kid
       ) {
         throw new MalformedTokenError("Token is missing required claims");
       }
 
       return {
-        sub: payload.sub as string,
-        sid: payload.sid as string,
-        orgId: payload.orgId as string,
-        iat: payload.iat as number,
-        exp: payload.exp as number,
+        sub: payload.sub as any,
+        sid: payload.sid as any,
+        orgId: payload.orgId as any,
+        iat: payload.iat,
+        exp: payload.exp,
         kid: payload.kid as string,
       };
     } catch (error) {
-      // Map jose errors to our custom error types for consistency
-      if (error instanceof MalformedTokenError || error instanceof ExpiredTokenError) {
+      // Map specific error types.
+      if (error instanceof MalformedTokenError) {
         throw error;
       }
 
       const message = error instanceof Error ? error.message : String(error);
 
-      // Signature verification failures
-      if (message.includes("signature") || message.includes("invalid")) {
-        throw new InvalidSignatureError(`Signature verification failed: ${message}`);
-      }
-
-      // Expiry check
+      // jose throws with "exp claim expired" or similar for expiry.
       if (message.includes("exp") || message.includes("expired")) {
-        throw new ExpiredTokenError(`Token has expired: ${message}`);
+        throw new ExpiredTokenError(message);
       }
 
-      // Default to malformed
+      // Signature failures include "invalid signature" or "verification failed".
+      if (
+        message.includes("signature") ||
+        message.includes("verify") ||
+        message.includes("invalid")
+      ) {
+        throw new InvalidSignatureError(message);
+      }
+
+      // Default to malformed for any other parse/validation error.
       throw new MalformedTokenError(`Token verification failed: ${message}`);
     }
   }
