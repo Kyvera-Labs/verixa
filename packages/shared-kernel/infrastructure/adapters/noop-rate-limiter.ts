@@ -1,4 +1,8 @@
-import type { RateLimiter, RateLimitResult } from "../application/ports/rate-limiter.js";
+import type {
+  RateLimiter,
+  RateLimitKey,
+  RateLimitResult,
+} from "../../application/ports/rate-limiter.js";
 
 /**
  * No-op RateLimiter adapter — always allows requests.
@@ -6,8 +10,8 @@ import type { RateLimiter, RateLimitResult } from "../application/ports/rate-lim
  * Wired as default adapter so use cases work before real limiter exists.
  */
 export class NoopRateLimiter implements RateLimiter {
-  // eslint-disable-next-line @typescript-eslint/require-await
-  async check(): Promise<RateLimitResult> {
+  // eslint-disable-next-line @typescript-eslint/require-await, @typescript-eslint/no-unused-vars
+  async check(key: RateLimitKey): Promise<RateLimitResult> {
     return {
       allowed: true,
       remaining: 999,
@@ -16,13 +20,13 @@ export class NoopRateLimiter implements RateLimiter {
     };
   }
 
-  // eslint-disable-next-line @typescript-eslint/require-await
-  async recordFailure(): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async recordFailure(key: RateLimitKey): Promise<void> {
     // no-op
   }
 
-  // eslint-disable-next-line @typescript-eslint/require-await
-  async reset(): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async reset(key: RateLimitKey): Promise<void> {
     // no-op
   }
 }

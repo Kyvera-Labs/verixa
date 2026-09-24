@@ -293,6 +293,13 @@ model Credential {
   /// nothing in the request path to notice.
   lockedUntil DateTime? @map("locked_until") @db.Timestamptz(3)
 
+  /// Password history for reuse prevention (Issue 072). Ordered most-recent
+  /// first: ["current_hash_that_moved_to_history", "older_hash", ...].
+  /// Capped at PasswordHistoryPolicy.depth (default 5) entries.
+  ///
+  /// Stored as JSON array of strings (PHC hash strings).
+  passwordHistory Json @default("[]") @map("password_history")
+
   createdAt DateTime @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @map("updated_at") @db.Timestamptz(3)
 

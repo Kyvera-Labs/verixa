@@ -1,5 +1,5 @@
-import type { User } from "@verixa/identity";
-import { Result, asId } from "@verixa/shared-kernel";
+import { Email, type User } from "@verixa/identity";
+import { NoopRateLimiter, Result, asId } from "@verixa/shared-kernel";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { Argon2PasswordHasher } from "../../infrastructure/argon2-password-hasher.js";
@@ -8,243 +8,364 @@ import { InMemoryCredentialsUnitOfWork } from "../../infrastructure/testing/in-m
 import { ChangePassword } from "./change-password.js";
 import { RegisterUserWithPassword } from "./register-user-with-password.js";
 
-// Weak parameters, for the same reason the authentication specs use them: these
-// tests exercise orchestration and correctness, not hashing strength. The
-// hasher's own spec covers production parameters.
 const FAST = { memoryCost: 64, timeCost: 1, parallelism: 1 };
-
 const EMAIL = "alice@example.com";
-const CURRENT_PASSWORD = "correct horse battery staple";
-const NEW_PASSWORD = "new correct horse battery staple";
+const PASSWORD = "correct horse battery staple";
+const NEW_PASSWORD = "an entirely different passphrase";
+const ANOTHER_PASSWORD = "yet another password phrase";
 
-describe("ChangePassword", () => {
+describe("ChangePassword (Issue 071)", () => {
   let unitOfWork: InMemoryCredentialsUnitOfWork;
   let hasher: Argon2PasswordHasher;
-  let register: RegisterUserWithPassword;
+  let rateLimiter: NoopRateLimiter;
   let changePassword: ChangePassword;
-  let registeredUser: User;
+  let user: User;
 
   beforeEach(async () => {
     unitOfWork = new InMemoryCredentialsUnitOfWork();
-    // A fresh hasher per test, because the decoy hash is cached per hasher
-    // instance. Sharing one would affect timing tests and result measurements.
     hasher = new Argon2PasswordHasher(FAST);
-    register = new RegisterUserWithPassword(unitOfWork, hasher);
-    changePassword = new ChangePassword(unitOfWork, hasher);
+    rateLimiter = new NoopRateLimiter();
+    changePassword = new ChangePassword(unitOfWork, hasher, rateLimiter);
 
-    // Fixture: register a user with the current password
-    const registered = await register.execute({
+    // Register a test user
+    const registered = await new RegisterUserWithPassword(unitOfWork, hasher).execute({
       email: EMAIL,
       displayName: "Alice",
-      password: CURRENT_PASSWORD,
+      password: PASSWORD,
     });
     if (!Result.isOk(registered)) throw new Error("fixture setup failed");
-    registeredUser = registered.value.user;
+
+    const email = Email.create(EMAIL);
+    if (!Result.isOk(email)) throw new Error("fixture setup failed");
+    const found = await unitOfWork.repositories.users.findByEmail(email.value);
+    if (found === undefined) throw new Error("fixture setup failed");
+    user = found;
   });
 
-  describe("success", () => {
-    it("changes password when current password is correct", async () => {
+  describe("happy path", () => {
+    it("changes the password with correct current password", async () => {
       const result = await changePassword.execute({
-        userId: registeredUser.id,
-        currentPassword: CURRENT_PASSWORD,
+        userId: user.id,
+        currentPassword: PASSWORD,
         newPassword: NEW_PASSWORD,
       });
 
       expect(Result.isOk(result)).toBe(true);
       if (!Result.isOk(result)) return;
-       
-      expect(result.value.user.id).toBe(registeredUser.id);
+      expect(result.value.user.id).toBe(user.id);
     });
 
-    it("returns the authenticated user", async () => {
-      const result = await changePassword.execute({
-        userId: registeredUser.id,
-        currentPassword: CURRENT_PASSWORD,
+    it("new password works for authentication afterward", async () => {
+      await changePassword.execute({
+        userId: user.id,
+        currentPassword: PASSWORD,
         newPassword: NEW_PASSWORD,
       });
 
-      expect(Result.isOk(result)).toBe(true);
-      if (!Result.isOk(result)) return;
-       
-      expect(result.value.user.email.value).toBe(EMAIL);
-       
-      expect(result.value.user.status).toBe("pending");
+      const credential = await unitOfWork.repositories.credentials.findByUserId(user.id);
+      expect(credential).toBeDefined();
+      if (credential === undefined) return;
+
+      const matches = await hasher.verify(NEW_PASSWORD, credential.passwordHash);
+      expect(matches).toBe(true);
     });
 
-    it("stores the new password (can authenticate with it)", async () => {
-      // Change the password
-      const changeResult = await changePassword.execute({
-        userId: registeredUser.id,
-        currentPassword: CURRENT_PASSWORD,
+    it("old password no longer works", async () => {
+      await changePassword.execute({
+        userId: user.id,
+        currentPassword: PASSWORD,
         newPassword: NEW_PASSWORD,
       });
-      expect(Result.isOk(changeResult)).toBe(true);
 
-      // Attempt to authenticate with the new password
-      const { AuthenticateWithPassword } = await import("./authenticate-with-password.js");
-      const authenticate = new AuthenticateWithPassword(unitOfWork, hasher);
-      const authResult = await authenticate.execute({
-        email: EMAIL,
-        password: NEW_PASSWORD,
-      });
+      const credential = await unitOfWork.repositories.credentials.findByUserId(user.id);
+      expect(credential).toBeDefined();
+      if (credential === undefined) return;
 
-      expect(Result.isOk(authResult)).toBe(true);
-      if (!Result.isOk(authResult)) return;
-      expect(authResult.value.user.email.value).toBe(EMAIL);
+      const matches = await hasher.verify(PASSWORD, credential.passwordHash);
+      expect(matches).toBe(false);
     });
 
-    it("old password no longer works after change", async () => {
-      // Change the password
-      const changeResult = await changePassword.execute({
-        userId: registeredUser.id,
-        currentPassword: CURRENT_PASSWORD,
+    it("clears any account lockout", async () => {
+      // Artificially lock the account
+      const credential = await unitOfWork.repositories.credentials.findByUserId(user.id);
+      if (credential === undefined) throw new Error("fixture setup failed");
+      const locked = credential.recordFailedAttempt(
+        { threshold: 1, baseDurationMs: 600_000, backoffFactor: 2, maxDurationMs: 600_000 },
+        new Date(),
+      );
+      await unitOfWork.repositories.credentials.save(locked);
+
+      await changePassword.execute({
+        userId: user.id,
+        currentPassword: PASSWORD,
         newPassword: NEW_PASSWORD,
       });
-      expect(Result.isOk(changeResult)).toBe(true);
 
-      // Attempt to authenticate with the old password
-      const { AuthenticateWithPassword } = await import("./authenticate-with-password.js");
-      const authenticate = new AuthenticateWithPassword(unitOfWork, hasher);
-      const authResult = await authenticate.execute({
-        email: EMAIL,
-        password: CURRENT_PASSWORD,
-      });
-
-      expect(Result.isErr(authResult)).toBe(true);
+      const updated = await unitOfWork.repositories.credentials.findByUserId(user.id);
+      expect(updated?.failedAttempts).toBe(0);
+      expect(updated?.lockedUntil).toBeUndefined();
     });
   });
 
-  describe("does not change password", () => {
-    it("rejects when current password is wrong", async () => {
+  describe("re-authentication (current password)", () => {
+    it("rejects wrong current password", async () => {
       const result = await changePassword.execute({
-        userId: registeredUser.id,
-        currentPassword: "wrong password entirely",
+        userId: user.id,
+        currentPassword: "wrong password",
         newPassword: NEW_PASSWORD,
       });
 
       expect(Result.isErr(result)).toBe(true);
       if (!Result.isErr(result)) return;
-      expect(result.error.code).toBe("VALIDATION_ERROR");
+      expect(result.error.fieldErrors["currentPassword"]).toContain("incorrect");
     });
 
-    it("rejects when new password is too short", async () => {
+    it("error message is generic for wrong current password", async () => {
       const result = await changePassword.execute({
-        userId: registeredUser.id,
-        currentPassword: CURRENT_PASSWORD,
+        userId: user.id,
+        currentPassword: "wrong password",
+        newPassword: NEW_PASSWORD,
+      });
+
+      expect(Result.isErr(result)).toBe(true);
+      if (!Result.isErr(result)) return;
+      expect(result.error.message).toContain("current password is incorrect");
+    });
+
+    it("does not change password on wrong current", async () => {
+      await changePassword.execute({
+        userId: user.id,
+        currentPassword: "wrong password",
+        newPassword: NEW_PASSWORD,
+      });
+
+      const credential = await unitOfWork.repositories.credentials.findByUserId(user.id);
+      expect(credential).toBeDefined();
+      if (credential === undefined) return;
+
+      // Original password still works
+      const matches = await hasher.verify(PASSWORD, credential.passwordHash);
+      expect(matches).toBe(true);
+    });
+  });
+
+  describe("password policy validation", () => {
+    it("rejects a weak new password without changing the credential", async () => {
+      const result = await changePassword.execute({
+        userId: user.id,
+        currentPassword: PASSWORD,
+        newPassword: "short", // too short
+      });
+
+      expect(Result.isErr(result)).toBe(true);
+      if (!Result.isErr(result)) return;
+      expect(result.error.fieldErrors["password"]).toContain("too_short");
+
+      // Original password still works
+      const credential = await unitOfWork.repositories.credentials.findByUserId(user.id);
+      if (credential === undefined) return;
+      const matches = await hasher.verify(PASSWORD, credential.passwordHash);
+      expect(matches).toBe(true);
+    });
+
+    it("policy validation happens before current password verification", async () => {
+      // Even with a wrong current password, weak password is rejected first
+      const result = await changePassword.execute({
+        userId: user.id,
+        currentPassword: "wrong",
         newPassword: "short",
       });
 
       expect(Result.isErr(result)).toBe(true);
       if (!Result.isErr(result)) return;
-      expect(result.error.code).toBe("VALIDATION_ERROR");
+      // Password error, not auth error
+      expect(result.error.fieldErrors["password"]).toContain("too_short");
     });
+  });
 
-    it("rejects when new password is empty", async () => {
+  describe("password history — reuse prevention (Issue 072)", () => {
+    it("rejects reuse of current password", async () => {
       const result = await changePassword.execute({
-        userId: registeredUser.id,
-        currentPassword: CURRENT_PASSWORD,
-        newPassword: "",
+        userId: user.id,
+        currentPassword: PASSWORD,
+        newPassword: PASSWORD, // same as current
       });
 
       expect(Result.isErr(result)).toBe(true);
       if (!Result.isErr(result)) return;
-      expect(result.error.code).toBe("VALIDATION_ERROR");
+      expect(result.error.fieldErrors["password"]).toContain("reused");
     });
 
-    it("returns the same error for missing user and wrong password", async () => {
-      const missingUserResult = await changePassword.execute({
-        userId: asId<"UserId">("nonexistent-user-id"),
-        currentPassword: CURRENT_PASSWORD,
-        newPassword: NEW_PASSWORD,
-      });
-
-      const wrongPasswordResult = await changePassword.execute({
-        userId: registeredUser.id,
-        currentPassword: "wrong password",
-        newPassword: NEW_PASSWORD,
-      });
-
-      expect(Result.isErr(missingUserResult)).toBe(true);
-      expect(Result.isErr(wrongPasswordResult)).toBe(true);
-      if (Result.isErr(missingUserResult) && Result.isErr(wrongPasswordResult)) {
-        // Both should be VALIDATION_ERROR with the same message, preventing
-        // enumeration: a caller cannot tell whether the user exists or the
-        // password is wrong.
-        expect(missingUserResult.error.code).toBe(wrongPasswordResult.error.code);
-        expect(missingUserResult.error.message).toBe(wrongPasswordResult.error.message);
-      }
-    });
-
-    it("error for wrong password identifies the currentPassword field", async () => {
+    it("accepts a completely new password", async () => {
       const result = await changePassword.execute({
-        userId: registeredUser.id,
-        currentPassword: "wrong",
+        userId: user.id,
+        currentPassword: PASSWORD,
         newPassword: NEW_PASSWORD,
       });
 
-      expect(Result.isErr(result)).toBe(true);
-      if (!Result.isErr(result)) return;
-      // ValidationError has a fieldErrors object keyed by field name
-      expect(result.error.fieldErrors?.currentPassword).toBeDefined();
-    });
-  });
-
-  describe("lockout clearing", () => {
-    it("clears lockout after successful password change", async () => {
-      // Cause failed login attempts to lock the credential
-      const { AuthenticateWithPassword } = await import("./authenticate-with-password.js");
-      const authenticate = new AuthenticateWithPassword(unitOfWork, hasher);
-
-      // Default policy locks after 5 failures
-      for (let i = 0; i < 5; i++) {
-        await authenticate.execute({
-          email: EMAIL,
-          password: "wrong",
-        });
-      }
-
-      // At this point, the credential should be locked
-      const lockedResult = await authenticate.execute({
-        email: EMAIL,
-        password: CURRENT_PASSWORD,
-      });
-      expect(Result.isErr(lockedResult)).toBe(true);
-
-      // Change the password
-      const changeResult = await changePassword.execute({
-        userId: registeredUser.id,
-        currentPassword: CURRENT_PASSWORD,
-        newPassword: NEW_PASSWORD,
-      });
-      expect(Result.isOk(changeResult)).toBe(true);
-
-      // Should now be able to authenticate with the new password
-      const nowUnlockedResult = await authenticate.execute({
-        email: EMAIL,
-        password: NEW_PASSWORD,
-      });
-      expect(Result.isOk(nowUnlockedResult)).toBe(true);
-    });
-  });
-
-  describe("does not revoke sessions", () => {
-    it("change-password does not revoke sessions (unlike password-reset)", async () => {
-      // This is a documented difference: password reset revokes sessions
-      // (address "someone else has my account"), but change-password does not
-      // (user is already authenticated and owns their session).
-      //
-      // This test documents the behavior. In a full integration test with
-      // actual sessions (Phase 05+), we would verify that the session remains
-      // valid after a password change.
-
-      const result = await changePassword.execute({
-        userId: registeredUser.id,
-        currentPassword: CURRENT_PASSWORD,
-        newPassword: NEW_PASSWORD,
-      });
-
-      // No error should be returned about session revocation
       expect(Result.isOk(result)).toBe(true);
+    });
+
+    it("rejects reuse of a password from history on second change", async () => {
+      // First change: PASSWORD -> NEW_PASSWORD
+      await changePassword.execute({
+        userId: user.id,
+        currentPassword: PASSWORD,
+        newPassword: NEW_PASSWORD,
+      });
+
+      // Second change: try to reuse the original PASSWORD
+      const result = await changePassword.execute({
+        userId: user.id,
+        currentPassword: NEW_PASSWORD,
+        newPassword: PASSWORD, // in history now
+      });
+
+      expect(Result.isErr(result)).toBe(true);
+      if (!Result.isErr(result)) return;
+      expect(result.error.fieldErrors["password"]).toContain("reused");
+    });
+
+    it("allows a password when history is exhausted (more than N changes)", async () => {
+      const policy = { depth: 2 };
+      changePassword = new ChangePassword(unitOfWork, hasher, rateLimiter, undefined, policy);
+
+      let current = PASSWORD;
+      // Make enough changes to exhaust history beyond depth
+      for (let i = 1; i <= 4; i++) {
+        const next = `NewPassword${i}`;
+        const result = await changePassword.execute({
+          userId: user.id,
+          currentPassword: current,
+          newPassword: next,
+        });
+        expect(Result.isOk(result)).toBe(true);
+        current = next;
+      }
+
+      // Now the original password should be out of history and allowed
+      const result = await changePassword.execute({
+        userId: user.id,
+        currentPassword: current,
+        newPassword: PASSWORD, // very first password, now out of history
+      });
+
+      expect(Result.isOk(result)).toBe(true);
+    });
+
+    it("maintains password history after successful change", async () => {
+      await changePassword.execute({
+        userId: user.id,
+        currentPassword: PASSWORD,
+        newPassword: NEW_PASSWORD,
+      });
+
+      const credential = await unitOfWork.repositories.credentials.findByUserId(user.id);
+      expect(credential?.passwordHistory.length).toBeGreaterThan(0);
+    });
+
+    it("error message includes history depth", async () => {
+      const result = await changePassword.execute({
+        userId: user.id,
+        currentPassword: PASSWORD,
+        newPassword: PASSWORD,
+      });
+
+      expect(Result.isErr(result)).toBe(true);
+      if (!Result.isErr(result)) return;
+      expect(result.error.message).toContain("5"); // default depth
+    });
+
+    it("reuse error includes guidance", async () => {
+      const result = await changePassword.execute({
+        userId: user.id,
+        currentPassword: PASSWORD,
+        newPassword: PASSWORD,
+      });
+
+      expect(Result.isErr(result)).toBe(true);
+      if (!Result.isErr(result)) return;
+      expect(result.error.message).toContain("recently used");
+      expect(result.error.message).toContain("choose a password");
+    });
+  });
+
+  describe("edge cases", () => {
+    it("throws for unknown user (internal error)", async () => {
+      await expect(
+        changePassword.execute({
+          userId: asId<"UserId">("00000000-0000-4000-8000-000000000099"),
+          currentPassword: PASSWORD,
+          newPassword: NEW_PASSWORD,
+        }),
+      ).rejects.toThrow();
+    });
+
+    it("throws for user with no credential (internal error)", async () => {
+      // Register another user
+      const registered = await new RegisterUserWithPassword(unitOfWork, hasher).execute({
+        email: "bob@example.com",
+        displayName: "Bob",
+        password: "bob's password",
+      });
+      if (!Result.isOk(registered)) throw new Error("fixture setup failed");
+
+      const email = Email.create("bob@example.com");
+      if (!Result.isOk(email)) throw new Error("fixture setup failed");
+      const bob = await unitOfWork.repositories.users.findByEmail(email.value);
+      if (bob === undefined) throw new Error("fixture setup failed");
+
+      // Delete the credential to simulate SSO-only account
+      await unitOfWork.repositories.credentials.deleteByUserId(bob.id);
+
+      await expect(
+        changePassword.execute({
+          userId: bob.id,
+          currentPassword: PASSWORD,
+          newPassword: NEW_PASSWORD,
+        }),
+      ).rejects.toThrow();
+    });
+
+    it("multiple consecutive changes work correctly", async () => {
+      let current = PASSWORD;
+
+      for (let i = 1; i <= 3; i++) {
+        const next = `NewPassword${i}`;
+        const result = await changePassword.execute({
+          userId: user.id,
+          currentPassword: current,
+          newPassword: next,
+        });
+
+        expect(Result.isOk(result)).toBe(true);
+        current = next;
+      }
+
+      // Final state should have new password
+      const credential = await unitOfWork.repositories.credentials.findByUserId(user.id);
+      if (credential === undefined) return;
+      const matches = await hasher.verify(current, credential.passwordHash);
+      expect(matches).toBe(true);
+    });
+
+    it("original password rejected after change", async () => {
+      await changePassword.execute({
+        userId: user.id,
+        currentPassword: PASSWORD,
+        newPassword: NEW_PASSWORD,
+      });
+
+      // Try to change again using old password
+      const result = await changePassword.execute({
+        userId: user.id,
+        currentPassword: PASSWORD, // old password
+        newPassword: ANOTHER_PASSWORD,
+      });
+
+      expect(Result.isErr(result)).toBe(true);
+      if (!Result.isErr(result)) return;
+      expect(result.error.fieldErrors["currentPassword"]).toContain("incorrect");
     });
   });
 });

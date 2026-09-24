@@ -1,12 +1,14 @@
-import type { User, UserId } from "@verixa/identity";
-import { Result, ValidationError } from "@verixa/shared-kernel";
+import type { User } from "@verixa/identity";
+import { Result, ValidationError, type Id, type RateLimiter } from "@verixa/shared-kernel";
 
+import { type PasswordHistoryPolicy } from "../../domain/value-objects/password-history-policy.js";
+import { DEFAULT_PASSWORD_HISTORY_POLICY } from "../../domain/value-objects/password-history-policy.js";
 import { type PasswordPolicy, RawPassword } from "../../domain/value-objects/raw-password.js";
 import type { CredentialsUnitOfWork } from "../ports/credentials-unit-of-work.js";
 import type { PasswordHasher } from "../ports/password-hasher.js";
 
 export interface ChangePasswordCommand {
-  readonly userId: UserId;
+  readonly userId: Id<"UserId">;
   readonly currentPassword: string;
   readonly newPassword: string;
 }
@@ -16,104 +18,115 @@ export interface ChangePasswordResult {
 }
 
 /**
- * Allows an authenticated user to change their own password by providing
- * their current password for re-authentication.
+ * Changes the authenticated user's password, requiring re-entry of the current one.
  *
- * Distinct from password reset (Issue 070):
- * - Requires the current password (step-up re-authentication)
- * - User must already be authenticated with a valid session
- * - Lower-friction than reset (no token/email flow)
+ * Distinct from `ConfirmPasswordReset` (Issue 070) — that is for account
+ * recovery when the current password is forgotten. This is for a logged-in
+ * user rotating their own password, as a convenience and as part of regular
+ * security hygiene.
  *
- * This previews Phase 06 MFA step-up authentication, where sensitive actions
- * require re-verification of identity.
+ * Re-authentication (current password re-entry) is deliberate. A user in an
+ * unlocked browser at a coffee shop wants to know that a password change will
+ * not go through while they grab a napkin. The complexity is real and the
+ * property is also real. Phase 06 will extend this to MFA step-up as another
+ * example of re-authentication.
  *
- * ## Security properties
- *
- * Wrong current password and new password policy violations both return a
- * generic {@link ValidationError}. Unlike login, enumeration is not a concern
- * here — the user is already authenticated and knows their own userId. The
- * user error (wrong password) can be stated clearly.
- *
- * **Lockout is cleared.** A user who successfully changes their password has
- * just demonstrated control of the account, so any lockout from failed login
- * attempts is cleared. They can immediately authenticate with the new password
- * and cannot be locked out of a credential they just set.
- *
- * **No session revocation.** Unlike password reset, which addresses "someone
- * else has my account", a password change by the owner does not necessitate
- * killing their own session. They stay logged in, which is the better UX.
- * Session invalidation is a Phase 15+ concern for coordinated security
- * responses.
- *
- * See `docs/security/authentication-flows.md`.
+ * Password reuse is rejected (Issue 072): one of the last N passwords cannot
+ * be used. This prevents trivial "change and change back" bypasses.
  */
 export class ChangePassword {
   constructor(
     private readonly unitOfWork: CredentialsUnitOfWork,
     private readonly passwordHasher: PasswordHasher,
+    private readonly rateLimiter: RateLimiter,
     private readonly passwordPolicy?: PasswordPolicy,
+    private readonly passwordHistoryPolicy: PasswordHistoryPolicy = DEFAULT_PASSWORD_HISTORY_POLICY,
   ) {}
 
   async execute(
     command: ChangePasswordCommand,
   ): Promise<Result<ChangePasswordResult, ValidationError>> {
-    // Validate new password first, before any database work. A rejected
-    // password should not consume a hash operation.
+    // Validate the new password policy first, before any hashing or
+    // database work. A rejected password should not advance the change.
     const passwordResult = RawPassword.create(command.newPassword, this.passwordPolicy);
     if (Result.isErr(passwordResult)) {
       return passwordResult;
     }
 
-    // Hash outside the transaction: it is slow (~50-100ms) and needs no
-    // database. Same reasoning as `RegisterUserWithPassword` and
-    // `ConfirmPasswordReset`.
-    const newHash = await this.passwordHasher.hash(passwordResult.value.reveal());
-
     const outcome = await this.unitOfWork.run(async (repositories) => {
-      // Load the user to verify they still exist and to return them.
       const user = await repositories.users.findById(command.userId);
       if (user === undefined) {
-        // User not found, but we do not distinguish this from wrong password
-        // to prevent user enumeration — same reasoning as login (Issue 066).
-        // In practice, this should not be reachable: an authenticated request
-        // would not reach here with a userId that no longer exists.
-        return { kind: "invalid" as const };
+        return { kind: "user_not_found" as const };
       }
 
-      // Load the credential. An SSO-only or passkey-only account legitimately
-      // has no password credential.
       const credential = await repositories.credentials.findByUserId(user.id);
       if (credential === undefined) {
-        return { kind: "invalid" as const };
+        // User has no password credential (SSO-only, etc.). Cannot change
+        // a password that doesn't exist.
+        return { kind: "no_credential" as const };
       }
 
-      // Verify the current password. Wrong password or missing credential
-      // are treated identically.
-      const matches = await this.passwordHasher.verify(
+      // Re-authenticate: verify the current password matches the stored one.
+      const currentMatches = await this.passwordHasher.verify(
         command.currentPassword,
         credential.passwordHash,
       );
-      if (!matches) {
-        return { kind: "invalid" as const };
+      if (!currentMatches) {
+        return { kind: "wrong_current_password" as const };
       }
 
-      // Update the credential with the new hash. `withPasswordHash` also
-      // clears any lockout, which is correct: the user has just proved
-      // control of their account and cannot be locked out of the credential
-      // they just set.
-      const updated = credential.withPasswordHash(newHash);
-      await repositories.credentials.save(updated);
+      // Check for password reuse (Issue 072)
+      const isReused = await credential.isPasswordReused(command.newPassword, (plain, hash) =>
+        this.passwordHasher.verify(plain, hash),
+      );
+      if (isReused) {
+        return { kind: "password_reused" as const };
+      }
 
       return { kind: "ok" as const, user };
     });
 
-    if (outcome.kind === "invalid") {
+    if (outcome.kind === "user_not_found" || outcome.kind === "no_credential") {
+      // Both are internal errors: the user supplied a valid userId, and the
+      // system should have found the account. Surface as 500 implicitly by
+      // not returning an error (use case error is for *semantic* failures).
+      throw new Error(`ChangePassword: outcome.kind === ${outcome.kind}`);
+    }
+
+    if (outcome.kind === "wrong_current_password") {
+      // Wrong re-authentication is treated as authentication failure: same
+      // message, same timing (password verification is expensive and took
+      // time already).
       return Result.err(
-        new ValidationError("Current password is incorrect.", {
-          currentPassword: ["invalid"],
-        }),
+        new ValidationError("Current password is incorrect.", { currentPassword: ["incorrect"] }),
       );
     }
+
+    if (outcome.kind === "password_reused") {
+      return Result.err(
+        new ValidationError(
+          `Password was recently used. ` +
+            `Please choose a password not used in your last ${this.passwordHistoryPolicy.depth} passwords.`,
+          { password: ["reused"] },
+        ),
+      );
+    }
+
+    // Hash the new password outside the transaction. It is the slowest
+    // operation here and needs no database, so holding a connection open
+    // across it is waste.
+    const newHash = await this.passwordHasher.hash(passwordResult.value.reveal());
+
+    // Update the credential with the new hash, maintaining history.
+    await this.unitOfWork.run(async (repositories) => {
+      const credential = await repositories.credentials.findByUserId(outcome.user.id);
+      if (credential === undefined) {
+        throw new Error("ChangePassword: credential vanished during transaction");
+      }
+
+      const rotated = credential.rotatePassword(newHash, this.passwordHistoryPolicy);
+      await repositories.credentials.save(rotated);
+    });
 
     return Result.ok({ user: outcome.user });
   }
