@@ -15,7 +15,8 @@
   },
   "dependencies": {
     "@verixa/database": "workspace:*",
-    "@verixa/shared-kernel": "workspace:*"
+    "@verixa/shared-kernel": "workspace:*",
+    "jose": "^5.9.6"
   },
   "devDependencies": {
     "@testcontainers/postgresql": "^12.1.0",
