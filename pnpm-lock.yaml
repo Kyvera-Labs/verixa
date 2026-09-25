@@ -68,6 +68,9 @@ importers:
       '@verixa/identity':
         specifier: workspace:*
         version: link:../../packages/identity
+      '@verixa/mfa':
+        specifier: workspace:*
+        version: link:../../packages/mfa
       '@verixa/shared-kernel':
         specifier: workspace:*
         version: link:../../packages/shared-kernel

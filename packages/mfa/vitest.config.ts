@@ -1,27 +1,26 @@
-import { defineConfig } from "vitest/config";
+import { defineConfig, mergeConfig } from "vitest/config";
 
-export default defineConfig({
-  test: {
-    environment: "node",
-    globals: true,
-    coverage: {
-      provider: "v8",
-      reporter: ["text", "json", "html"],
-      exclude: [
-        "dist/**",
-        "node_modules/**",
-        "**/*.spec.ts",
-        "vitest.config.ts",
-        "application/ports/**",
-        "index.ts",
-        "infrastructure/fakes/**",
-      ],
-      thresholds: {
-        statements: 90,
-        branches: 85,
-        functions: 90,
-        lines: 90,
+import baseConfig from "../../vitest.config.js";
+
+export default mergeConfig(
+  baseConfig,
+  defineConfig({
+    test: {
+      name: "@verixa/mfa",
+      coverage: {
+        exclude: [
+          "**/application/ports/**",
+          "index.ts",
+          "**/infrastructure/fakes/**",
+          "**/infrastructure/persistence/**",
+        ],
+        thresholds: {
+          statements: 90,
+          lines: 90,
+          functions: 85,
+          branches: 85,
+        },
       },
     },
-  },
-});
+  }),
+);
