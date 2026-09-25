@@ -3,6 +3,7 @@ import { createId, type Id, Result, ValidationError } from "@verixa/shared-kerne
 import { SystemRoleImmutableError } from "../errors/system-role-immutable-error.js";
 import { Permission } from "../value-objects/permission.js";
 
+export type OrgId = Id<"OrgId">;
 export type RoleId = Id<"RoleId">;
 
 export interface RoleProps {
@@ -10,6 +11,7 @@ export interface RoleProps {
   readonly name: string;
   readonly description?: string | undefined;
   readonly isSystemRole: boolean;
+  readonly orgId?: OrgId | null | undefined;
   readonly permissions: ReadonlySet<string>;
   readonly createdAt: Date;
   readonly updatedAt: Date;
@@ -20,6 +22,7 @@ export interface CreateRoleParams {
   readonly name: string;
   readonly description?: string | undefined;
   readonly isSystemRole?: boolean;
+  readonly orgId?: OrgId | null | undefined;
   readonly permissions?: Iterable<Permission | string>;
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
@@ -44,6 +47,7 @@ export class Role {
   private _name: string;
   private _description: string | undefined;
   readonly isSystemRole: boolean;
+  readonly orgId: OrgId | null;
   private readonly _permissions: Set<string>;
   readonly createdAt: Date;
   private _updatedAt: Date;
@@ -53,6 +57,7 @@ export class Role {
     name: string;
     description?: string | undefined;
     isSystemRole: boolean;
+    orgId: OrgId | null;
     permissions: Set<string>;
     createdAt: Date;
     updatedAt: Date;
@@ -61,6 +66,7 @@ export class Role {
     this._name = props.name;
     this._description = props.description;
     this.isSystemRole = props.isSystemRole;
+    this.orgId = props.orgId;
     this._permissions = props.permissions;
     this.createdAt = props.createdAt;
     this._updatedAt = props.updatedAt;
@@ -72,6 +78,20 @@ export class Role {
 
   get description(): string | undefined {
     return this._description;
+  }
+
+  /**
+   * Returns true if this role applies globally (system role or global tenant role).
+   */
+  isGlobal(): boolean {
+    return this.orgId === null;
+  }
+
+  /**
+   * Returns true if this role is scoped to a specific organization.
+   */
+  isScoped(): boolean {
+    return this.orgId !== null;
   }
 
   get updatedAt(): Date {
@@ -104,6 +124,7 @@ export class Role {
     const createdAt = params.createdAt ?? now;
     const updatedAt = params.updatedAt ?? now;
     const isSystemRole = params.isSystemRole ?? false;
+    const orgId = isSystemRole ? null : (params.orgId ?? null);
 
     const initialPermissions = new Set<string>();
     if (params.permissions) {
@@ -119,6 +140,7 @@ export class Role {
         name: trimmedName,
         description: params.description?.trim(),
         isSystemRole,
+        orgId,
         permissions: initialPermissions,
         createdAt,
         updatedAt,
@@ -128,11 +150,21 @@ export class Role {
 
   /**
    * Convenience factory to create a protected system role (`isSystemRole: true`).
+   * System roles always apply globally (`orgId: null`).
    */
   static createSystemRole(
-    params: Omit<CreateRoleParams, "isSystemRole">,
+    params: Omit<CreateRoleParams, "isSystemRole" | "orgId">,
   ): Result<Role, ValidationError> {
-    return Role.create({ ...params, isSystemRole: true });
+    return Role.create({ ...params, isSystemRole: true, orgId: null });
+  }
+
+  /**
+   * Convenience factory to create an organization-scoped role.
+   */
+  static createScoped(
+    params: Omit<CreateRoleParams, "orgId" | "isSystemRole"> & { readonly orgId: OrgId },
+  ): Result<Role, ValidationError> {
+    return Role.create(params);
   }
 
   /**
@@ -145,6 +177,7 @@ export class Role {
       name: props.name,
       description: props.description,
       isSystemRole: props.isSystemRole,
+      orgId: props.orgId ?? null,
       permissions: new Set(props.permissions),
       createdAt: props.createdAt,
       updatedAt: props.updatedAt,
