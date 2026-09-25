@@ -22,6 +22,13 @@ export class Permission {
   }
 
   /**
+   * The canonical permission key (e.g. `users:read`), identical to `value`.
+   */
+  get key(): string {
+    return this.value;
+  }
+
+  /**
    * Normalizes (trims, lowercases) and validates a raw permission string.
    *
    * Rejects malformed strings (missing colon, empty segments, invalid characters, whitespace).
