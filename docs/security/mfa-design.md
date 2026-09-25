@@ -76,3 +76,57 @@ _Design Decision & Alternatives Rejected:_
 - `attestationType`: Attestation format (e.g. `none`, `packed`).
 
 Even in the event of an arbitrary database compromise, no private key material exists on the server, eliminating offline credential cracking.
+
+---
+
+## 3. WebAuthn Authentication Ceremony (`VerifyWebAuthnAssertion`)
+
+The authentication ceremony verifies that a user attempting to authenticate or step-up possesses the physical security key or platform passkey enrolled during registration.
+
+### Authentication Protocol Flow
+
+```
+User Agent (Browser)                  Verixa API                      Authenticator
+         |                                |                                 |
+         | --- 1. issueChallenge(userId) ->|                                |
+         |                                | (generate 32-byte CSPRNG token) |
+         | <- 2. { challenge, expiresAt } -|                                |
+         |                                |                                 |
+         | --- 3. navigator.credentials.get({ challenge, rpId, allowCreds })>|
+         |                                |                                 |
+         |                                |    [Verify User Presence (UP)]  |
+         |                                |    [Increment Signature Counter]|
+         |                                |    [Sign AuthData || DataHash]  |
+         |                                |                                 |
+         | <- 4. PublicKeyCredential ---------------------------------------|
+         |    (clientDataJSON, authenticatorData, signature)                |
+         |                                |                                 |
+         | --- 5. execute(assertion) ---->|                                 |
+         |                                | 6. Verify Challenge & Consume   |
+         |                                | 7. Verify ClientData Origin     |
+         |                                | 8. Verify RP ID Hash & UP Flag  |
+         |                                | 9. Verify Signature w/ PubKey   |
+         |                                | 10. Check SignCounter (Clone)   |
+         |                                | 11. Advance Counter & Touch TS  |
+         | <- 12. Ok({ credential, mfa }) -|                                 |
+```
+
+### Signature Verification over `authenticatorData || clientDataHash`
+
+The authenticator asserts possession by signing the concatenation of:
+
+1. `authenticatorData` (containing RP ID hash, flags including User Presence `UP`, and the 32-bit big-endian signature counter).
+2. `SHA-256(clientDataJSON)` (binding the challenge and origin).
+
+`WebAuthnAssertionVerifier` loads the registered public key (COSE or PEM format) and cryptographically verifies the signature over this payload.
+
+### Clone Detection via Signature Counter
+
+FIDO2 authenticators maintain an internal monotonic counter (`signCount`) that increments with every assertion.
+
+- **Legitimate usage:** Every assertion yields a `signCounter` strictly greater than the previously recorded counter (`newCounter > storedCounter`).
+- **Clone detection:** If a physical authenticator's internal state or private key is cloned or copied to a second device, assertions from the cloned authenticator will produce counter values that collide with or lag behind the genuine authenticator (`newCounter <= storedCounter`).
+- **Security Escalation:** When a non-increasing counter is observed (and counter tracking is active with `storedCounter > 0`), Verixa flags this as suspected credential duplication:
+  1. Immediately emits a `WebAuthnCloneSuspected` domain event (`mfa.webauthn.clone_suspected`).
+  2. Records an authentication failure attempt on the associated `MfaMethod` (triggering automatic lockout if repeated).
+  3. Rejects the assertion ceremony with a validation error.
