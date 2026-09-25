@@ -68,6 +68,9 @@ importers:
       '@verixa/identity':
         specifier: workspace:*
         version: link:../../packages/identity
+      '@verixa/mfa':
+        specifier: workspace:*
+        version: link:../../packages/mfa
       '@verixa/shared-kernel':
         specifier: workspace:*
         version: link:../../packages/shared-kernel
@@ -221,6 +224,25 @@ importers:
       tsx:
         specifier: ^4.23.13
         version: 4.23.13
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.20.1)(supports-color@7.2.0)
+
+  packages/mfa:
+    dependencies:
+      '@verixa/shared-kernel':
+        specifier: workspace:*
+        version: link:../shared-kernel
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.20.1
+      '@vitest/coverage-v8':
+        specifier: ^2.1.9
+        version: 2.1.9(supports-color@7.2.0)(vitest@2.1.9(@types/node@22.20.1)(supports-color@7.2.0))
       typescript:
         specifier: ^5.7.2
         version: 5.9.3
