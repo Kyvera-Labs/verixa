@@ -3,8 +3,9 @@
  * session-based authentication primitives for Phase 05 and later.
  *
  * This package encapsulates sessions as a bounded context: domain entities
- * (`Session`, `SessionExpiryPolicy`), application ports (`SessionRepository`),
- * and infrastructure implementations (Prisma persistence, in-memory testing).
+ * (`Session`, `RefreshToken`, `SessionExpiryPolicy`), application ports
+ * (`SessionRepository`), and infrastructure implementations (Prisma persistence,
+ * in-memory testing).
  *
  * ### Public API Surface
  *
@@ -15,6 +16,7 @@
  *
  * **Domain layer:**
  * - `Session` aggregate with `create`, `reconstitute`, `touch`, `revoke` methods
+ * - `RefreshToken` entity with opaque, hashed bearer token design (Issue 086)
  * - `SessionExpiryPolicy` value object with `sliding` and `absolute` modes
  * - `SessionStatus` type for lifecycle states
  *
@@ -31,6 +33,7 @@
 
 // Domain
 export { Session, type SessionId, type SessionStatus, type UserId } from "./domain/entities/session.js";
+export { RefreshToken, type RefreshTokenId, type IssuedRefreshToken } from "./domain/entities/refresh-token.js";
 export {
   SessionExpiryPolicy,
   type SessionExpiryMode,

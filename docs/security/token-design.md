@@ -102,7 +102,7 @@ The 15-minute TTL is a standard in OAuth 2.0 and OpenID Connect. Verixa makes it
 - **Why stateful?** Can be revoked immediately (logged-out user gets a new token, old one rejected, all on the same day).
 - **Why hashed in database?** A stolen database dump doesn't yield usable refresh tokens (only their hashes).
 
-See the sections below for refresh token details (Issue 086) and theft detection (Issue 090).
+See Issue 086 for the `RefreshToken` entity design and implementation. Issue 089 covers token rotation; Issue 090 covers theft detection.
 
 ## The Architecture: Hybrid Stateless + Deny-List
 
@@ -160,6 +160,54 @@ Refresh tokens are **not JWTs**. They're high-entropy opaque strings, hashed bef
 
 Refresh tokens live in the database so they can be revoked immediately. Their values are hashed (like passwords) so a stolen database dump doesn't yield usable tokens.
 
+### Why Opaque, Not JWT?
+
+A refresh token is fundamentally different from an access token in its operational role:
+
+**Access tokens** are verified hundreds of times per second across a cluster (on every API request). Stateless JWTs make this possible: verification requires only the public key, no database round-trip.
+
+**Refresh tokens** are used infrequently (every 15 minutes per session, during token refresh requests only). A database round-trip is acceptable and preferable because:
+
+1. **Revocation immediacy:** A compromised refresh token must be revocable instantly. A deny-list (suitable for 15-minute access tokens) doesn't suffice for a 7-day token — the memory cost is prohibitive. Stateful revocation via database status field is immediate and bounded in cost.
+
+2. **Database lookup is operationally cheap:** Refresh requests are rare (one per session per 15 minutes). The database cost of validating a token is negligible compared to the security benefit of immediate revocation.
+
+3. **Opacity prevents information leakage:** A JWT in a database dump reveals its claims (user ID, organization ID, session ID) even if expired or revoked. An opaque token reveals nothing — the token itself is valueless without the stored hash.
+
+4. **Simplifies token rotation:** Refresh token rotation (Issue 089) is simpler without JWT semantics. Issue the new token, invalidate the old one in the database, done. No claim versioning, no signature-related concerns.
+
+### Implementation: Format and Storage
+
+**Generation:**
+- High-entropy opaque string: 32 bytes (256 bits) from `crypto.randomBytes()`, base64-encoded
+- Byte length (256 bits) chosen for the following reasons:
+  - Exceeds OWASP minimum of 128 bits for long-lived bearer tokens (RFC 6819, §5.2.2)
+  - Long-lived tokens are higher-value targets; higher entropy is justified
+  - Base64-encoded 32 bytes = 44 characters, fits standard HTTP header sizes
+  - 16 additional bytes vs. 128-bit alternative costs negligible storage and transport overhead
+  - Aligns with OAuth 2.0 and similar standards recommendations for long-lived tokens
+
+**Storage:**
+- SHA-256 hash only, never the raw token
+- Stored as 64-character hex string
+- Raw token exists **only in `RefreshToken.create()`'s return value** — structurally impossible to leak after that point
+
+**Comparison:**
+- **Not timing-safe in the domain layer** — that's an implementation detail at the use-case or repository layer
+- Repository or use case can expose a `compare(token, refreshToken)` method that uses timing-safe comparison
+- Domain entity provides the hash; comparison logic belongs above the domain
+
+### Comparison to Passwords (Issue 061)
+
+Refresh token storage mirrors password storage:
+- **Never stored raw:** Always hashed before persistence
+- **One-way:** A stolen database dump yields hashes, not credentials
+- **Revocable:** Unlike passwords, no expiry timeout; immediate session-level revocation is possible
+
+Unlike passwords, tokens are **ephemeral and automatically rotated:**
+- Compromised tokens are rotated (Issue 089) rather than requiring user action
+- User is never told "your refresh token was compromised, reset it" — they just refresh transparently and get a new one
+
 ## Refresh Token Rotation (Issue 089)
 
 Every time a refresh token is used, a new one is issued and the old one is immediately invalidated. This limits the usefulness of a stolen refresh token to a single request.
@@ -187,12 +235,13 @@ This turns token rotation from a hygiene measure (limits exposure window) into a
 
 ### Threat: Refresh Token Theft
 
-**Attack:** Attacker intercepts a refresh token.
+**Attack:** Attacker intercepts a refresh token (network sniffing, compromised device, database breach).
 
 **Mitigation:**
-- Refresh token is opaque and hashed. A stolen database dump doesn't yield usable tokens.
-- Token is revoked on first use (rotate-on-use). Attacker can use it at most once.
-- Reuse detection triggers theft detection. Presenting a rotated token revokes the entire family and session, and emits a security event.
+- **Opaque and hashed:** Stored as SHA-256 hash only. A stolen database dump doesn't yield usable tokens — only hashes.
+- **High entropy:** 256 bits, making brute-force guessing infeasible even with offline attacks.
+- **Rotate-on-use:** Every time a refresh token is used, a new one is issued and the old one is immediately revoked (Issue 089). Attacker's window to use a stolen token is bounded to the time until next refresh.
+- **Reuse detection (Issue 090):** If a superseded token is presented again, the entire token family and session are revoked, and a security event is emitted. This detects theft actively and limits damage.
 
 ### Threat: Token Forgery
 
@@ -288,10 +337,19 @@ All tests are unit tests (no database, no external services) and fail without th
 - **OpenID Connect Core:** https://openid.net/specs/openid-connect-core-1_0.html
 - **OWASP Token Security:** https://cheatsheetseries.owasp.org/cheatsheets/JSON_Web_Token_for_Java_Cheat_Sheet.html
 
+## Theft Detection: Reuse Detection (Issue 090)
+
+Refresh tokens carry an optional `familyId` linking them to a rotation chain. When a token is rotated (Issue 089), the new token carries the same family ID. If an old token is presented after it's been superseded, it's evidence of theft:
+
+1. The entire token family (all tokens descended from the stolen one) is revoked.
+2. The session is revoked.
+3. A security event is emitted.
+
+This turns token rotation from a hygiene measure (limits exposure window) into an **active theft detection mechanism** (notifies the user and operator). See Issue 090 for the detection implementation.
+
 ## Next Steps
 
 - **Issue 085:** Implement `SigningKeyProvider` for multi-key support and rotation.
-- **Issue 086:** Define `RefreshToken` entity (opaque, hashed).
 - **Issue 087:** Implement `IssueSession` use case (creates a Session + issues token pair).
 - **Issue 088:** Implement Redis-backed deny-list for revocation.
 - **Issue 089:** Implement `RefreshAccessToken` use case (token rotation).
