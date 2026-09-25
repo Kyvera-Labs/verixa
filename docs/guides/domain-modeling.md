@@ -282,6 +282,66 @@ that weren't exported in the first place. Remove something from `index.ts`
 and the compiler (and this lint rule) will tell you exactly what broke,
 which is a much stronger guarantee than "we agreed not to do that."
 
+## Session expiry policies: sliding vs. absolute tradeoff
+
+`Session` and `SessionExpiryPolicy` (`packages/sessions/domain/`, Phase 05
+Issue 081) introduce a common architectural tradeoff in session management:
+how aggressively time-bound a session's lifetime should be.
+
+`SessionExpiryPolicy` is a value object supporting two modes:
+
+- **Sliding expiry**: Each time a user makes a request (via `Session.touch()`),
+  the session's `expiresAt` is reset to `now + policyDuration`. From the
+  user's perspective, activity grants unlimited time — as long as they keep
+  using the app, they never get logged out.
+
+- **Absolute expiry**: The session's `expiresAt` is set at creation and never
+  changes, regardless of activity. A user who logs in at 10:00 AM with a
+  24-hour policy expires at 10:00 AM the next day, even if they've been
+  actively using the app the entire time.
+
+### Security vs. UX tradeoff
+
+**Absolute is stricter but less forgiving.** It guarantees a hard upper bound
+on session lifetime. If an attacker steals a session token, they can use it
+until that time limit expires — no longer. The cost: users are forced to
+re-authenticate periodically, even if they're actively using the app.
+Compliance frameworks (e.g. PCI-DSS) frequently mandate absolute limits on
+session duration as a mitigation for long-lived credential theft.
+
+**Sliding feels seamless but can persist indefinitely.** A user who is
+continuously active never needs to re-authenticate, which is ideal for UX.
+The risk: a stolen session token could theoretically be used indefinitely if
+the attacker replays it frequently enough to keep resetting the expiry. This
+can violate regulations that require a bounded maximum session lifetime — a
+sliding 1-hour policy could permit a session to live for weeks under
+continuous requests.
+
+### Implementation note: policy is pluggable, not hardcoded
+
+`Session` takes a `SessionExpiryPolicy` instance at creation (Issue 081), so
+the behavior is configurable per-environment without rewriting domain code.
+A production deployment might use `absolute(86400000)` (24 hours) while
+development uses `sliding(3600000)` (1 hour). This follows the principle
+that domain entities should be abstract over policy choices that might vary
+by deployment or use case — the entity defines the _interface_ (a session
+can expire, and there are two modes), while the application layer or config
+system decides which to use.
+
+### Why policy duration choices matter
+
+Both modes depend on choosing a duration: 1 hour, 8 hours, 1 day, etc.
+There's no universally correct answer — it depends on the attacker model
+and regulatory context you're optimizing for. Shorter durations (1 hour or
+less) bound the window for token theft but increase re-authentication
+friction. Longer durations (8 hours, 1 day) feel better to users but expand
+the window during which a leaked token remains useful. Some deployments
+mitigate this asymmetry by combining short access-token lifetimes (15
+minutes) with longer refresh-token lifetimes (7 days), allowing automatic
+token rotation in the background — this is explored in Phase 05 Issues
+084–090, which build token issuance, rotation, and theft detection on top of
+the Session lifecycle defined here.
+
 ## Use cases
 
 The first concrete use case, `RegisterUser`
