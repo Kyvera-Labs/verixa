@@ -141,6 +141,12 @@ system alone can't — a `User` cannot exist with an invalid status, an
 `OrganizationMembership` cannot be created as a duplicate active membership
 for the same user+organization pair.
 
+### MFA methods as an aggregate family
+
+`MfaMethod` (`packages/mfa/domain/entities/mfa-method.ts`, Phase 06) models a user's enrolled second factor (TOTP, WebAuthn, backup codes). Instead of creating separate entities like `TotpMethod` or `WebAuthnCredential`, they are modeled as a single aggregate family with a `type` field (`MfaMethodType`).
+
+This keeps enrollment and enforcement logic method-agnostic. The core business rule — "a session cannot be issued without satisfying an active MFA challenge" — does not need to know whether the challenge was satisfied by a TOTP code or a hardware key. The `MfaMethod` aggregate handles the common lifecycle (`pending`, `active`, `disabled`) and tracks the `lastUsedAt` timestamp, allowing new factor types to plug into the same enforcement policy engine without modifying the core logic.
+
 ### Status transitions as an explicit table, not scattered `if`s
 
 `User.ALLOWED_TRANSITIONS` names every legal status change up front
