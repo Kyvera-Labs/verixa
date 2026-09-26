@@ -28,3 +28,4 @@ export class MfaMethodType {
     return this.value;
   }
 }
+export type MfaMethodType = "totp" | "webauthn" | "backup-codes";
