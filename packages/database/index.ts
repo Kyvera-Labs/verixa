@@ -70,4 +70,5 @@ export type {
   Organization as OrganizationRow,
   OrganizationMembership as OrganizationMembershipRow,
   User as UserRow,
+  MfaMethod as MfaMethodRow,
 } from "@prisma/client";

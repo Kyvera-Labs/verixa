@@ -110,6 +110,7 @@ model User {
   sentInvitations         Invitation[]             @relation("InvitationInviter")
   emailVerificationTokens EmailVerificationToken[]
   passwordResetTokens     PasswordResetToken[]
+  mfaMethods              MfaMethod[]
 
   @@index([deletedAt])
   @@map("users")
@@ -433,4 +434,52 @@ model AnchorRecord {
 
   @@index([sequence])
   @@map("anchor_records")
+}
+
+/// Mirrors the MfaMethodType union in packages/mfa/domain/entities/mfa-method.ts
+enum MfaMethodType {
+  totp
+  webauthn
+  backup_codes @map("backup-codes")
+
+  @@map("mfa_method_type")
+}
+
+/// Mirrors the MfaMethodStatus union in packages/mfa/domain/entities/mfa-method.ts
+enum MfaMethodStatus {
+  pending
+  active
+  disabled
+
+  @@map("mfa_method_status")
+}
+
+/// A second factor enrolled by a user (Issue 107).
+///
+/// TOTP secrets are encrypted at rest using AEAD, not hashed.
+/// The server must decrypt them to compute expected codes during login, but
+/// a compromised database backup alone should not reveal the plaintext secrets.
+model MfaMethod {
+  id String @id @db.Uuid
+
+  userId String @map("user_id") @db.Uuid
+
+  type   MfaMethodType
+  status MfaMethodStatus
+
+  /// The encrypted TOTP secret. Only populated for type=totp.
+  /// Stored as a base64 encoded string of the ciphertext + IV + auth tag,
+  /// or whatever format the encryption utility produces.
+  secret String?
+
+  lastUsedAt DateTime? @map("last_used_at") @db.Timestamptz(3)
+
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, status])
+  @@map("mfa_methods")
 }

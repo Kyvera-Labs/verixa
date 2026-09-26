@@ -23,6 +23,17 @@
     "@types/node": "^22.10.0",
     "@vitest/coverage-v8": "^2.1.9",
     "tsx": "^4.23.13",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@node-rs/argon2": "^2.0.2",
+    "@verixa/database": "workspace:*",
+    "@verixa/identity": "workspace:*",
+    "@verixa/shared-kernel": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@vitest/coverage-v8": "^2.1.9",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   }

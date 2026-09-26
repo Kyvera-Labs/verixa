@@ -294,3 +294,11 @@ The first concrete use case, `RegisterUser`
 (`packages/identity/application/use-cases/register-user.ts`), establishes
 the application layer's command-handler pattern: see
 `docs/guides/use-cases.md` for the full shape and rationale.
+
+## MFA Secret Storage (Issue 107)
+
+Unlike passwords, which are one-way hashed using a slow KDF (Argon2), TOTP secrets must be decryptable by the server to compute expected verification codes during login. This fundamental difference requires a separate storage strategy: symmetric encryption (AES-256-GCM) with a managed key.
+
+We deliberately rejected hashing for TOTP secrets because the protocol relies on both the client and the server independently computing HMACs over the current time step using a shared plaintext secret. A one-way hash would destroy the secret needed for this computation.
+
+By encrypting the secret at rest in the database, we defend against a compromised database backup or read-only SQL injection: an attacker who gains access to the mfa_methods table cannot generate TOTP codes without also obtaining the application's symmetric encryption key, which is injected via environment variables and never persisted to the database. The PrismaMfaMethodRepository acts as the encryption boundary, ensuring the domain layer (MfaMethod) only ever deals with plaintext secrets while the database only ever holds ciphertext.
