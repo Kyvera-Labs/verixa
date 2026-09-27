@@ -166,3 +166,12 @@ persists it — the "send the email with this token" step is simply not
 implemented anywhere yet, which is a different thing from being designed
 wrong. See `docs/guides/domain-modeling.md` for the general principle this
 follows.
+
+## Scoped uniqueness: `CreateRole`
+
+`CreateRole` (`packages/authorization/application/use-cases/create-role.ts`,
+Issue 130) enforces scoped uniqueness across role aggregates:
+a role name must be unique within an organization (for organization-scoped roles)
+or globally (for system and platform-level roles). The aggregate `Role` cannot enforce
+uniqueness on its own across sibling aggregates, so the use case queries `RoleRepository.findByName(name, orgId)`
+before persisting.
