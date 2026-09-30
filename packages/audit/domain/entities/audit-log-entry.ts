@@ -16,7 +16,11 @@ export type AuditAction =
   | "user.locked_out"
   | "user.email_verified"
   | "user.password_reset_requested"
-  | "user.password_reset_completed";
+  | "user.password_reset_completed"
+  // Reads of the audit log itself — see `domain/policies/audit-access-policy.ts`.
+  | "audit.queried"
+  | "audit.exported"
+  | "audit.access_denied";
 
 /**
  * The genesis link.
