@@ -1,4 +1,9 @@
 import type {
+  AuditEventCriteria,
+  AuditEventPage,
+  AuditEventReader,
+} from "../../application/ports/audit-event-reader.js";
+import type {
   AnchorRecord,
   AnchorRecordRepository,
   AuditLogRepository,
@@ -80,5 +85,54 @@ export class InMemoryAnchorRecordRepository implements AnchorRecordRepository {
 
   findAll(limit: number): Promise<readonly AnchorRecord[]> {
     return Promise.resolve([...this.records].reverse().slice(0, limit));
+  }
+}
+
+/**
+ * In-memory `AuditEventReader` for testing without a database.
+ *
+ * Entries are filed under an organization explicitly with {@link seed}, since
+ * `AuditLogEntry` does not carry one yet (Issue 181). Every read is recorded in
+ * {@link reads}, so a test can prove a refused request never reached storage
+ * at all — "returned an error" and "returned an error without looking" are
+ * different guarantees, and only the second one is the point.
+ */
+export class InMemoryAuditEventReader implements AuditEventReader {
+  private readonly entries: { organizationId: string; entry: AuditLogEntry }[] = [];
+  readonly reads: AuditEventCriteria[] = [];
+
+  seed(organizationId: string, ...entries: AuditLogEntry[]): void {
+    for (const entry of entries) this.entries.push({ organizationId, entry });
+  }
+
+  query(criteria: AuditEventCriteria, page: AuditEventPage): Promise<readonly AuditLogEntry[]> {
+    this.reads.push(criteria);
+    return Promise.resolve(
+      this.matching(criteria)
+        .filter((entry) => entry.sequence > (page.afterSequence ?? 0))
+        .slice(0, page.limit),
+    );
+  }
+
+  async *stream(criteria: AuditEventCriteria): AsyncIterable<AuditLogEntry> {
+    this.reads.push(criteria);
+    for (const entry of this.matching(criteria)) {
+      await Promise.resolve();
+      yield entry;
+    }
+  }
+
+  private matching(criteria: AuditEventCriteria): AuditLogEntry[] {
+    return this.entries
+      .filter(({ organizationId }) => organizationId === criteria.organizationId)
+      .map(({ entry }) => entry)
+      .filter(
+        (entry) =>
+          (criteria.actorId === undefined || entry.actorId === criteria.actorId) &&
+          (criteria.subjectId === undefined || entry.subjectId === criteria.subjectId) &&
+          (criteria.from === undefined || entry.occurredAt >= criteria.from) &&
+          (criteria.to === undefined || entry.occurredAt <= criteria.to),
+      )
+      .sort((a, b) => a.sequence - b.sequence);
   }
 }
