@@ -54,8 +54,10 @@ export {
   type AnchorAuditLogResult,
 } from "./application/use-cases/anchor-audit-log.js";
 export {
+  type AuditRecorder,
   RecordAuditEvent,
   type RecordAuditEventCommand,
+  recordAuditEventBatch,
 } from "./application/use-cases/record-audit-event.js";
 export {
   QueryAuditEvents,
@@ -77,7 +79,17 @@ export {
 
 // Infrastructure
 export {
+  AuditQueueFullError,
+  type AuditBatchFailureReport,
+  type AuditOverflowReport,
+  type AuditWriterStats,
+  BatchedAuditWriter,
+  type BatchedAuditWriterOptions,
+} from "./infrastructure/persistence/batched-audit-writer.js";
+export {
+  type AuditDelegate,
   AuditLogEntryMapper,
+  type AuditTransaction,
   PrismaAnchorRecordRepository,
   PrismaAuditLogRepository,
 } from "./infrastructure/persistence/prisma-audit-repositories.js";

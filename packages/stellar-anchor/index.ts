@@ -7,6 +7,19 @@
 export { AnchorError, isValidSha256Hex } from "./application/ports/hash-anchor.js";
 export type { AnchorReceipt, HashAnchor } from "./application/ports/hash-anchor.js";
 
+// Signing. `TransactionSigner` is the boundary that keeps the anchoring
+// account's key out of this process; the adapters below are the two ways across
+// it. See docs/security/stellar-key-management.md.
+export { SigningError } from "./application/ports/transaction-signer.js";
+export type { TransactionSigner } from "./application/ports/transaction-signer.js";
+export {
+  KmsTransactionSigner,
+  type KmsSignClient,
+  type KmsSignRequest,
+  type KmsTransactionSignerOptions,
+} from "./infrastructure/signing/kms-transaction-signer.js";
+export { LocalTransactionSigner } from "./infrastructure/signing/local-transaction-signer.js";
+
 // The Stellar adapter.
 export { StellarHashAnchor } from "./infrastructure/stellar/stellar-hash-anchor.js";
 export type {
@@ -14,10 +27,14 @@ export type {
   StellarNetwork,
 } from "./infrastructure/stellar/stellar-hash-anchor.js";
 
-// Test double, exported deliberately: consumers testing their own anchoring
-// logic need it, and it doubles as the "anchoring disabled" implementation
-// for deployments that want no ledger dependency at all.
+// Test doubles, exported deliberately: consumers testing their own anchoring
+// logic need them, and the in-memory anchor doubles as the "anchoring disabled"
+// implementation for deployments that want no ledger dependency at all.
 export { InMemoryHashAnchor } from "./infrastructure/testing/in-memory-hash-anchor.js";
+export {
+  fakeKmsClient,
+  type FakeKmsClient,
+} from "./infrastructure/testing/fake-kms-sign-client.js";
 
 // `hashAnchorContract` is deliberately NOT exported here.
 //

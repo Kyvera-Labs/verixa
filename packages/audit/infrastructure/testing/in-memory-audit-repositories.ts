@@ -1,18 +1,23 @@
+import { Result } from "@verixa/shared-kernel";
+
 import type {
   AnchorRecord,
   AnchorRecordRepository,
   AuditLogRepository,
   FindWithFiltersParams,
 } from "../../application/ports/audit-log-repository.js";
-import type { AuditLogEntry } from "../../domain/entities/audit-log-entry.js";
+import { ChainConflictError } from "../../application/ports/audit-log-repository.js";
+import { type AuditLogEntry, GENESIS_HASH } from "../../domain/entities/audit-log-entry.js";
 
 /**
  * In-memory `AuditLogRepository` for testing without a database.
  *
- * Enforces the sequence uniqueness the real table enforces with an index.
- * That matters more than usual here: the whole append protocol depends on a
- * duplicate sequence being rejected, and a fake that accepted one would let
- * tests pass against a forked chain that production would have refused.
+ * Enforces the append protocol the real table enforces with an index. That
+ * matters more than usual here: the whole append protocol depends on a
+ * compare-and-set losing, and a fake that accepted a stale `previousHash`
+ * would let tests pass against a forked chain that production would have
+ * refused. The `PrismaAuditLogRepository` and this class are held to the same
+ * behaviour by `auditLogRepositoryContract`.
  */
 export class InMemoryAuditLogRepository implements AuditLogRepository {
   private readonly entries: AuditLogEntry[] = [];
@@ -21,14 +26,59 @@ export class InMemoryAuditLogRepository implements AuditLogRepository {
     return Promise.resolve(this.entries.at(-1));
   }
 
-  append(entry: AuditLogEntry): Promise<void> {
-    if (this.entries.some((existing) => existing.sequence === entry.sequence)) {
-      return Promise.reject(
-        new Error(`An audit entry with sequence ${String(entry.sequence)} already exists.`),
-      );
+  append(
+    entry: AuditLogEntry,
+    expectedPreviousHash: string,
+  ): Promise<Result<void, ChainConflictError>> {
+    return this.appendMany([entry], expectedPreviousHash);
+  }
+
+  /**
+   * Appends atomically: either the whole batch lands or none of it does, and
+   * the head is checked exactly once.
+   *
+   * The synchronous body is deliberate — there is no `await` between the check
+   * and the push, so no interleaving can slip between them. JavaScript's
+   * run-to-completion semantics give this fake the serialisation the real
+   * adapter gets from a unique index, which is the closest honest equivalent:
+   * it reproduces the *guarantee*, not the mechanism.
+   */
+  appendMany(
+    entries: readonly AuditLogEntry[],
+    expectedPreviousHash: string,
+  ): Promise<Result<void, ChainConflictError>> {
+    if (entries.length === 0) {
+      return Promise.resolve(Result.ok(undefined));
     }
-    this.entries.push(entry);
-    return Promise.resolve();
+
+    const headHash = this.entries.at(-1)?.hash ?? GENESIS_HASH;
+    if (headHash !== expectedPreviousHash) {
+      return Promise.resolve(Result.err(new ChainConflictError(expectedPreviousHash, headHash)));
+    }
+
+    // A duplicate sequence is the same failure the unique index raises in
+    // Postgres, and it must surface as the same conflict here rather than as a
+    // thrown error, so tests against the fake exercise the real retry path.
+    for (const entry of entries) {
+      if (this.entries.some((existing) => existing.sequence === entry.sequence)) {
+        return Promise.resolve(
+          Result.err(
+            new ChainConflictError(entry.previousHash, this.entries.at(-1)?.hash ?? GENESIS_HASH),
+          ),
+        );
+      }
+    }
+
+    let expected = expectedPreviousHash;
+    for (const entry of entries) {
+      if (entry.previousHash !== expected) {
+        return Promise.resolve(Result.err(new ChainConflictError(expected, entry.previousHash)));
+      }
+      expected = entry.hash;
+    }
+
+    this.entries.push(...entries);
+    return Promise.resolve(Result.ok(undefined));
   }
 
   findFrom(fromSequence: number, limit: number): Promise<readonly AuditLogEntry[]> {
