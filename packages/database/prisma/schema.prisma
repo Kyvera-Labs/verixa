@@ -112,7 +112,7 @@ model User {
   passwordResetTokens     PasswordResetToken[]
   mfaMethods              MfaMethod[]
   roleAssignments         UserRoleAssignment[]
-  verificationRequests    VerificationRequest[]      @relation("VerificationRequestSubject")
+  verificationRequests    VerificationRequest[]    @relation("VerificationRequestSubject")
   sessions                Session[]
 
   @@index([deletedAt])
@@ -169,7 +169,7 @@ model Organization {
 
   memberships          OrganizationMembership[]
   invitations          Invitation[]
-  verificationRequests VerificationRequest[]  @relation("VerificationRequestOrganization")
+  verificationRequests VerificationRequest[]    @relation("VerificationRequestOrganization")
 
   @@map("organizations")
 }
@@ -451,10 +451,8 @@ model Session {
   ///   WHERE userId = ? AND status = 'active' AND expiresAt > now()
   /// use this index without a secondary sort.
   @@index([userId, expiresAt])
-
   /// Supports background expiry sweep (Issue 024 Phase equivalent).
   @@index([expiresAt])
-
   @@map("sessions")
 }
 
@@ -494,9 +492,21 @@ model AuditLogEntry {
   /// SHA-256 over this entry's canonical form, including previousHash.
   hash String @unique
 
-  @@index([occurredAt])
-  @@index([actorId])
-  @@index([subjectId])
+  /// Composite indexes for the filtered query paths in
+  /// `PrismaAuditLogRepository.findWithFilters` (Issue 187), all of which
+  /// filter on one equality column and then walk the log in `sequence` order
+  /// for keyset pagination (Issue 188).
+  ///
+  /// `(actor_id, sequence)` rather than the roadmap's literal
+  /// `(actorId, timestamp)`: the query orders by `sequence`, not by time, so
+  /// the cursor column is the one the index has to lead with to avoid a sort.
+  /// The single-column indexes these replace are redundant — a composite is
+  /// usable by any prefix of its columns — so keeping both would only add
+  /// write cost.
+  @@index([actorId, sequence])
+  @@index([subjectId, sequence])
+  @@index([action, sequence])
+  @@index([occurredAt, sequence])
   @@map("audit_log_entries")
 }
 
@@ -778,7 +788,7 @@ model VerificationRequest {
   /// The mandatory rationale recorded with a decision. Kept alongside the
   /// decision so an auditor reading the row does not need a join, and so the
   /// record answers "why" without a follow-up query.
-  decisionNote        String?              @map("decision_note")
+  decisionNote        String?               @map("decision_note")
 
   /// What the reviewer asked for when the request is `needs_more_info`.
   /// Visible to the subject; NULL in every other state.
