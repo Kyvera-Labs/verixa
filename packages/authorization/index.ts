@@ -1,78 +1,45 @@
-export { AttributeContext } from "./domain/value-objects/attribute-context.js";
+// Curated public surface of @verixa/authorization. Nothing outside this package
+// should import from a deep path (`@verixa/authorization/domain/...`,
+// `@verixa/authorization/application/...`) — see docs/guides/domain-modeling.md
+// ("Package encapsulation") for why, and eslint.config.mjs's
+// `no-restricted-imports` rule, which enforces it.
+
+// Domain: the decision vocabulary and the precedence contract
+export {
+  AUTHORIZATION_PRECEDENCE,
+  AUTHORIZATION_REASONS,
+  UnsafeAuthorizationPrecedenceError,
+  assertAuthorizationPrecedenceIsSafe,
+  resolveAuthorizationPrecedence,
+} from "./domain/authorization-decision.js";
+export type {
+  AuthorizationDecision,
+  AuthorizationDecisionSource,
+  AuthorizationEffect,
+  AuthorizationPrecedence,
+  PolicyEffect,
+} from "./domain/authorization-decision.js";
+export { emptyAttributeContext } from "./domain/attribute-context.js";
 export type {
   AttributeBag,
-  AttributeBagName,
-  AttributeBags,
-  AttributeRecord,
-  AttributeValue,
-  AttributeValueType,
-} from "./domain/value-objects/attribute-context.js";
-export { between, evaluateOperator } from "./domain/dsl/operators.js";
-export type { ComparisonOperator, OperatorResult } from "./domain/dsl/operators.js";
-export type {
-  AttributeProvider,
-  AttributeResolutionRequest,
-} from "./application/ports/attribute-provider.js";
-export {
-  AttributeProviderResolutionError,
-  AttributeResolutionPipeline,
-} from "./application/services/attribute-resolution-pipeline.js";
-export type {
-  AttributeProviderFailure,
-  AttributeResolutionResult,
-} from "./application/services/attribute-resolution-pipeline.js";
-export { Policy, type PolicyId, type PolicyTarget } from "./domain/entities/policy.js";
-export {
-  Condition,
-  type AlwaysCondition,
-  type AndCondition,
-  type ComparisonCondition,
-  type ComparisonLiteral,
-  type ComparisonOperator,
-  type NotCondition,
-  type OrCondition,
-} from "./domain/value-objects/condition.js";
-export type { Effect } from "./domain/value-objects/effect.js";
-export { Rule } from "./domain/value-objects/rule.js";
-export type { PolicyRepository } from "./application/ports/policy-repository.js";
-export { InMemoryPolicyRepository } from "./infrastructure/fakes/in-memory-policy-repository.js";
-export type {
-  ResourceAttributeResolver,
-  ResourceAttributes,
-  ResourceAttributeValue,
-} from "./application/ports/resource-attribute-resolver.js";
-export {
-  ResourceAttributeResolverRegistry,
-  UnknownResourceTypeError,
-} from "./application/services/resource-attribute-resolver-registry.js";
-export {
   AttributeContext,
-  type AttributeBag,
-  type AttributeCategory,
-  type AttributeValue,
-} from "./domain/value-objects/attribute-context.js";
-export { evaluateCondition, evaluateRule } from "./domain/services/policy-evaluation-engine.js";
-export {
-  deriveRuleOutcomes,
-  denyOverrides,
-  permitOverrides,
-  firstApplicable,
-  type CombiningAlgorithm,
-  type RuleOutcome,
-} from "./domain/services/combining-algorithms.js";
-export {
-  NoRbacGrants,
-  type RbacAuthorizationPort,
-  type RbacDecision,
-} from "./application/ports/rbac-authorization.js";
-export {
-  AuthorizationService,
-  type AuthorizeParams,
-  type AuthorizationEffect,
-  type AuthorizationResult,
-} from "./application/services/authorization-service.js";
-export type { AuthorizationDecision } from "./application/dto/authorization-decision.js";
-export {
-  AuthorizeAction,
-  type AuthorizeActionCommand,
-} from "./application/use-cases/authorize-action.js";
+  AuthorizationRequest,
+  ResourceRef,
+  SubjectRef,
+} from "./domain/attribute-context.js";
+
+// Application: ports (implemented by infrastructure adapters — see
+// docs/guides/domain-modeling.md)
+export type {
+  PolicyDecisionPoint,
+  PolicyEvaluation,
+} from "./application/ports/policy-decision-point.js";
+export type {
+  RoleCheckRequest,
+  RoleDecision,
+  RoleDecisionKind,
+  RolePermissionGate,
+} from "./application/ports/role-permission-gate.js";
+
+// Application: services
+export { AuthorizationService } from "./application/services/authorization-service.js";
