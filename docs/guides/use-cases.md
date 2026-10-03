@@ -134,7 +134,7 @@ a `pending` user even though the domain layer alone would have allowed it.
 
 ## Automated Checks & Human-in-the-Loop: `RunAutomatedCheck`
 
-`RunAutomatedCheck` (`packages/verification/application/use-cases/run-automated-check.ts`, Issue 172) illustrates how third-party provider integrations are orchestrated without letting external systems bypass domain governance. The verification provider returns an automated signal (`pass`, `fail`, or `inconclusive`), but the status always lands in `in_review` rather than auto-approving or auto-rejecting. 
+`RunAutomatedCheck` (`packages/verification/application/use-cases/run-automated-check.ts`, Issue 172) illustrates how third-party provider integrations are orchestrated without letting external systems bypass domain governance. The verification provider returns an automated signal (`pass`, `fail`, or `inconclusive`), but the status always lands in `in_review` rather than auto-approving or auto-rejecting.
 
 We deliberately rejected auto-deciding on provider signals alone in v1: false positives or negatives in automated KYC carry severe real-world consequences, so keeping the human reviewer as the authoritative decision-maker protects users while automated results inform their review.
 
@@ -224,6 +224,51 @@ implemented anywhere yet, which is a different thing from being designed
 wrong. See `docs/guides/domain-modeling.md` for the general principle this
 follows.
 
+## Streaming a large result: `ExportAuditEvents`
+
+`ExportAuditEvents` (`packages/audit/application/use-cases/export-audit-events.ts`,
+Issue 189) is the same command-handler shape as everything above, with one
+deliberate difference: it returns `Result<AsyncIterable<string>, ValidationError>`
+rather than `Result<T, E>` over a materialised value. It reuses
+`QueryAuditEvents`' filters (`AuditLogFilters`) instead of defining its own, so
+a compliance export can never drift from the in-app query it is meant to
+mirror.
+
+### Why a stream, not a string
+
+The natural implementation — query every matching entry, build one string,
+return it — is a memory bug waiting for a large enough log. A compliance
+export is precisely the operation that runs against a log accumulated over
+years, and buffering makes peak memory grow with the history being exported;
+on a small container that is an out-of-memory kill in the middle of an
+audited export. So the use case fetches the log one bounded page at a time
+(`batchSize`, default 500) and yields each row as it goes. Peak memory is
+flat no matter how much matches, and the caller pipes chunks straight to the
+HTTP response, a file, or object storage. The cost is that the caller _must_
+consume the iterable — there is deliberately no "give me the whole thing"
+method, because that is the behaviour the design exists to prevent.
+
+### Why newline-delimited JSON
+
+The issue left JSON's shape as "newline-delimited or array JSON per a
+documented choice". This chose NDJSON, because it is the shape that composes
+with streaming. An array would force the writer to hold the opening bracket,
+insert a comma before every element after the first, and close the bracket —
+state that exists only to satisfy the format, not to carry information — and
+it cannot be produced incrementally on its own. NDJSON also matches what
+downstream tooling (`jq`, `grep`, log pipelines) actually consumes. The one
+thing an array buys is being a single valid JSON document; a consumer that
+needs that can wrap the stream at the edge.
+
+### CSV injection
+
+Metadata is the attacker-controlled field, so it gets two layers of defence:
+serialised to JSON first (a value containing a comma, quote or newline can no
+longer break out of its cell), then the whole resulting string is quoted and
+its quotes doubled per RFC 4180. "Just join the fields with commas" is exactly
+the injection the audit-metadata issue calls out, and the round-trip test in
+`export-audit-events.spec.ts` pins the escaping against metadata laden with
+delimiters, quotes and line breaks.
 ## Use cases that delegate their rules: the review flow
 
 `ClaimNextReviewCase`, `ApproveVerification`, `RejectVerification` and

@@ -61,6 +61,13 @@ export {
   type QueryAuditEventsResult,
 } from "./application/use-cases/query-audit-events.js";
 export {
+  ExportAuditEvents,
+  escapeCsvField,
+  type ExportAuditEventsCommand,
+  type ExportAuditEventsError,
+  type ExportAuditEventsFormat,
+} from "./application/use-cases/export-audit-events.js";
+export {
   DEFAULT_MAX_ANCHOR_CHECKS,
   DEFAULT_VERIFY_BATCH_SIZE,
   MAX_VERIFY_BATCH_SIZE,

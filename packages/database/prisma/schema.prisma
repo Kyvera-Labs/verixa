@@ -112,7 +112,7 @@ model User {
   passwordResetTokens     PasswordResetToken[]
   mfaMethods              MfaMethod[]
   roleAssignments         UserRoleAssignment[]
-  verificationRequests    VerificationRequest[]      @relation("VerificationRequestSubject")
+  verificationRequests    VerificationRequest[]    @relation("VerificationRequestSubject")
   sessions                Session[]
 
   @@index([deletedAt])
@@ -169,7 +169,7 @@ model Organization {
 
   memberships          OrganizationMembership[]
   invitations          Invitation[]
-  verificationRequests VerificationRequest[]  @relation("VerificationRequestOrganization")
+  verificationRequests VerificationRequest[]    @relation("VerificationRequestOrganization")
 
   @@map("organizations")
 }
@@ -451,10 +451,8 @@ model Session {
   ///   WHERE userId = ? AND status = 'active' AND expiresAt > now()
   /// use this index without a secondary sort.
   @@index([userId, expiresAt])
-
   /// Supports background expiry sweep (Issue 024 Phase equivalent).
   @@index([expiresAt])
-
   @@map("sessions")
 }
 
@@ -778,7 +776,7 @@ model VerificationRequest {
   /// The mandatory rationale recorded with a decision. Kept alongside the
   /// decision so an auditor reading the row does not need a join, and so the
   /// record answers "why" without a follow-up query.
-  decisionNote        String?              @map("decision_note")
+  decisionNote        String?               @map("decision_note")
 
   /// What the reviewer asked for when the request is `needs_more_info`.
   /// Visible to the subject; NULL in every other state.
