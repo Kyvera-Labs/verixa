@@ -99,3 +99,7 @@ export {
   InMemoryAnchorRecordRepository,
   InMemoryAuditLogRepository,
 } from "./infrastructure/testing/in-memory-audit-repositories.js";
+export {
+  IdentityCredentialsAuditSubscriber,
+  type AuditSubscriberErrorHandler,
+} from "./infrastructure/event-handlers/identity-credentials-audit-subscriber.js";
