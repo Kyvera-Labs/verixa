@@ -3,6 +3,7 @@ export type {
   AttributeBag,
   AttributeBagName,
   AttributeBags,
+  AttributeCategory,
   AttributeRecord,
   AttributeValue,
   AttributeValueType,
@@ -28,7 +29,6 @@ export {
   type AndCondition,
   type ComparisonCondition,
   type ComparisonLiteral,
-  type ComparisonOperator,
   type NotCondition,
   type OrCondition,
 } from "./domain/value-objects/condition.js";
@@ -45,12 +45,6 @@ export {
   ResourceAttributeResolverRegistry,
   UnknownResourceTypeError,
 } from "./application/services/resource-attribute-resolver-registry.js";
-export {
-  AttributeContext,
-  type AttributeBag,
-  type AttributeCategory,
-  type AttributeValue,
-} from "./domain/value-objects/attribute-context.js";
 export { evaluateCondition, evaluateRule } from "./domain/services/policy-evaluation-engine.js";
 export {
   deriveRuleOutcomes,
@@ -76,3 +70,15 @@ export {
   AuthorizeAction,
   type AuthorizeActionCommand,
 } from "./application/use-cases/authorize-action.js";
+
+// RBAC: default role/permission catalog, persistence and admin routes.
+export { Permission, Role, AuthorizationError } from "./domain/authorization.js";
+export type { PermissionKey, RoleRecord, RoleAssignment } from "./domain/authorization.js";
+export type { AuthorizationRepository } from "./application/authorization-repository.js";
+export { PrismaAuthorizationRepository } from "./infrastructure/prisma-authorization-repository.js";
+export {
+  DEFAULT_PERMISSIONS,
+  DEFAULT_ROLES,
+  seedDefaultRoles,
+} from "./infrastructure/seed/seed-default-roles.js";
+export { registerAdminAuthorizationRoutes } from "./interface/admin-roles.routes.js";
