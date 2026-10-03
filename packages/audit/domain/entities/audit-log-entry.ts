@@ -2,7 +2,25 @@ import { createHash } from "node:crypto";
 
 import { createId, type Id } from "@verixa/shared-kernel";
 
+import {
+  AuditMetadata,
+  escapeForText,
+  escapeJsonLineTerminators,
+  utf8ByteLength,
+} from "../value-objects/audit-metadata.js";
+
 export type AuditLogEntryId = Id<"AuditLogEntryId">;
+
+/**
+ * The label prefixed to every canonical form.
+ *
+ * Changing how an entry is serialized changes its digest, and a chain written
+ * under one rule and verified under another reports `content_altered` on every
+ * entry after the change — an integrity alarm with no tampering behind it.
+ * Naming the form in the form means that if this ever has to change again, the
+ * version that produced a given hash travels with the hash.
+ */
+const CANONICAL_FORM_VERSION = "verixa-audit-v2";
 
 /**
  * What happened. A closed set rather than a free string, so a query for
@@ -103,31 +121,41 @@ export class AuditLogEntry {
   /**
    * The canonical byte representation an entry's hash is computed over.
    *
-   * Field order is fixed and metadata keys are sorted, because the hash has
-   * to be reproducible by someone re-deriving it years later from the stored
-   * columns — possibly in another language. `JSON.stringify` over an object
-   * would make the digest depend on JavaScript's property-insertion order,
-   * which is an implementation detail of how the entry happened to be built.
+   * Field order is fixed, metadata keys are sorted, and **every field carries
+   * its own byte length**. That last part is the one to read carefully.
    *
-   * Newline-separated with an explicit field count rather than concatenated,
-   * so no combination of field values can produce the same string as a
-   * different combination.
+   * This used to join the fields with newlines, on the reasoning that an
+   * explicit separator makes concatenation unambiguous. It does not, when the
+   * separator can appear *inside* a field: `actorId` and `subjectId` are
+   * routinely supplied from outside the process, and an entry with actor
+   * `"a\nb"` and subject `"c"` serialized identically to a different entry with
+   * actor `"a"` and subject `"b\nc"`. Two different facts, one digest — which
+   * inverts the property the chain exists to provide. The same bug class
+   * reappears wherever a value is embedded in a syntax by concatenation, so it
+   * is treated as a threat in its own right in
+   * `docs/security/threat-model-audit.md`.
+   *
+   * A length prefix declares how many bytes belong to the field, so nothing
+   * inside it can be read as framing. The form is versioned and mechanical
+   * rather than pretty, because the digest has to be re-derivable years later
+   * from the stored columns by somebody not running this code — hence UTF-8
+   * *byte* lengths rather than JavaScript character counts, which disagree
+   * about anything outside ASCII.
    */
   private static canonicalize(props: Omit<AuditLogEntryProps, "hash" | "id">): string {
-    const metadata = Object.keys(props.metadata)
-      .sort()
-      .map((key) => `${key}=${props.metadata[key] ?? ""}`)
-      .join("");
-
-    return [
+    const fields = [
       String(props.sequence),
       props.action,
       props.actorId ?? "",
       props.subjectId ?? "",
       props.occurredAt.toISOString(),
       props.previousHash,
-      metadata,
-    ].join("\n");
+      AuditMetadata.of(props.metadata).canonicalForm,
+    ];
+
+    const framed = fields.map((field) => `${String(utf8ByteLength(field))}:${field}`).join("|");
+
+    return `${CANONICAL_FORM_VERSION} ${String(fields.length)} ${framed}`;
   }
 
   /** SHA-256 over {@link canonicalize}, hex-encoded. */
@@ -194,6 +222,39 @@ export class AuditLogEntry {
         previousHash: this.previousHash,
       })
     );
+  }
+
+  /**
+   * A one-record-per-entry projection of this entry, safe to write into any
+   * line-oriented sink.
+   *
+   * No field can contain a character a reader would take for a line break, so
+   * the number of lines in the output equals the number of entries — the
+   * property an auditor counting rows is silently relying on, and the reason
+   * this projection, rather than the raw values, is what `ExportAuditEvents`
+   * builds its CSV rows from.
+   *
+   * Note what this does *not* do: it does not change what is stored or hashed.
+   * The escaping is a property of this rendering, not of the data, so the same
+   * entry can be logged, exported as CSV, and exported as JSON without any of
+   * the three agreeing on how to write a newline — and without any of them
+   * rewriting the record.
+   */
+  toLogFields(): Readonly<Record<string, string>> {
+    // `sequence`, `occurredAt`, and the two hashes are structurally safe — a
+    // number, an ISO timestamp, and hex. Everything that came from outside the
+    // process is escaped, and the metadata bag goes through the JSON-specific
+    // treatment instead of `escapeForText` (see `escapeJsonLineTerminators`).
+    return {
+      sequence: String(this.sequence),
+      action: escapeForText(this.action),
+      actorId: escapeForText(this.actorId ?? ""),
+      subjectId: escapeForText(this.subjectId ?? ""),
+      occurredAt: this.occurredAt.toISOString(),
+      previousHash: this.previousHash,
+      hash: this.hash,
+      metadata: escapeJsonLineTerminators(JSON.stringify(this.metadata) ?? "{}"),
+    };
   }
 }
 
