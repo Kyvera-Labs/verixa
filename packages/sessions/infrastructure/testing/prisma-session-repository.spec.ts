@@ -4,8 +4,7 @@ import { PrismaClient } from "@verixa/database";
 import { createId } from "@verixa/shared-kernel";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
-import { Session, type SessionUserId } from "../../domain/entities/session.js";
-import { SessionExpiryPolicy } from "../../domain/value-objects/session-expiry-policy.js";
+import type { SessionUserId } from "../../domain/entities/session.js";
 import { PrismaSessionRepository } from "../persistence/prisma-session-repository.js";
 
 import { sessionRepositoryContract } from "./contracts/session-repository.contract.js";
@@ -58,6 +57,17 @@ async function databaseAvailability(): Promise<boolean> {
 
 function createTestPrismaClient(): PrismaClient {
   return new PrismaClient({ datasources: { db: { url: testDatabaseUrl() } } });
+}
+
+interface SeedRow {
+  readonly id: string;
+  readonly userId: string;
+  readonly createdAt: Date;
+  readonly lastSeenAt: Date;
+  readonly expiresAt: Date;
+  readonly ipAddress: null;
+  readonly userAgent: null;
+  readonly revokedAt: null;
 }
 
 /**
@@ -113,6 +123,46 @@ describe.skipIf(!available)("PrismaSessionRepository (Issue 083)", () => {
     return id;
   }
 
+  /**
+   * Creates a user and its session rows in one transaction.
+   *
+   * `pnpm -r run test` runs every package concurrently against the same
+   * shared test database, and `packages/identity`'s own contract suite
+   * truncates the whole `users` table in its `afterEach` (its contracts
+   * assume they start from an empty store). Creating the user and its
+   * sessions as two separate statements left a window where that
+   * concurrent truncation could remove the user between them, failing the
+   * session inserts on `sessions_user_id_fkey`. Postgres takes a row lock
+   * on a referenced row for the lifetime of a transaction that inserts
+   * against it, which blocks a concurrent `DELETE` of that row until this
+   * transaction commits — closing the window instead of narrowing it.
+   */
+  async function setupUserWithSessions(
+    buildRows: (userId: SessionUserId) => readonly SeedRow[],
+  ): Promise<SessionUserId> {
+    const id = createId<"UserId">();
+    const now = new Date();
+    const rows = [...buildRows(id)];
+
+    await prisma.$transaction([
+      prisma.user.create({
+        data: {
+          id,
+          email: `sessions-${id}@example.com`,
+          displayName: "Sessions Test User",
+          status: "active",
+          createdAt: now,
+          updatedAt: now,
+        },
+      }),
+      prisma.session.createMany({ data: rows }),
+    ]);
+
+    createdUserIds.push(id);
+    createdSessionIds.push(...rows.map((row) => row.id));
+    return id;
+  }
+
   describe("contract tests", () => {
     sessionRepositoryContract(() => new PrismaSessionRepository(prisma), setupUser);
   });
@@ -124,25 +174,37 @@ describe.skipIf(!available)("PrismaSessionRepository (Issue 083)", () => {
       // bystander rows -- owned by other users -- for the target user's
       // single session to be a genuinely selective match.
       const repository = new PrismaSessionRepository(prisma);
-      const userId = await setupUser();
-      const session = Session.open({ userId, policy: SessionExpiryPolicy.default() });
-      createdSessionIds.push(session.id);
-      await repository.save(session);
-
-      const bystanderUserId = await setupUser();
       const now = new Date();
-      const bystanderRows = Array.from({ length: 2000 }, (_unused, offset) => ({
-        id: createId<"SessionId">(),
-        userId: bystanderUserId,
-        createdAt: now,
-        lastSeenAt: now,
-        expiresAt: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000 + offset * 1000),
-        ipAddress: null,
-        userAgent: null,
-        revokedAt: null,
-      }));
-      createdSessionIds.push(...bystanderRows.map((row) => row.id));
-      await prisma.session.createMany({ data: bystanderRows });
+
+      const userId = await setupUserWithSessions((id) => [
+        {
+          id: createId<"SessionId">(),
+          userId: id,
+          createdAt: now,
+          lastSeenAt: now,
+          expiresAt: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
+          ipAddress: null,
+          userAgent: null,
+          revokedAt: null,
+        },
+      ]);
+      const [session] = await repository.findActiveByUserId(userId);
+      if (session === undefined) {
+        throw new Error("fixture setup failed: expected session row not found");
+      }
+
+      await setupUserWithSessions((bystanderUserId) =>
+        Array.from({ length: 2000 }, (_unused, offset) => ({
+          id: createId<"SessionId">(),
+          userId: bystanderUserId,
+          createdAt: now,
+          lastSeenAt: now,
+          expiresAt: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000 + offset * 1000),
+          ipAddress: null,
+          userAgent: null,
+          revokedAt: null,
+        })),
+      );
       await prisma.$executeRawUnsafe("ANALYZE sessions;");
 
       const explainResult = await prisma.$queryRawUnsafe<{ "QUERY PLAN": string }[]>(
@@ -169,28 +231,27 @@ describe.skipIf(!available)("PrismaSessionRepository (Issue 083)", () => {
       // keeping the expired row a small minority, is what makes this a test
       // of the index rather than of table size. Same reasoning as
       // docs/performance/audit-query-benchmarks.md.
-      const userId = await setupUser();
-      const now = new Date();
       const rowCount = 2000;
 
-      const rows = Array.from({ length: rowCount }, (_unused, offset) => ({
-        id: createId<"SessionId">(),
-        userId,
-        createdAt: new Date(now.getTime() - 2 * 60 * 60 * 1000),
-        lastSeenAt: new Date(now.getTime() - 60 * 60 * 1000),
-        // Only the first row is already expired; the rest expire far in the
-        // future, so "expires_at < now()" matches a small, selective slice.
-        expiresAt:
-          offset === 0
-            ? new Date(now.getTime() - 30 * 60 * 1000)
-            : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000 + offset * 1000),
-        ipAddress: null,
-        userAgent: null,
-        revokedAt: null,
-      }));
-
-      createdSessionIds.push(...rows.map((row) => row.id));
-      await prisma.session.createMany({ data: rows });
+      await setupUserWithSessions((userId) => {
+        const now = new Date();
+        return Array.from({ length: rowCount }, (_unused, offset) => ({
+          id: createId<"SessionId">(),
+          userId,
+          createdAt: new Date(now.getTime() - 2 * 60 * 60 * 1000),
+          lastSeenAt: new Date(now.getTime() - 60 * 60 * 1000),
+          // Only the first row is already expired; the rest expire far in
+          // the future, so "expires_at < now()" matches a small, selective
+          // slice.
+          expiresAt:
+            offset === 0
+              ? new Date(now.getTime() - 30 * 60 * 1000)
+              : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000 + offset * 1000),
+          ipAddress: null,
+          userAgent: null,
+          revokedAt: null,
+        }));
+      });
       await prisma.$executeRawUnsafe("ANALYZE sessions;");
 
       const explainResult = await prisma.$queryRawUnsafe<{ "QUERY PLAN": string }[]>(
