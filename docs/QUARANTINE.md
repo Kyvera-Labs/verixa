@@ -1,9 +1,8 @@
 # Quarantined packages
 
-`packages/verification` does not build.
-Its `build`, `typecheck`, `test` and `lint` scripts are deliberately no-ops,
-and eslint skips it, so the rest of the repository — and the open pull
-request queue — can be verified and merged.
+All previously quarantined packages have now been lifted — see the
+"Lifted" sections below. This document is kept as the record of what
+happened and why, for the next time a merge compounds unverified changes.
 
 **No contributor's work has been deleted.** Every file is still in the
 repository, exactly as merged.
@@ -161,9 +160,47 @@ suite passes (database- and Redis-backed specs correctly skip without
 Docker, and CI's `REQUIRE_DATABASE_TESTS=1`/`REQUIRE_REDIS_TESTS=1` turn
 that skip into a failure if either is unexpectedly unreachable there).
 
+## Lifted: `packages/verification` (2026-10-11)
+
+Smaller than `sessions`: only one file had drifted from the rest of the
+package, not every layer. `RunAutomatedCheck` and its spec were written
+against an entity and a port that no longer existed in this form —
+`VerificationRequest.register`/public `transitionTo`/`providerResult` and
+a single-method `VerificationProvider.check(request)` returning
+`{ outcome: "pass" | "fail" | "inconclusive", score, details }`. Every
+other file in the package (the aggregate, `checkDocument`/`checkLiveness`,
+`ProviderCheckResult.{passed,failed,inconclusive}`, the reviewer-queue and
+decision use cases) already agreed with each other and built cleanly —
+`RunAutomatedCheck` just hadn't been updated to match.
+
+**Rewritten against the real shapes**, not restored: the real
+`VerificationRequest` has no field for a provider's opinion, and this
+package has no `EvidenceRepository` yet (evidence persistence is Issues
+166/168), so the use case now takes the evidence to check as part of its
+command (the upload flow that triggers a check already has it in hand)
+rather than fetching it, and returns the per-evidence `ProviderCheckResult`s
+to the caller instead of trying to store them on an aggregate that has
+nowhere to put them. It still does what the port's own doc always said
+`RunAutomatedCheck` does: run the provider, then move the request to
+`in_review` regardless of outcome — a provider holds an opinion, never the
+authority to decide.
+
+Also removed two leftover exports nothing used — `InMemoryTokenSigner`
+and `TokenVerificationError` in `packages/sessions`, found while chasing
+that package's coverage gate below 90% after a prior fix (see commit
+history on #297) — unrelated to `verification` but caught by the same
+"does every exported thing have a real caller" pass.
+
+The package now builds, typechecks, lints with zero errors, and its full
+suite passes at 96% statement coverage against the same 90/90/85/85 gate
+`mfa`, `sessions`, `identity`, `credentials` and `audit` are held to
+(database-backed specs correctly skip without Docker, and CI's
+`REQUIRE_DATABASE_TESTS=1` turns that skip into a failure if the database
+is unexpectedly unreachable there).
+
 ## What is still verified
 
-Everything except `packages/verification`: `shared-kernel`, `config`,
-`database`, `identity`, `credentials`, `audit`, `authorization`, `mfa`,
-`sessions`, `stellar-anchor`, `apps/api` and the integration suite all
-build, typecheck, lint and test.
+Everything: `shared-kernel`, `config`, `database`, `identity`,
+`credentials`, `audit`, `authorization`, `mfa`, `sessions`, `verification`,
+`stellar-anchor`, `apps/api` and the integration suite all build,
+typecheck, lint and test.

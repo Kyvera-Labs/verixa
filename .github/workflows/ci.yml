@@ -191,6 +191,13 @@ jobs:
       - name: Audit coverage gate
         run: pnpm --filter @verixa/audit run test:coverage
 
+      # packages/verification was lifted out of quarantine (docs/QUARANTINE.md)
+      # alongside packages/sessions; held to the same enforced floor rather
+      # than trusted to `pnpm test` alone, for the same reason the contexts
+      # above are.
+      - name: Verification coverage gate
+        run: pnpm --filter @verixa/verification run test:coverage
+
   # Verifies the *other* database strategy. The `ci` job above points
   # TEST_DATABASE_URL at a service container, so it never exercises the
   # Testcontainers path in database-harness.ts (Issue 047). This job
