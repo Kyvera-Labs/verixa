@@ -62,7 +62,6 @@ export { SessionsPackageRevoker } from "./infrastructure/session-revoker-adapter
 // Testing fakes
 export { InMemorySessionRepository } from "./infrastructure/testing/in-memory-session-repository.js";
 export { InMemoryRevocationList } from "./infrastructure/testing/in-memory-revocation-list.js";
-export { InMemoryTokenSigner } from "./infrastructure/testing/in-memory-token-signer.js";
 export {
   InMemorySessionAuditLogger,
   type RecordedSessionAuditEntry,
