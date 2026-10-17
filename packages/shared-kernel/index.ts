@@ -32,3 +32,4 @@ export {
   type RateLimitResult,
   type RateLimiter,
 } from "./application/ports/rate-limiter.js";
+export type { RouteRegistration } from "./interface/route-registration.js";

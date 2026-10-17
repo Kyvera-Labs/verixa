@@ -528,3 +528,27 @@ risk (an attacker who can reliably break audit writes can act unrecorded) is
 mitigated by visibility, not by failing requests: a gap in the sequence is
 detectable, and `pnpm audit:verify-chain` is how someone looks. See
 `docs/security/audit-log-integrity.md`.
+
+## Registering bounded-context routes
+
+`apps/api/src/composition/register-routes.ts` is the HTTP composition point.
+It maps each route plugin to a context prefix (`/auth`, `/admin`, and
+`/verification`) and closes over the already-built `Container`. A route module
+receives only the dependencies it needs; it must not construct a Prisma
+repository or discover its own global container.
+
+Each route group declares relative paths. Fastify applies the context prefix
+when the plugin is registered, so `/auth` plus `/register` still exposes
+`POST /auth/register`. Keeping the prefix at registration makes the public
+surface visible in one place and lets a context move its transport adapter
+without changing its application use cases. The generic
+`RouteRegistration<TPlugin>` contract in `@verixa/shared-kernel` captures only
+that mapping; the shared kernel does not depend on Fastify.
+
+The `POST /auth/register` integration coverage in
+`tests/integration/auth-register-route.spec.ts` exercises the full path from
+`buildContainer()` through the Fastify plugin, credential use case, Prisma
+adapter, and PostgreSQL. Keep at least one such integration route as the
+pattern for future contexts. A liveness endpoint remains outside these
+context plugins because it answers whether the process serves requests and
+must work when no database-backed container is available.

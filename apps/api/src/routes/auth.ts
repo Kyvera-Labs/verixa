@@ -94,7 +94,7 @@ export function registerAuthRoutes<TLogger extends FastifyBaseLogger>(
   container: Container,
 ): void {
   app.post<{ Body: RegisterBody }>(
-    "/auth/register",
+    "/register",
     { schema: { body: registerBodySchema } },
     async (request, reply) => {
       try {
@@ -141,7 +141,7 @@ export function registerAuthRoutes<TLogger extends FastifyBaseLogger>(
   );
 
   app.post<{ Body: LoginBody }>(
-    "/auth/login",
+    "/login",
     { schema: { body: loginBodySchema } },
     async (request, reply) => {
       try {

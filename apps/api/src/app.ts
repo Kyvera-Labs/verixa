@@ -7,8 +7,7 @@ import { createLogger, type Logger } from "@verixa/shared-kernel";
 import Fastify from "fastify";
 
 import type { Container } from "./composition-root.js";
-import { registerAuthRoutes } from "./routes/auth.js";
-import { registerVerificationRoutes } from "./routes/verification.js";
+import { registerContextRoutes } from "./composition/register-routes.js";
 
 export interface BuildAppOptions {
   readonly logger?: Logger;
@@ -89,11 +88,7 @@ export function buildApp(options: BuildAppOptions = {}) {
   });
 
   if (options.container !== undefined) {
-    registerAuthRoutes(app, options.container);
-    registerAdminAuthorizationRoutes(app, options.container.authorization);
-    // Takes only the Fastify instance: this route group resolves what it
-    // needs from the request rather than from the container.
-    registerVerificationRoutes(app);
+    registerContextRoutes(app, options.container);
   }
 
   return app;

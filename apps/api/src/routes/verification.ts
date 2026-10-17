@@ -175,23 +175,27 @@ export function registerVerificationRoutes<TLogger extends FastifyBaseLogger>(
     TLogger
   >,
 ): void {
-  fastify.post("/verification", submitVerificationSchema, async (req, reply) => {
-    const body = z
-      .object({
-        subjectUserId: z.string(),
-        orgId: z.string(),
-        verificationType: z.string(),
-      })
-      .parse(req.body);
+  fastify.post(
+    "/",
+    { ...submitVerificationSchema, prefixTrailingSlash: "no-slash" },
+    async (req, reply) => {
+      const body = z
+        .object({
+          subjectUserId: z.string(),
+          orgId: z.string(),
+          verificationType: z.string(),
+        })
+        .parse(req.body);
 
-    return reply.status(201).send({
-      requestId: "req_mock_123",
-      status: "pending_evidence",
-      ...body,
-    });
-  });
+      return reply.status(201).send({
+        requestId: "req_mock_123",
+        status: "pending_evidence",
+        ...body,
+      });
+    },
+  );
 
-  fastify.post("/verification/:requestId/evidence", submitEvidenceSchema, async (req, reply) => {
+  fastify.post("/:requestId/evidence", submitEvidenceSchema, async (req, reply) => {
     const params = z.object({ requestId: z.string() }).parse(req.params);
     // `@fastify/multipart` augments the request with `file()`, but the
     // plugin is not registered yet, so the method may genuinely be absent.
@@ -219,7 +223,7 @@ export function registerVerificationRoutes<TLogger extends FastifyBaseLogger>(
     });
   });
 
-  fastify.get("/verification/:requestId", getStatusSchema, async (req, reply) => {
+  fastify.get("/:requestId", getStatusSchema, async (req, reply) => {
     const params = z.object({ requestId: z.string() }).parse(req.params);
     return reply.send({
       requestId: params.requestId,
@@ -227,12 +231,12 @@ export function registerVerificationRoutes<TLogger extends FastifyBaseLogger>(
     });
   });
 
-  fastify.get("/verification/review-queue", reviewQueueSchema, async (req, reply) => {
+  fastify.get("/review-queue", reviewQueueSchema, async (req, reply) => {
     if (!checkReviewer(req, reply)) return;
     return reply.send([]);
   });
 
-  fastify.post("/verification/review-queue/claim", claimCaseSchema, async (req, reply) => {
+  fastify.post("/review-queue/claim", claimCaseSchema, async (req, reply) => {
     if (!checkReviewer(req, reply)) return;
     return reply.send({
       requestId: "req_claimed_123",
@@ -240,32 +244,28 @@ export function registerVerificationRoutes<TLogger extends FastifyBaseLogger>(
     });
   });
 
-  fastify.post(
-    "/verification/review-queue/:requestId/decision",
-    decisionSchema,
-    async (req, reply) => {
-      if (!checkReviewer(req, reply)) return;
-      const params = z.object({ requestId: z.string() }).parse(req.params);
-      const body = z
-        .object({
-          decision: z.enum(["approve", "reject", "request-more-info"]),
-          reason: z.string().optional(),
-        })
-        .parse(req.body);
+  fastify.post("/review-queue/:requestId/decision", decisionSchema, async (req, reply) => {
+    if (!checkReviewer(req, reply)) return;
+    const params = z.object({ requestId: z.string() }).parse(req.params);
+    const body = z
+      .object({
+        decision: z.enum(["approve", "reject", "request-more-info"]),
+        reason: z.string().optional(),
+      })
+      .parse(req.body);
 
-      const newStatus =
-        body.decision === "approve"
-          ? "approved"
-          : body.decision === "reject"
-            ? "rejected"
-            : "needs_more_info";
+    const newStatus =
+      body.decision === "approve"
+        ? "approved"
+        : body.decision === "reject"
+          ? "rejected"
+          : "needs_more_info";
 
-      return reply.send({
-        requestId: params.requestId,
-        status: newStatus,
-      });
-    },
-  );
+    return reply.send({
+      requestId: params.requestId,
+      status: newStatus,
+    });
+  });
 }
 
 async function getStreamSize(stream: NodeJS.ReadableStream): Promise<number> {
