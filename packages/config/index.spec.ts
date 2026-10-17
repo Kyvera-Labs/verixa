@@ -27,6 +27,11 @@ describe("loadConfig", () => {
       REDIS_URL: "redis://redis.example.com:6379",
       SESSION_ACCESS_TOKEN_SECRET: VALID_SESSION_SECRET,
       SESSION_MAX_CONCURRENT_SESSIONS: 0,
+      HSTS_MAX_AGE_SECONDS: 31_536_000,
+      HSTS_INCLUDE_SUBDOMAINS: true,
+      HSTS_PRELOAD: false,
+      ENFORCE_HTTPS: false,
+      TRUST_PROXY: false,
       MFA_ENFORCEMENT_LEVEL: "optional",
       MFA_ALLOWED_METHODS: [],
     });
@@ -56,6 +61,11 @@ describe("loadConfig", () => {
       REDIS_URL: "redis://localhost:6379",
       SESSION_ACCESS_TOKEN_SECRET: VALID_SESSION_SECRET,
       SESSION_MAX_CONCURRENT_SESSIONS: 0,
+      HSTS_MAX_AGE_SECONDS: 31_536_000,
+      HSTS_INCLUDE_SUBDOMAINS: true,
+      HSTS_PRELOAD: false,
+      ENFORCE_HTTPS: false,
+      TRUST_PROXY: false,
       MFA_ENFORCEMENT_LEVEL: "optional",
       MFA_ALLOWED_METHODS: [],
     });
@@ -176,5 +186,101 @@ describe("loadConfig", () => {
 
   it("rejects a negative SESSION_MAX_CONCURRENT_SESSIONS", () => {
     expect(() => loadConfig({ SESSION_MAX_CONCURRENT_SESSIONS: "-1" })).toThrowError(ConfigError);
+  });
+
+  it("parses ENFORCE_HTTPS=false as false, not as a truthy string", () => {
+    // The regression this guards is the reason `booleanFromEnv` exists:
+    // `z.coerce.boolean()` would have read the literal string "false" as true
+    // and turned the operator's opt-out into an opt-in.
+    const config = loadConfig({
+      SESSION_ACCESS_TOKEN_SECRET: VALID_SESSION_SECRET,
+      ENFORCE_HTTPS: "false",
+      HSTS_PRELOAD: "0",
+      TRUST_PROXY: "false",
+    });
+
+    expect(config.ENFORCE_HTTPS).toBe(false);
+    expect(config.HSTS_PRELOAD).toBe(false);
+    expect(config.TRUST_PROXY).toBe(false);
+  });
+
+  it("parses the accepted truthy spellings of the transport-security flags", () => {
+    const config = loadConfig({
+      SESSION_ACCESS_TOKEN_SECRET: VALID_SESSION_SECRET,
+      ENFORCE_HTTPS: "true",
+      HSTS_INCLUDE_SUBDOMAINS: "1",
+    });
+
+    expect(config.ENFORCE_HTTPS).toBe(true);
+    expect(config.HSTS_INCLUDE_SUBDOMAINS).toBe(true);
+  });
+
+  it("rejects an ambiguous boolean instead of guessing", () => {
+    // "yes" is the value someone reaches for when a flag is not documented.
+    // Accepting it would make the same deployment mean two different things to
+    // two different operators, so it fails at startup and names itself.
+    expect(() =>
+      loadConfig({
+        SESSION_ACCESS_TOKEN_SECRET: VALID_SESSION_SECRET,
+        ENFORCE_HTTPS: "yes",
+      }),
+    ).toThrowError(ConfigError);
+
+    expect(() =>
+      loadConfig({
+        SESSION_ACCESS_TOKEN_SECRET: VALID_SESSION_SECRET,
+        ENFORCE_HTTPS: "TRUE",
+      }),
+    ).toThrowError(ConfigError);
+  });
+
+  it("defaults the transport-security flags to the production-safe-but-inert posture", () => {
+    const config = loadConfig({
+      NODE_ENV: "production",
+      SESSION_ACCESS_TOKEN_SECRET: VALID_SESSION_SECRET,
+    });
+
+    expect(config.HSTS_MAX_AGE_SECONDS).toBe(31_536_000);
+    expect(config.HSTS_INCLUDE_SUBDOMAINS).toBe(true);
+    // Two flags with hard-to-reverse consequences are never defaulted on.
+    expect(config.HSTS_PRELOAD).toBe(false);
+    expect(config.ENFORCE_HTTPS).toBe(false);
+    expect(config.TRUST_PROXY).toBe(false);
+  });
+
+  it("coerces HSTS_MAX_AGE_SECONDS from a string", () => {
+    const config = loadConfig({
+      SESSION_ACCESS_TOKEN_SECRET: VALID_SESSION_SECRET,
+      HSTS_MAX_AGE_SECONDS: "86400",
+    });
+
+    expect(config.HSTS_MAX_AGE_SECONDS).toBe(86_400);
+  });
+
+  it("rejects an HSTS_MAX_AGE_SECONDS beyond the two-year ceiling", () => {
+    // A longer pin is not a stronger one: the browser renews it on every
+    // response, so an over-long max-age is a promise nobody can take back.
+    expect(() =>
+      loadConfig({
+        SESSION_ACCESS_TOKEN_SECRET: VALID_SESSION_SECRET,
+        HSTS_MAX_AGE_SECONDS: "99999999999",
+      }),
+    ).toThrowError(ConfigError);
+  });
+
+  it("rejects a fractional or negative HSTS_MAX_AGE_SECONDS", () => {
+    expect(() =>
+      loadConfig({
+        SESSION_ACCESS_TOKEN_SECRET: VALID_SESSION_SECRET,
+        HSTS_MAX_AGE_SECONDS: "-1",
+      }),
+    ).toThrowError(ConfigError);
+
+    expect(() =>
+      loadConfig({
+        SESSION_ACCESS_TOKEN_SECRET: VALID_SESSION_SECRET,
+        HSTS_MAX_AGE_SECONDS: "1.5",
+      }),
+    ).toThrowError(ConfigError);
   });
 });
