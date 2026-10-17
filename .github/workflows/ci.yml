@@ -402,6 +402,88 @@ jobs:
             exit 1
           fi
 
+      # `whoami` says the name; the number is what an orchestrator enforces.
+      # `runAsNonRoot: true` is satisfied by any non-zero UID, and a
+      # `securityContext` or a pre-chowned volume that names a UID needs the
+      # value to be the one the Dockerfile pins.
+      - name: Verify the container runs as an unprivileged UID
+        run: |
+          set -eu
+          uid="$(docker exec verixa-api id -u)"
+          gid="$(docker exec verixa-api id -g)"
+          echo "Container uid/gid: $uid/$gid"
+          if [ "$uid" = "0" ] || [ "$gid" = "0" ]; then
+            echo "::error::the API must not run as UID or GID 0"
+            exit 1
+          fi
+
+      # A package manager inside a production container is a download primitive:
+      # `npm install <anything>` turns a foothold into code the operator never
+      # approved, fetched from a registry the operator does not control. The
+      # runtime stage deletes it, and this is the assertion that it stayed gone.
+      - name: Verify the image has no package manager or compiler headers
+        run: |
+          set -eu
+          found="$(docker exec verixa-api sh -c \
+            'for tool in /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/lib/node_modules/npm /usr/local/include/node; do [ -e "$tool" ] && echo "$tool"; done' || true)"
+          if [ -n "$found" ]; then
+            echo "::error::the runtime image still ships build tooling:"
+            printf '%s\n' "$found"
+            exit 1
+          fi
+          echo "no npm, npx, corepack or node headers in the image"
+
+      # Issue 216: source maps are the original TypeScript, a `*.spec.js` is an
+      # executable description of every assumption the test suite makes about the
+      # code, and `pnpm deploy` copies each workspace package directory whole —
+      # so `apps/api/src/**`, every package's `domain/` tree and the last test
+      # run's `coverage/` output all ride into the image unless something
+      # removes them. None of it is read at runtime; all of it is useful to
+      # whoever ends up with a shell in here.
+      - name: Verify the image carries no build residue or first-party source
+        run: |
+          set -eu
+          found="$(docker exec verixa-api sh -c '
+            find /app -name "*.js.map" -o -name "*.d.ts.map" -o -name "*.d.ts" -o -name "*.spec.js"
+            find /app -name "*.ts" -not -path "*/node_modules/*"
+            find /app -path "*/@verixa/*" -name "*.ts"
+            find /app -type d -name coverage
+          ' 2>&1 | head -20 || true)"
+          if [ -n "$found" ]; then
+            echo "::error::the runtime image still contains pruned files:"
+            printf '%s\n' "$found"
+            echo "See scripts/prune-runtime-bundle.mjs and docs/security/container-hardening.md."
+            exit 1
+          fi
+          echo "no source maps, declarations, compiled specs, sources or coverage in the image"
+
+      # `pnpm deploy --prod` is supposed to be what guarantees this, and it does,
+      # until something changes the hoisting or the manifest. `testcontainers`
+      # and `supertest` reappearing here would be invisible from the diff that
+      # caused it.
+      - name: Verify the image has no dev dependencies
+        run: |
+          set -eu
+          dev="$(docker exec verixa-api sh -c 'ls /app/node_modules /app/node_modules/.pnpm 2>/dev/null' \
+            | grep -E '^(typescript|vitest|tsx|eslint|prettier|husky|lint-staged|supertest|testcontainers|@vitest\+|@types\+|prisma@)' || true)"
+          if [ -n "$dev" ]; then
+            echo "::error::dev dependencies are present in the runtime image:"
+            printf '%s\n' "$dev"
+            exit 1
+          fi
+          echo "no dev dependencies in the bundle"
+
+      # Recorded, not asserted: the size number belongs in the hardening doc only
+      # if it was measured on a machine that could build the image, and CI is the
+      # only place that is. `docker`'s own size is unpacked-layer metadata, so the
+      # in-container figure is the one that says what the filesystem holds.
+      - name: Record the image size and contents
+        run: |
+          set -eu
+          docker images verixa-api:ci --format 'image {{.Repository}}:{{.Tag}}  size {{.Size}}'
+          docker exec verixa-api sh -c 'du -sh /app; printf "files in /app: "; find /app -type f | wc -l'
+          docker exec verixa-api sh -c 'du -sh /app/node_modules /app/dist 2>/dev/null || true'
+
       - name: Stop container
         if: always()
         run: docker rm -f verixa-api || true

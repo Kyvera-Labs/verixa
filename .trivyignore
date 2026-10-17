@@ -1,0 +1,25 @@
+# Accepted-risk list for the image scan (roadmap Issue 216).
+#
+# `.github/workflows/container-scan.yml` fails on HIGH and CRITICAL
+# vulnerabilities in the final image's OS packages, and Trivy reads this file
+# automatically when it is at the repository root.
+#
+# It is deliberately empty.
+#
+# An entry here is a claim that a vulnerability does not need fixing, so the
+# bar for adding one is higher than the bar for the alert it silences: one
+# advisory id per line, plus a line above it naming (a) why the vulnerable
+# binary or package is not reachable in this image, and (b) what would change
+# that. "It is a transitive dependency" is not a reason — neither was anything
+# else in the image when it got built.
+#
+# `ignore-unfixed` is already on in the workflow, which handles the common case
+# of an advisory with no released patch. That is the mechanism for waiting on
+# upstream; this file is the mechanism for disagreeing with the finding.
+#
+# Example, for the shape only — do not copy an id from here:
+#   # CVE-2026-000000: libfoo's vulnerable code path is the one that parses
+#   # .po files; nothing in this image reads one and `apk info` shows libfoo
+#   # present only because of busybox-links. Revisit if a base image moves off
+#   # Alpine or if the image ever ships gettext.
+# CVE-2026-000000
