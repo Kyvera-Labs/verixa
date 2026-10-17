@@ -66,6 +66,29 @@ RUN set -eu; \
     rm -rf "$dest/.prisma"; \
     cp -R "$src" "$dest/"
 
+# Drop everything the running process will never read: source maps, type
+# declarations, the compiled output of the test suites, and our own TypeScript
+# sources and coverage output (Issue 216).
+#
+# `pnpm deploy --prod` excludes dev dependencies but nothing else. It copies
+# each workspace package directory whole — no package declares a `files` array
+# — so `/out` is where `apps/api/src/**`, every package's `domain/` tree and the
+# test run's `coverage/` would otherwise end up, next to the `.js.map` files that
+# contain the original source.
+#
+# That is not merely wasted megabytes. All of it is readable by anyone who gets a
+# shell in this container, and none of it buys anything at runtime: a `.spec.js`
+# is an executable description of every assumption the tests make about the code,
+# and a source tree is the version of the code an attacker would rather read.
+#
+# The script lives in `scripts/`, is unit-tested in
+# `tests/integration/prune-runtime-bundle.spec.ts`, and runs *before* the load
+# proof below rather than after it: if the bundle turns out to need one of the
+# files this step removes, that is discovered here, at build time, instead of in
+# a container that starts and then fails to import.
+COPY scripts/prune-runtime-bundle.mjs scripts/
+RUN node scripts/prune-runtime-bundle.mjs /out
+
 # Prove the bundle actually loads before shipping it.
 #
 # Two separate production-only failures reached CI from this Dockerfile —
@@ -74,7 +97,8 @@ RUN set -eu; \
 # because none of those load the deployed bundle through Node's ESM loader.
 # This line does exactly that, so the next one fails here, loudly, at build
 # time, rather than as a healthcheck that times out with the reason buried in
-# container logs.
+# container logs. It runs against the pruned tree, so what is proven here is
+# byte-for-byte what ships.
 #
 # The URL is a placeholder: PrismaClient's constructor requires one but does
 # not connect, and connecting is not what is being tested.
@@ -86,13 +110,34 @@ RUN cd /out \
 FROM node:22-alpine AS runtime
 ENV NODE_ENV=production
 
+# The package manager and the compiler toolchain's headers are in the base
+# image because the base image is also used for building. In here they are
+# post-compromise tooling: `npm install` from inside a running container is how
+# a foothold becomes arbitrary code fetched from a registry the operator never
+# approved, and `node.gypi` plus the headers exist only to build native
+# addons. `node` itself stays — it is the only thing the image runs.
+#
+# Removing them is also the difference between "an attacker has to ship their
+# own tooling into the container" and "an attacker types a command".
+RUN rm -rf /usr/local/lib/node_modules/npm \
+           /usr/local/lib/node_modules/corepack \
+           /usr/local/bin/npm \
+           /usr/local/bin/npx \
+           /usr/local/bin/corepack \
+           /usr/local/include/node
+
 # Running as root inside a container is a common, avoidable mistake: a
 # container's process namespace isolation is not a security boundary on its
 # own, and a container-escape vulnerability (kernel bug, misconfigured
 # mount, etc.) hands an attacker root on the host if the process inside was
 # already root. A dedicated, unprivileged user costs nothing and closes off
 # that entire class of escalation.
-RUN addgroup -S verixa && adduser -S verixa -G verixa
+#
+# The UID and GID are pinned rather than let Alpine pick, because the number is
+# what an orchestrator asserts on: `runAsNonRoot: true` is satisfiable by any
+# non-zero UID, and a `securityContext.runAsUser: 10001` — or a volume whose
+# ownership was set for this image — needs the value to be stable across builds.
+RUN addgroup -S -g 10001 verixa && adduser -S -u 10001 -G verixa verixa
 
 WORKDIR /app
 COPY --from=build --chown=verixa:verixa /out .

@@ -32,13 +32,22 @@ The Dockerfile has four stages:
    and nothing else from the monorepo.
 4. **`runtime`** — a fresh, minimal `node:22-alpine`, with only `/out` from
    the `build` stage copied in. No pnpm, no TypeScript, no dev dependencies,
-   no monorepo source — just the deployed bundle and a Node runtime.
+   no monorepo source — just the deployed bundle and a Node runtime. Even the
+   base image's `npm`, `npx`, Corepack and Node headers are deleted in this
+   stage, and the bundle is pruned of source maps, declarations, compiled
+   specs and its own TypeScript sources first.
 
 Only the `runtime` stage ships. Everything in `base`/`deps`/`build` (the
 lockfile, every package's source, the TypeScript compiler, `devDependencies`)
 exists purely to _produce_ the final image and is discarded — the shipped
 image doesn't carry any of it, which keeps it small and reduces its attack
 surface (nothing to exploit that was never even in the final layer).
+
+**[docs/security/container-hardening.md](../security/container-hardening.md)
+is the security half of this file**: why each removal is there, what the
+Trivy gate in `.github/workflows/container-scan.yml` blocks on, and the
+measured size and contents of the final image. This file stays about how to
+build and run it.
 
 ## Why the container doesn't run as root
 
@@ -56,11 +65,23 @@ real-world deployments.
 
 `.github/workflows/ci.yml`'s `docker` job builds the image, starts a
 container from it, polls `/health` until it responds (or times out and fails
-with the container logs attached), and asserts `docker exec ... whoami`
-returns something other than `root`. This is the same three-part acceptance
-criteria as the issue that introduced the Dockerfile: **builds, serves
-`/health`, doesn't run as root** — verified as actual behavior, not just
-"the Dockerfile looks right."
+with the container logs attached), and then asserts against the running
+container:
+
+- `whoami` is not `root`, and `id -u`/`id -g` are not `0` — the name and the
+  number, because an orchestrator checks the number;
+- `npm`, `npx`, Corepack and the Node headers are not present;
+- no `.js.map`, `.d.ts`, `.d.ts.map`, `*.spec.js`, `*.ts` of ours, or
+  `coverage/` directory anywhere under `/app`;
+- no dev dependency directories under `/app/node_modules`;
+- the image size and the file count of `/app` are printed, which is where the
+  figures in the hardening doc come from.
+
+This is the same three-part acceptance criteria as the issue that introduced
+the Dockerfile — **builds, serves `/health`, doesn't run as root** — verified
+as actual behavior, not just "the Dockerfile looks right." The vulnerability
+scan of the same image is a separate workflow; see
+[docs/security/container-hardening.md](../security/container-hardening.md).
 
 ## Local development stack
 
