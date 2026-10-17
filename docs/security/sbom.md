@@ -14,10 +14,11 @@ A release tag (`v*.*.*`) runs `.github/workflows/release.yml`, which writes
 `sbom/verixa.cdx.json`, validates it against the CycloneDX 1.6 JSON schema,
 uploads it as a workflow artifact, and attaches it to the GitHub Release.
 
-At the time of writing the real tree produces 695 components and 297 dependency
-edges. The file is not committed — it is a build output, it changes whenever a
-dependency does, and putting it in git would mean every dependency PR carries a
-thousand-line diff that no reviewer reads. `.gitignore` says so.
+At the time of writing the real tree produces 716 components and 306
+`dependencies` entries. The file is not committed — it is a build output, it
+changes whenever a dependency does, and putting it in git would mean every
+dependency PR carries a thousand-line diff that no reviewer reads.
+`.gitignore` says so.
 
 To produce one locally:
 
