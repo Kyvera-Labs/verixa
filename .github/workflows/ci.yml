@@ -65,6 +65,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Issue 215. Runs before the install it guards, and deliberately invoked
+      # as `node` rather than `pnpm run check:lockfile`: the gate has to work on
+      # a tree that has never been installed, so it takes no dependencies, no
+      # package-manager setup and no build. It is also the first thing to fail
+      # when `pnpm-lock.yaml` is missing at all, which would otherwise surface
+      # as setup-node's `cache: pnpm` complaining that it cannot find a
+      # lockfile — true, but three steps downstream of the actual mistake.
+      - name: Check lockfile integrity
+        run: node infra/ci/check-lockfile-integrity.mjs
+
       - uses: pnpm/action-setup@v4
 
       - uses: actions/setup-node@v4
@@ -155,6 +165,15 @@ jobs:
 
       - name: Typecheck
         run: pnpm typecheck
+
+      # `pnpm typecheck` is recursive over *workspace packages*, and infra/ci is
+      # deliberately not one (it declares no dependencies and must never be
+      # built, published, or installed as a package — see infra/ci/package.json).
+      # So the tooling that decides whether a release is installable gets
+      # typechecked here instead, rather than first failing in release.yml, where
+      # nothing else runs before the SBOM step.
+      - name: Typecheck CI tooling
+        run: pnpm typecheck:ci
 
       - name: Test
         run: pnpm test

@@ -45,3 +45,9 @@ Thumbs.db
 # Local database dumps (Issue 057). Never committed: they contain real local
 # data and can be large.
 backups/
+
+# Generated SBOM (Issue 215). It is a release artifact, produced from
+# pnpm-lock.yaml by `pnpm sbom:generate` and uploaded by CI — committing it
+# would create a second, staler copy of the dependency graph that says nothing
+# about the build it sits next to.
+sbom/
