@@ -7,6 +7,7 @@ import { createLogger, type Logger } from "@verixa/shared-kernel";
 import Fastify from "fastify";
 
 import type { Container } from "./composition-root.js";
+import { errorResponseSchema, handleApiError } from "./http/error-response.js";
 import { registerContextRoutes } from "./composition/register-routes.js";
 import {
   NO_TRANSPORT_SECURITY,
@@ -16,6 +17,7 @@ import {
 } from "./plugins/security-headers.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerVerificationRoutes } from "./routes/verification.js";
+import { assertRouteValidationSchemas } from "./http/route-validation.js";
 
 /**
  * Re-exported so callers (and the integration suite) can name the policy
@@ -94,6 +96,9 @@ export function buildApp(options: BuildAppOptions = {}) {
     },
   });
 
+  app.setErrorHandler(handleApiError);
+  app.addSchema(errorResponseSchema);
+  app.addHook("onRoute", (route) => assertRouteValidationSchemas(route));
   if (process.env["NODE_ENV"] !== "production") {
     app.register(fastifySwagger, {
       mode: "static",

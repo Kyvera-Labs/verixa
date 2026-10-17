@@ -8,7 +8,7 @@ import type {
 } from "fastify";
 
 import type { Container } from "../composition-root.js";
-import { sendDomainError, sendError } from "../http/error-response.js";
+import { sendApiError, sendDomainError, sendError } from "../http/error-response.js";
 
 /**
  * JSON Schema for the registration body.
@@ -186,7 +186,7 @@ export function registerAuthRoutes<TLogger extends FastifyBaseLogger>(
             "AuthenticateWithPassword returned an MFA-flow result, but /auth/login does not " +
               "yet handle one.",
           );
-          await reply.status(501).send({ error: "mfa_not_yet_supported" });
+          sendApiError(reply, "NOT_IMPLEMENTED", "MFA login is not yet supported.");
           return;
         }
 

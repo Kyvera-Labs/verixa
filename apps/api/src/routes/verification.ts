@@ -9,6 +9,8 @@ import type {
 } from "fastify";
 import { z } from "zod";
 
+import { sendApiError } from "../http/error-response.js";
+
 const submitVerificationSchema = {
   schema: {
     description: "Submit a new verification request",
@@ -150,12 +152,7 @@ const decisionSchema = {
 function checkReviewer(req: FastifyRequest, reply: FastifyReply): boolean {
   const authHeader = req.headers["authorization"];
   if (!authHeader || !authHeader.includes("reviewer")) {
-    reply.status(403).send({
-      error: {
-        code: "FORBIDDEN",
-        message: "Reviewer role required",
-      },
-    });
+    sendApiError(reply, "FORBIDDEN", "Reviewer role required");
     return false;
   }
   return true;
@@ -209,12 +206,8 @@ export function registerVerificationRoutes<TLogger extends FastifyBaseLogger>(
     const size = data?.file ? await getStreamSize(data.file) : 1024;
 
     if (size > 10 * 1024 * 1024) {
-      return (reply as FastifyReply).status(400).send({
-        error: {
-          code: "INVALID_EVIDENCE",
-          message: "File size exceeds limit",
-        },
-      });
+      sendApiError(reply as FastifyReply, "INVALID_EVIDENCE", "File size exceeds limit");
+      return;
     }
 
     return reply.status(201).send({

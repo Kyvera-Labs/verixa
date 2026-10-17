@@ -69,6 +69,58 @@ function replyError(
   });
 }
 
+const roleParamsSchema = {
+  type: "object",
+  required: ["roleId"],
+  additionalProperties: false,
+  properties: { roleId: { type: "string", minLength: 1 } },
+} as const;
+const userParamsSchema = {
+  type: "object",
+  required: ["userId"],
+  additionalProperties: false,
+  properties: { userId: { type: "string", minLength: 1 } },
+} as const;
+const assignmentParamsSchema = {
+  type: "object",
+  required: ["assignmentId"],
+  additionalProperties: false,
+  properties: { assignmentId: { type: "string", minLength: 1 } },
+} as const;
+const createRoleBodySchema = {
+  type: "object",
+  required: ["name", "description"],
+  additionalProperties: false,
+  properties: { name: { type: "string" }, description: { type: "string" } },
+} as const;
+const updateRoleBodySchema = {
+  type: "object",
+  minProperties: 1,
+  additionalProperties: false,
+  properties: { name: { type: "string" }, description: { type: "string" } },
+} as const;
+const permissionBodySchema = {
+  type: "object",
+  required: ["key"],
+  additionalProperties: false,
+  properties: { key: { type: "string", minLength: 1 } },
+} as const;
+const assignmentBodySchema = {
+  type: "object",
+  required: ["roleId"],
+  additionalProperties: false,
+  properties: {
+    roleId: { type: "string", minLength: 1 },
+    organizationId: { type: "string", minLength: 1 },
+    expiresAt: { type: "string", format: "date-time" },
+  },
+} as const;
+const assignmentQuerySchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: { organizationId: { type: "string", minLength: 1 } },
+} as const;
+
 /** Registers the complete RBAC management surface. Authentication is supplied
  * by the session layer through x-user-id until the principal plugin lands. */
 export function registerAdminAuthorizationRoutes<TLogger extends FastifyBaseLogger>(
@@ -104,6 +156,28 @@ export function registerAdminAuthorizationRoutes<TLogger extends FastifyBaseLogg
     if (!(await requirePermission(request, reply, "roles:read"))) return;
     return authorization.listRoles();
   });
+  app.post<{ Body: CreateRoleBody }>(
+    "/admin/roles",
+    { schema: { body: createRoleBodySchema } },
+    async (request, reply) => {
+      if (!(await requirePermission(request, reply, "roles:write"))) return;
+      if (request.body.name.trim() === "" || request.body.description.trim() === "") {
+        return reply.code(400).send({ error: "name and description are required" });
+      }
+      try {
+        const role = await authorization.createRole({
+          ...request.body,
+          isSystemRole: false,
+        });
+        return reply.code(201).send(role);
+      } catch (error) {
+        return replyError(reply, error);
+      }
+    },
+  );
+  app.patch<{ Params: RoleParams; Body: UpdateRoleBody }>(
+    "/admin/roles/:roleId",
+    { schema: { params: roleParamsSchema, body: updateRoleBodySchema } },
   app.post<{ Body: CreateRoleBody }>("/roles", async (request, reply) => {
     if (!(await requirePermission(request, reply, "roles:write"))) return;
     if (request.body.name.trim() === "" || request.body.description.trim() === "") {
@@ -130,6 +204,20 @@ export function registerAdminAuthorizationRoutes<TLogger extends FastifyBaseLogg
       }
     },
   );
+  app.delete<{ Params: RoleParams }>(
+    "/admin/roles/:roleId",
+    { schema: { params: roleParamsSchema } },
+    async (request, reply) => {
+      if (!(await requirePermission(request, reply, "roles:write"))) return;
+      try {
+        await authorization.deleteRole(request.params.roleId);
+        return reply.code(204).send();
+      } catch (error) {
+        return replyError(reply, error);
+      }
+    },
+  );
+  app.get("/admin/permissions", async (request, reply) => {
   app.delete<{ Params: RoleParams }>("/roles/:roleId", async (request, reply) => {
     if (!(await requirePermission(request, reply, "roles:write"))) return;
     try {
@@ -144,6 +232,8 @@ export function registerAdminAuthorizationRoutes<TLogger extends FastifyBaseLogg
     return authorization.listPermissions();
   });
   app.post<{ Params: RoleParams; Body: PermissionBody }>(
+    "/admin/roles/:roleId/permissions",
+    { schema: { params: roleParamsSchema, body: permissionBodySchema } },
     "/roles/:roleId/permissions",
     async (request, reply) => {
       if (!(await requirePermission(request, reply, "roles:write"))) return;
@@ -155,6 +245,8 @@ export function registerAdminAuthorizationRoutes<TLogger extends FastifyBaseLogg
     },
   );
   app.delete<{ Params: RoleParams; Body: PermissionBody }>(
+    "/admin/roles/:roleId/permissions",
+    { schema: { params: roleParamsSchema, body: permissionBodySchema } },
     "/roles/:roleId/permissions",
     async (request, reply) => {
       if (!(await requirePermission(request, reply, "roles:write"))) return;
@@ -166,6 +258,8 @@ export function registerAdminAuthorizationRoutes<TLogger extends FastifyBaseLogg
     },
   );
   app.get<{ Params: UserParams; Querystring: RoleQuery }>(
+    "/admin/users/:userId/roles",
+    { schema: { params: userParamsSchema, querystring: assignmentQuerySchema } },
     "/users/:userId/roles",
     async (request, reply) => {
       if (!(await requirePermission(request, reply, "roles:read"))) return;
@@ -181,6 +275,8 @@ export function registerAdminAuthorizationRoutes<TLogger extends FastifyBaseLogg
     },
   );
   app.post<{ Params: UserParams; Body: AssignmentBody }>(
+    "/admin/users/:userId/roles",
+    { schema: { params: userParamsSchema, body: assignmentBodySchema } },
     "/users/:userId/roles",
     async (request, reply) => {
       if (!(await requirePermission(request, reply, "roles:write"))) return;
@@ -219,6 +315,8 @@ export function registerAdminAuthorizationRoutes<TLogger extends FastifyBaseLogg
     },
   );
   app.delete<{ Params: { assignmentId: string } }>(
+    "/admin/user-role-assignments/:assignmentId",
+    { schema: { params: assignmentParamsSchema } },
     "/user-role-assignments/:assignmentId",
     async (request, reply) => {
       if (!(await requirePermission(request, reply, "roles:write"))) return;
