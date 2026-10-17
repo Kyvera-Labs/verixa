@@ -35,7 +35,8 @@ interface ApiErrorBody {
   error: {
     code: string;
     message: string;
-    fields?: Record<string, string[]>;
+    details?: { fields?: Record<string, string[]> };
+    requestId: string;
   };
 }
 
@@ -114,7 +115,7 @@ describe.skipIf(!available)("POST /auth/register", () => {
 
     expect(response.status).toBe(400);
     expect(asError(response.body).error.code).toBe("VALIDATION_ERROR");
-    expect(asError(response.body).error.fields?.["password"]).toContain("too_short");
+    expect(asError(response.body).error.details?.fields?.["password"]).toContain("too_short");
     await expect(prisma.user.count()).resolves.toBe(0);
   });
 

@@ -1,0 +1,120 @@
+openapi: 3.1.0
+info:
+  title: Verixa API
+  version: 0.1.0
+  summary: OpenAPI-first contract for the Verixa REST API.
+  description: >-
+    The contract is authored before route implementations. Reserved tags keep
+    the bounded-context surface stable while each context adds operations in
+    its own focused change.
+servers:
+  - url: http://localhost:3000
+    description: Local development server
+  - url: https://api.example.com
+    description: Replace with the deployment's public API origin.
+tags:
+  - name: Identity
+    description: Users and organizations.
+  - name: Credentials
+    description: Password registration, authentication, and recovery.
+  - name: Sessions
+    description: Session lifecycle and token operations.
+  - name: MFA
+    description: Multi-factor authentication ceremonies.
+  - name: Authorization
+    description: Roles, permissions, and policy decisions.
+  - name: Verification
+    description: Identity verification requests and evidence.
+  - name: Audit
+    description: Audit event queries and integrity verification.
+  - name: Governance
+    description: Administrative governance operations.
+  - name: Notifications
+    description: Delivery and notification preferences.
+paths: {}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access token supplied by a trusted client.
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Machine credential; never place it in a URL.
+  schemas:
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error, message]
+      properties:
+        error:
+          type: string
+          description: Stable machine-readable error code.
+        message:
+          type: string
+          description: Safe message suitable for the caller.
+        details:
+          type: object
+          additionalProperties: true
+          description: Optional validation or domain details; never include secrets.
+    ValidationError:
+      type: object
+      additionalProperties: false
+      required: [error, message, fields]
+      properties:
+        error:
+          type: string
+          const: validation_error
+        message:
+          type: string
+        fields:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          const: ok
+  parameters:
+    RequestId:
+      name: requestId
+      in: path
+      required: true
+      description: Opaque request identifier.
+      schema:
+        type: string
+        minLength: 1
+  responses:
+    BadRequest:
+      description: The request shape or value is invalid.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationError'
+    Unauthorized:
+      description: Authentication is missing or invalid.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: The authenticated principal is not permitted to perform this operation.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: The requested resource does not exist or is not visible to this principal.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'

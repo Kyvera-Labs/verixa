@@ -1,11 +1,33 @@
 import { registerAdminAuthorizationRoutes } from "@verixa/authorization";
+import { fileURLToPath } from "node:url";
+
+import fastifySwagger from "@fastify/swagger";
+import fastifySwaggerUi from "@fastify/swagger-ui";
 import { createLogger, type Logger } from "@verixa/shared-kernel";
 import Fastify from "fastify";
 
 import type { Container } from "./composition-root.js";
 import { registerSecurityHeaders } from "./plugins/security-headers.js";
+import { errorResponseSchema, handleApiError } from "./http/error-response.js";
+import { registerContextRoutes } from "./composition/register-routes.js";
+import {
+  NO_TRANSPORT_SECURITY,
+  registerSecurityHeaders,
+  type HstsDirective,
+  type SecurityHeadersOptions,
+} from "./plugins/security-headers.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerVerificationRoutes } from "./routes/verification.js";
+import { enforceRegisteredRouteSchemas } from "./openapi/zod-registry.js";
+import { assertRouteValidationSchemas } from "./http/route-validation.js";
+
+/**
+ * Re-exported so callers (and the integration suite) can name the policy
+ * without reaching into `src/plugins/` — `apps/api`'s public surface is
+ * `./app` and `./composition-root`, and adding a third subpath to
+ * `package.json` for two types would be more ceremony than content.
+ */
+export type { HstsDirective, SecurityHeadersOptions };
 
 export interface BuildAppOptions {
   readonly logger?: Logger;
@@ -23,6 +45,25 @@ export interface BuildAppOptions {
    * broken", and only one of those is true.
    */
   readonly container?: Container;
+  /**
+   * Transport-security response controls (Issue 213).
+   *
+   * Defaults to `NO_TRANSPORT_SECURITY` — no `Strict-Transport-Security`, no
+   * plaintext redirect — for the same reason `container` is optional: the
+   * callers that pass nothing are in-process tests, and `server.ts`, the only
+   * caller that binds a port, always derives this from validated config.
+   * Reading the environment here would put a second, unvalidated config path
+   * next to `@verixa/config`, which is the thing this package exists to avoid.
+   */
+  readonly securityHeaders?: SecurityHeadersOptions;
+  /**
+   * Honour `X-Forwarded-Proto` / `X-Forwarded-For` from an upstream proxy.
+   *
+   * Off unless a deployment says it sits behind one. Trusting those headers
+   * with no proxy in front is how a caller picks its own apparent IP and
+   * scheme; see `docs/security/tls-enforcement.md`.
+   */
+  readonly trustProxy?: boolean;
 }
 
 /**
@@ -36,6 +77,7 @@ export function buildApp(options: BuildAppOptions = {}) {
   const logger = options.logger ?? createLogger({ name: "verixa-api" });
   const app = Fastify({
     loggerInstance: logger,
+    trustProxy: options.trustProxy ?? false,
     ajv: {
       customOptions: {
         /**
@@ -62,6 +104,28 @@ export function buildApp(options: BuildAppOptions = {}) {
   // it is the one endpoint a deployment is most likely to expose without
   // thinking about it.
   registerSecurityHeaders(app);
+  app.setErrorHandler(handleApiError);
+  app.addSchema(errorResponseSchema);
+  app.addHook("onRoute", (route) => assertRouteValidationSchemas(route));
+  if (process.env["NODE_ENV"] !== "production") {
+    app.register(fastifySwagger, {
+      mode: "static",
+      specification: {
+        path: fileURLToPath(new URL("../openapi/openapi.yaml", import.meta.url)),
+        baseDir: fileURLToPath(new URL("../openapi", import.meta.url)),
+      },
+    });
+    app.register(fastifySwaggerUi, {
+      routePrefix: "/docs",
+      staticCSP: true,
+      uiConfig: {
+        docExpansion: "list",
+        deepLinking: true,
+        url: "/docs/openapi.json",
+      },
+    });
+    app.get("/docs/openapi.json", () => app.swagger());
+  }
 
   app.get("/health", () => {
     // Deliberately does not touch the database. This answers "is this process
@@ -72,12 +136,20 @@ export function buildApp(options: BuildAppOptions = {}) {
     return { status: "ok" };
   });
 
+  // Registered on `app` itself, in the same encapsulation context as every
+  // route below, so it covers `/health` and the authenticated routes alike.
+  // See the comment on `registerSecurityHeaders` for why this is not a
+  // `register()`-style plugin.
+  registerSecurityHeaders(app, options.securityHeaders ?? NO_TRANSPORT_SECURITY);
+
   if (options.container !== undefined) {
+    enforceRegisteredRouteSchemas(app);
     registerAuthRoutes(app, options.container);
     registerAdminAuthorizationRoutes(app, options.container.authorization);
     // Takes only the Fastify instance: this route group resolves what it
     // needs from the request rather than from the container.
     registerVerificationRoutes(app);
+    registerContextRoutes(app, options.container);
   }
 
   return app;

@@ -59,6 +59,25 @@ export {
 } from "./infrastructure/redis-revocation-list.js";
 export { SessionsPackageRevoker } from "./infrastructure/session-revoker-adapter.js";
 
+// Infrastructure: HTTP surface. The cookie *policy* lives here rather than in
+// `apps/api`, because which cookie is `HttpOnly` is a property of the session
+// model, not of the framework that happens to carry it — and the sessions
+// package is where that model is defined. The transport layer's job is to put
+// the returned strings in a `Set-Cookie` header and nothing else.
+export type { CookieAttributes, SameSiteMode } from "./infrastructure/http/cookie-config.js";
+export {
+  CSRF_COOKIE_NAME,
+  CSRF_COOKIE_PATH,
+  REFRESH_COOKIE_NAME,
+  REFRESH_COOKIE_PATH,
+  clearedSessionCookies,
+  csrfTokenCookie,
+  expireCookie,
+  refreshTokenCookie,
+  serializeCookie,
+  sessionCookies,
+} from "./infrastructure/http/cookie-config.js";
+
 // Testing fakes
 export { InMemorySessionRepository } from "./infrastructure/testing/in-memory-session-repository.js";
 export { InMemoryRevocationList } from "./infrastructure/testing/in-memory-revocation-list.js";
