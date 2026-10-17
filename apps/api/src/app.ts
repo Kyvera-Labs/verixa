@@ -2,7 +2,6 @@ import { fileURLToPath } from "node:url";
 
 import fastifySwagger from "@fastify/swagger";
 import fastifySwaggerUi from "@fastify/swagger-ui";
-import { registerAdminAuthorizationRoutes } from "@verixa/authorization";
 import { createLogger, type Logger } from "@verixa/shared-kernel";
 import Fastify from "fastify";
 
@@ -18,8 +17,6 @@ import {
   type HstsDirective,
   type SecurityHeadersOptions,
 } from "./plugins/security-headers.js";
-import { registerAuthRoutes } from "./routes/auth.js";
-import { registerVerificationRoutes } from "./routes/verification.js";
 
 /**
  * Re-exported so callers (and the integration suite) can name the policy
@@ -155,12 +152,13 @@ export function buildApp(options: BuildAppOptions = {}) {
   });
 
   if (options.container !== undefined) {
+    // One registration path, not two. `registerContextRoutes` already mounts
+    // every module at its public prefix — auth at `/auth`, admin at `/admin`,
+    // verification at `/verification`. Mounting them here as well, unprefixed,
+    // duplicated each route set and made the second attempt to register the
+    // same OpenAPI component (`RegisterBody`) throw during boot. It also put
+    // routes at URLs no client calls (`POST /:requestId/evidence`).
     enforceRegisteredRouteSchemas(app);
-    registerAuthRoutes(app, options.container);
-    registerAdminAuthorizationRoutes(app, options.container.authorization);
-    // Takes only the Fastify instance: this route group resolves what it
-    // needs from the request rather than from the container.
-    registerVerificationRoutes(app);
     registerContextRoutes(app, options.container);
   }
 

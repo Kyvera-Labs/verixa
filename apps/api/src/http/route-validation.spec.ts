@@ -45,4 +45,42 @@ describe("route input validation", () => {
       /missing validation schema\(s\): body/,
     );
   });
+
+  it("permits the multipart evidence upload, which has no parsed body to validate", async () => {
+    const app = Fastify();
+    app.addHook("onRoute", (route) => assertRouteValidationSchemas(route));
+    expect(() =>
+      app.post(
+        "/verification/:requestId/evidence",
+        {
+          schema: {
+            params: {
+              type: "object",
+              required: ["requestId"],
+              properties: { requestId: { type: "string" } },
+            },
+          },
+        },
+        () => ({ ok: true }),
+      ),
+    ).not.toThrow();
+    await app.ready();
+    await app.close();
+  });
+
+  it("permits the claim route, which takes no body", async () => {
+    const app = Fastify();
+    app.addHook("onRoute", (route) => assertRouteValidationSchemas(route));
+    expect(() => app.post("/verification/review-queue/claim", () => ({ ok: true }))).not.toThrow();
+    await app.ready();
+    await app.close();
+  });
+
+  it("does not exempt an unprefixed route that merely shares the last segments", () => {
+    const app = Fastify();
+    app.addHook("onRoute", (route) => assertRouteValidationSchemas(route));
+    expect(() => app.post("/:requestId/evidence", () => ({ ok: true }))).toThrow(
+      /missing validation schema\(s\): params, body/,
+    );
+  });
 });

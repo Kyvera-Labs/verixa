@@ -67,7 +67,14 @@ export function getOpenApiComponents(app: FastifyInstance): {
 export function enforceRegisteredRouteSchemas<TLogger extends FastifyBaseLogger>(
   app: App<TLogger>,
 ): void {
-  app.addHook("onRoute", (route: RouteOptions) => {
+  // A regular function with an explicit `this`, not an arrow: Fastify invokes
+  // the hook with `this` bound to the instance the route is being added to,
+  // and routes are added inside encapsulated plugins (`/auth`, `/admin`,
+  // `/verification`), where the schema was registered on that same scope.
+  // Checking the root `app`'s registry instead would reject every prefixed
+  // route as "referencing an unregistered schema" — the schemas are visible to
+  // the child context that registered them and to no other.
+  app.addHook("onRoute", function (this: FastifyInstance, route: RouteOptions) {
     // Routes that predate this registry declare hand-written JSON Schema and
     // opt out with `config.allowJsonSchemaValidation`; see the RBAC route
     // module. The exemption is a per-route marker rather than a URL prefix so
@@ -86,7 +93,7 @@ export function enforceRegisteredRouteSchemas<TLogger extends FastifyBaseLogger>
         throw new Error(`${method} ${route.url} ${key} must use a registered Zod schema`);
       }
       const name = ref.slice(0, -1);
-      if (!schemasByApp.get(app)?.has(name)) {
+      if (!schemasByApp.get(this)?.has(name)) {
         throw new Error(`${method} ${route.url} ${key} references unregistered schema ${name}`);
       }
     }
