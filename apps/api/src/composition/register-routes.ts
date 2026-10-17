@@ -3,7 +3,7 @@ import type { RouteRegistration } from "@verixa/shared-kernel";
 import type {
   FastifyBaseLogger,
   FastifyInstance,
-  FastifyPluginAsync,
+  FastifyPluginCallback,
   RawReplyDefaultExpression,
   RawRequestDefaultExpression,
   RawServerDefault,
@@ -29,18 +29,27 @@ export function registerContextRoutes<TLogger extends FastifyBaseLogger>(
   >,
   container: Container,
 ): void {
-  const registrations: readonly RouteRegistration<FastifyPluginAsync>[] = [
+  // Callbacks rather than `async` functions: these registrations only declare
+  // routes and never await, and an `async` wrapper would add a promise nobody
+  // consumes for the sole benefit of matching the plugin type.
+  const registrations: readonly RouteRegistration<FastifyPluginCallback>[] = [
     {
       prefix: "/auth",
-      plugin: async (scope) => registerAuthRoutes(scope, container),
+      plugin: (scope) => {
+        registerAuthRoutes(scope, container);
+      },
     },
     {
       prefix: "/admin",
-      plugin: async (scope) => registerAdminAuthorizationRoutes(scope, container.authorization),
+      plugin: (scope) => {
+        registerAdminAuthorizationRoutes(scope, container.authorization);
+      },
     },
     {
       prefix: "/verification",
-      plugin: async (scope) => registerVerificationRoutes(scope),
+      plugin: (scope) => {
+        registerVerificationRoutes(scope);
+      },
     },
   ];
 

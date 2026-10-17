@@ -1,0 +1,99 @@
+name: Dependency scan
+
+# Known-vulnerable production dependencies, caught by CI instead of by review
+# (issue 207).
+#
+# ## Why a separate workflow rather than a step in `ci.yml`
+#
+# The advisories this job acts on are published by other people, on their
+# schedule. A dependency that passed on Monday can fail on Tuesday with no
+# change to this repository, and a nightly run is the only way that becomes
+# visible without someone remembering to look. Keeping it separate means that
+# event arrives as its own red X with the scan output as the whole story,
+# rather than as a mysterious failure on an unrelated pull request.
+#
+# The pull-request trigger has the opposite job: a newly *added* dependency
+# with a known high or critical advisory fails before it is merged.
+#
+# ## Why the gate is `infra/ci/dependency-scan.mjs` and not `--audit-level`
+#
+# `pnpm audit --audit-level=high` cannot express the exception process the
+# issue requires: a maintained entry with a justification and a review date, so
+# an accepted risk is re-examined instead of being remembered forever. The
+# script reads the report, applies the exceptions, and treats an expired
+# exception as absent. `docs/security/dependency-scanning.md` is the reference
+# for the file format and the review process.
+#
+# ## Scope
+#
+# `--prod` on purpose. A high advisory in a build-only tool is a real finding,
+# but it is not shipped, and blocking every pull request on the dev-dependency
+# graph is how a security gate becomes something people route around. The
+# production graph is the one with a customer on the other end of it.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  # Nightly, so an advisory published after the merge that introduced the
+  # package still gets noticed without a pull request to hang it on. Off the
+  # hour for the same reason the container scan is: scheduled workflows for
+  # public repositories share a congested queue at round times.
+  schedule:
+    - cron: "23 3 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: dependency-scan-${{ github.ref }}
+  # A new push supersedes the previous run, except that the scheduled run must
+  # never be cancelled by someone pushing to `main` — the scheduled run is the
+  # one that catches advisories published since the last merge.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Audit production dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # `--frozen-lockfile` so the audit reads the graph this repository
+      # actually ships. Auditing a freshly resolved graph would report on
+      # versions nobody reviewed.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # `pnpm audit` exits non-zero when it finds anything at or above the
+      # audit level, and that exit code is not the gate — the report is. The
+      # file is captured either way so a finding produces an interpretable
+      # message rather than a bare non-zero step. A missing or empty report
+      # makes the next step exit 2, which fails the job rather than passing it.
+      - name: Capture the production audit report
+        run: pnpm audit --prod --json > dependency-audit.json || true
+
+      - name: Fail on unexcepted high or critical advisories
+        run: >
+          node infra/ci/dependency-scan.mjs
+          --audit dependency-audit.json
+          --exceptions infra/ci/security-exceptions.json
+
+      # Kept even when the gate passes: the report is the evidence for what the
+      # job looked at, and a nightly run whose artifact is missing cannot be
+      # audited after the fact.
+      - name: Upload the audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-audit
+          path: dependency-audit.json
+          retention-days: 30

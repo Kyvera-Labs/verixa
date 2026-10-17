@@ -8,6 +8,8 @@ import type {
   RawServerDefault,
 } from "fastify";
 import { z } from "zod";
+
+import { sendApiError } from "../http/error-response.js";
 import { registerZodSchema } from "../openapi/zod-registry.js";
 
 const submitVerificationZod = z
@@ -44,51 +46,6 @@ function routeSchemas<TLogger extends FastifyBaseLogger>(
             type: "object",
             properties: { requestId: { type: "string" }, status: { type: "string" } },
           },
-
-import { sendApiError } from "../http/error-response.js";
-
-const submitVerificationSchema = {
-  schema: {
-    description: "Submit a new verification request",
-    tags: ["Verification"],
-    body: {
-      type: "object",
-      required: ["subjectUserId", "orgId", "verificationType"],
-      additionalProperties: false,
-      properties: {
-        subjectUserId: { type: "string" },
-        orgId: { type: "string" },
-        verificationType: { type: "string" },
-      },
-    },
-    response: {
-      201: {
-        type: "object",
-        properties: {
-          requestId: { type: "string" },
-          status: { type: "string" },
-        },
-      },
-    },
-  },
-};
-
-const submitEvidenceSchema = {
-  schema: {
-    description: "Submit evidence for a verification request",
-    tags: ["Verification"],
-    params: {
-      type: "object",
-      required: ["requestId"],
-      properties: {
-        requestId: { type: "string" },
-      },
-    },
-    response: {
-      201: {
-        type: "object",
-        properties: {
-          evidenceId: { type: "string" },
         },
       },
     },
@@ -181,32 +138,19 @@ export function registerVerificationRoutes<TLogger extends FastifyBaseLogger>(
   >,
 ): void {
   const schemas = routeSchemas(fastify);
-  fastify.post("/verification", schemas.submitVerification, async (req, reply) => {
+
+  fastify.post("/", schemas.submitVerification, async (req, reply) => {
     const body = req.body as z.infer<typeof submitVerificationZod>;
-  fastify.post(
-    "/",
-    { ...submitVerificationSchema, prefixTrailingSlash: "no-slash" },
-    async (req, reply) => {
-      const body = z
-        .object({
-          subjectUserId: z.string(),
-          orgId: z.string(),
-          verificationType: z.string(),
-        })
-        .parse(req.body);
 
-      return reply.status(201).send({
-        requestId: "req_mock_123",
-        status: "pending_evidence",
-        ...body,
-      });
-    },
-  );
+    return reply.status(201).send({
+      requestId: "req_mock_123",
+      status: "pending_evidence",
+      ...body,
+    });
+  });
 
-  fastify.post("/verification/:requestId/evidence", schemas.submitEvidence, async (req, reply) => {
+  fastify.post("/:requestId/evidence", schemas.submitEvidence, async (req, reply) => {
     const params = req.params as z.infer<typeof requestIdZod>;
-  fastify.post("/:requestId/evidence", submitEvidenceSchema, async (req, reply) => {
-    const params = z.object({ requestId: z.string() }).parse(req.params);
     // `@fastify/multipart` augments the request with `file()`, but the
     // plugin is not registered yet, so the method may genuinely be absent.
     // Typed narrowly rather than cast to `any`: the shape actually relied on
@@ -219,7 +163,7 @@ export function registerVerificationRoutes<TLogger extends FastifyBaseLogger>(
     const size = data?.file ? await getStreamSize(data.file) : 1024;
 
     if (size > 10 * 1024 * 1024) {
-      sendApiError(reply as FastifyReply, "INVALID_EVIDENCE", "File size exceeds limit");
+      sendApiError(reply, "INVALID_EVIDENCE", "File size exceeds limit");
       return;
     }
 
@@ -229,24 +173,20 @@ export function registerVerificationRoutes<TLogger extends FastifyBaseLogger>(
     });
   });
 
-  fastify.get("/verification/:requestId", schemas.getStatus, async (req, reply) => {
+  fastify.get("/:requestId", schemas.getStatus, async (req, reply) => {
     const params = req.params as z.infer<typeof requestIdZod>;
-  fastify.get("/:requestId", getStatusSchema, async (req, reply) => {
-    const params = z.object({ requestId: z.string() }).parse(req.params);
     return reply.send({
       requestId: params.requestId,
       status: "pending_evidence",
     });
   });
 
-  fastify.get("/verification/review-queue", schemas.reviewQueue, async (req, reply) => {
-  fastify.get("/review-queue", reviewQueueSchema, async (req, reply) => {
+  fastify.get("/review-queue", schemas.reviewQueue, async (req, reply) => {
     if (!checkReviewer(req, reply)) return;
     return reply.send([]);
   });
 
-  fastify.post("/verification/review-queue/claim", schemas.claimCase, async (req, reply) => {
-  fastify.post("/review-queue/claim", claimCaseSchema, async (req, reply) => {
+  fastify.post("/review-queue/claim", schemas.claimCase, async (req, reply) => {
     if (!checkReviewer(req, reply)) return;
     return reply.send({
       requestId: "req_claimed_123",
@@ -254,22 +194,10 @@ export function registerVerificationRoutes<TLogger extends FastifyBaseLogger>(
     });
   });
 
-  fastify.post(
-    "/verification/review-queue/:requestId/decision",
-    schemas.decision,
-    async (req, reply) => {
-      if (!checkReviewer(req, reply)) return;
-      const params = req.params as z.infer<typeof requestIdZod>;
-      const body = req.body as z.infer<typeof decisionBodyZod>;
-  fastify.post("/review-queue/:requestId/decision", decisionSchema, async (req, reply) => {
+  fastify.post("/review-queue/:requestId/decision", schemas.decision, async (req, reply) => {
     if (!checkReviewer(req, reply)) return;
-    const params = z.object({ requestId: z.string() }).parse(req.params);
-    const body = z
-      .object({
-        decision: z.enum(["approve", "reject", "request-more-info"]),
-        reason: z.string().optional(),
-      })
-      .parse(req.body);
+    const params = req.params as z.infer<typeof requestIdZod>;
+    const body = req.body as z.infer<typeof decisionBodyZod>;
 
     const newStatus =
       body.decision === "approve"

@@ -179,6 +179,13 @@ export const NullAnchorBalanceMetricSink: AnchorBalanceMetricSink = {
  * callers treat as a failed reading rather than as zero.
  */
 export function xlmToStroops(amount: string): number | undefined {
+  // `security/detect-unsafe-regex` flags this pattern as a backtracking risk
+  // (Issue 208). It is linear on this input: the leading `\d+` is separated
+  // from the optional fractional group by a literal `.`, the fractional group
+  // is bounded to seven digits, and the anchored shape fails on the first
+  // non-digit. Reviewed rather than rewritten — an equivalent pattern without
+  // the shape rule would be less readable and no safer.
+  // eslint-disable-next-line security/detect-unsafe-regex
   const match = /^(\d+)(?:\.(\d{1,7}))?$/u.exec(amount.trim());
   if (match === null) return undefined;
 

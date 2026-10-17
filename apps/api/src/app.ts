@@ -1,15 +1,17 @@
-import { registerAdminAuthorizationRoutes } from "@verixa/authorization";
 import { fileURLToPath } from "node:url";
 
 import fastifySwagger from "@fastify/swagger";
 import fastifySwaggerUi from "@fastify/swagger-ui";
+import { registerAdminAuthorizationRoutes } from "@verixa/authorization";
 import { createLogger, type Logger } from "@verixa/shared-kernel";
 import Fastify from "fastify";
 
-import type { Container } from "./composition-root.js";
-import { registerSecurityHeaders } from "./plugins/security-headers.js";
-import { errorResponseSchema, handleApiError } from "./http/error-response.js";
 import { registerContextRoutes } from "./composition/register-routes.js";
+import type { Container } from "./composition-root.js";
+import { errorResponseSchema, handleApiError } from "./http/error-response.js";
+import { assertRouteValidationSchemas } from "./http/route-validation.js";
+import { enforceRegisteredRouteSchemas } from "./openapi/zod-registry.js";
+import { NO_CORS, registerCors, type CorsPolicy } from "./plugins/cors.js";
 import {
   NO_TRANSPORT_SECURITY,
   registerSecurityHeaders,
@@ -18,8 +20,6 @@ import {
 } from "./plugins/security-headers.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerVerificationRoutes } from "./routes/verification.js";
-import { enforceRegisteredRouteSchemas } from "./openapi/zod-registry.js";
-import { assertRouteValidationSchemas } from "./http/route-validation.js";
 
 /**
  * Re-exported so callers (and the integration suite) can name the policy
@@ -28,6 +28,13 @@ import { assertRouteValidationSchemas } from "./http/route-validation.js";
  * `package.json` for two types would be more ceremony than content.
  */
 export type { HstsDirective, SecurityHeadersOptions };
+
+/**
+ * Re-exported for the same reason the security-header types are: callers and
+ * the integration suite should be able to name the policy without reaching
+ * into `src/plugins/`.
+ */
+export type { CorsPolicy };
 
 export interface BuildAppOptions {
   readonly logger?: Logger;
@@ -56,6 +63,16 @@ export interface BuildAppOptions {
    * next to `@verixa/config`, which is the thing this package exists to avoid.
    */
   readonly securityHeaders?: SecurityHeadersOptions;
+  /**
+   * The cross-origin browser policy (Issue 204).
+   *
+   * Defaults to `NO_CORS` — an empty allowlist — for the same reason
+   * `securityHeaders` defaults to the nothing-on shape: the callers that pass
+   * nothing are in-process tests, and `server.ts` always derives this from
+   * validated configuration. Reading the environment here would create a
+   * second, unvalidated config path.
+   */
+  readonly cors?: CorsPolicy;
   /**
    * Honour `X-Forwarded-Proto` / `X-Forwarded-For` from an upstream proxy.
    *
@@ -100,10 +117,11 @@ export function buildApp(options: BuildAppOptions = {}) {
 
   // Security headers are registered before any route exists, so "all routes
   // return the configured header set" is true by construction rather than by
-  // every route remembering to ask (Issue 203). `/health` below is the proof:
-  // it is the one endpoint a deployment is most likely to expose without
+  // every route remembering to ask (Issues 203 and 213). `/health` below is the
+  // proof: it is the one endpoint a deployment is most likely to expose without
   // thinking about it.
-  registerSecurityHeaders(app);
+  registerSecurityHeaders(app, options.securityHeaders ?? NO_TRANSPORT_SECURITY);
+  registerCors(app, options.cors ?? NO_CORS);
   app.setErrorHandler(handleApiError);
   app.addSchema(errorResponseSchema);
   app.addHook("onRoute", (route) => assertRouteValidationSchemas(route));
@@ -135,12 +153,6 @@ export function buildApp(options: BuildAppOptions = {}) {
     // *does* check dependencies is a separate concern (Phase 18).
     return { status: "ok" };
   });
-
-  // Registered on `app` itself, in the same encapsulation context as every
-  // route below, so it covers `/health` and the authenticated routes alike.
-  // See the comment on `registerSecurityHeaders` for why this is not a
-  // `register()`-style plugin.
-  registerSecurityHeaders(app, options.securityHeaders ?? NO_TRANSPORT_SECURITY);
 
   if (options.container !== undefined) {
     enforceRegisteredRouteSchemas(app);

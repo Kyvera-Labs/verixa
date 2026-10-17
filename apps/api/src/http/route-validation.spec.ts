@@ -7,7 +7,7 @@ describe("route input validation", () => {
   it("rejects malformed input before a route handler runs", async () => {
     const app = Fastify();
     app.addHook("onRoute", (route) => assertRouteValidationSchemas(route));
-    const handler = vi.fn(async () => ({ accepted: true }));
+    const handler = vi.fn(() => ({ accepted: true }));
     app.post(
       "/widgets",
       {
@@ -33,7 +33,7 @@ describe("route input validation", () => {
   it("fails route registration when path parameters have no validator", () => {
     const app = Fastify();
     app.addHook("onRoute", (route) => assertRouteValidationSchemas(route));
-    expect(() => app.get("/widgets/:widgetId", async () => ({ ok: true }))).toThrow(
+    expect(() => app.get("/widgets/:widgetId", () => ({ ok: true }))).toThrow(
       /missing validation schema\(s\): params/,
     );
   });
@@ -41,7 +41,7 @@ describe("route input validation", () => {
   it("fails route registration when a write route has no body validator", () => {
     const app = Fastify();
     app.addHook("onRoute", (route) => assertRouteValidationSchemas(route));
-    expect(() => app.post("/widgets", async () => ({ ok: true }))).toThrow(
+    expect(() => app.post("/widgets", () => ({ ok: true }))).toThrow(
       /missing validation schema\(s\): body/,
     );
   });
