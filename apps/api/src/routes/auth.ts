@@ -6,12 +6,11 @@ import type {
   RawRequestDefaultExpression,
   RawServerDefault,
 } from "fastify";
+import { z } from "zod";
 
 import type { Container } from "../composition-root.js";
-import { sendDomainError, sendError } from "../http/error-response.js";
-import { registerZodSchema } from "../openapi/zod-registry.js";
-import { z } from "zod";
 import { sendApiError, sendDomainError, sendError } from "../http/error-response.js";
+import { registerZodSchema } from "../openapi/zod-registry.js";
 
 /**
  * JSON Schema for the registration body.

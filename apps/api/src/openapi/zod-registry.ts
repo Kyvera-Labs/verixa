@@ -6,8 +6,8 @@ import type {
   RawServerDefault,
   RouteOptions,
 } from "fastify";
-import { zodToJsonSchema } from "zod-to-json-schema";
 import type { ZodTypeAny } from "zod";
+import { zodToJsonSchema } from "zod-to-json-schema";
 
 type OpenApiSchema = Record<string, unknown>;
 
@@ -20,6 +20,18 @@ type App<TLogger extends FastifyBaseLogger> = FastifyInstance<
   TLogger
 >;
 
+function getOrCreateAppSchemas(app: FastifyInstance): Map<string, OpenApiSchema> {
+  // Walk up encapsulated child scopes if needed, or check if `app` already
+  // shares `getSchema` with a registered root instance.
+  const existing = schemasByApp.get(app);
+  if (existing !== undefined) {
+    return existing;
+  }
+  const created = new Map<string, OpenApiSchema>();
+  schemasByApp.set(app, created);
+  return created;
+}
+
 /** Register one Zod DTO as a reusable Fastify validator and OpenAPI component. */
 export function registerZodSchema<TLogger extends FastifyBaseLogger, TSchema extends ZodTypeAny>(
   app: App<TLogger>,
@@ -30,7 +42,7 @@ export function registerZodSchema<TLogger extends FastifyBaseLogger, TSchema ext
     throw new Error(`Invalid OpenAPI schema name: ${name}`);
   }
 
-  const appSchemas = schemasByApp.get(app) ?? new Map<string, OpenApiSchema>();
+  const appSchemas = getOrCreateAppSchemas(app);
   if (appSchemas.has(name) || app.getSchema(name) !== undefined) {
     throw new Error(`OpenAPI schema is already registered: ${name}`);
   }
@@ -42,7 +54,6 @@ export function registerZodSchema<TLogger extends FastifyBaseLogger, TSchema ext
   const component = { ...jsonSchema, $id: name };
   app.addSchema(component);
   appSchemas.set(name, component);
-  schemasByApp.set(app, appSchemas);
   return { $ref: `${name}#` };
 }
 
@@ -57,6 +68,11 @@ export function getOpenApiComponents(app: FastifyInstance): {
 export function enforceRegisteredRouteSchemas<TLogger extends FastifyBaseLogger>(
   app: App<TLogger>,
 ): void {
+  const rootSchemas = getOrCreateAppSchemas(app);
+  app.addHook("onRegister", (instance) => {
+    schemasByApp.set(instance, rootSchemas);
+  });
+
   app.addHook("onRoute", (route: RouteOptions) => {
     const schema = route.schema;
     if (schema === undefined) return;
@@ -68,7 +84,7 @@ export function enforceRegisteredRouteSchemas<TLogger extends FastifyBaseLogger>
         throw new Error(`${route.method} ${route.url} ${key} must use a registered Zod schema`);
       }
       const name = ref.slice(0, -1);
-      if (!schemasByApp.get(app)?.has(name)) {
+      if (!rootSchemas.has(name) && app.getSchema(name) === undefined) {
         throw new Error(
           `${route.method} ${route.url} ${key} references unregistered schema ${name}`,
         );

@@ -70,42 +70,49 @@ function replyError(
 }
 
 const roleParamsSchema = {
+  $id: "AdminRoleParams",
   type: "object",
   required: ["roleId"],
   additionalProperties: false,
   properties: { roleId: { type: "string", minLength: 1 } },
 } as const;
 const userParamsSchema = {
+  $id: "AdminUserParams",
   type: "object",
   required: ["userId"],
   additionalProperties: false,
   properties: { userId: { type: "string", minLength: 1 } },
 } as const;
 const assignmentParamsSchema = {
+  $id: "AdminAssignmentParams",
   type: "object",
   required: ["assignmentId"],
   additionalProperties: false,
   properties: { assignmentId: { type: "string", minLength: 1 } },
 } as const;
 const createRoleBodySchema = {
+  $id: "AdminCreateRoleBody",
   type: "object",
   required: ["name", "description"],
   additionalProperties: false,
   properties: { name: { type: "string" }, description: { type: "string" } },
 } as const;
 const updateRoleBodySchema = {
+  $id: "AdminUpdateRoleBody",
   type: "object",
   minProperties: 1,
   additionalProperties: false,
   properties: { name: { type: "string" }, description: { type: "string" } },
 } as const;
 const permissionBodySchema = {
+  $id: "AdminPermissionBody",
   type: "object",
   required: ["key"],
   additionalProperties: false,
   properties: { key: { type: "string", minLength: 1 } },
 } as const;
 const assignmentBodySchema = {
+  $id: "AdminAssignmentBody",
   type: "object",
   required: ["roleId"],
   additionalProperties: false,
@@ -116,10 +123,31 @@ const assignmentBodySchema = {
   },
 } as const;
 const assignmentQuerySchema = {
+  $id: "AdminAssignmentQuery",
   type: "object",
   additionalProperties: false,
   properties: { organizationId: { type: "string", minLength: 1 } },
 } as const;
+
+const ADMIN_SCHEMAS = [
+  roleParamsSchema,
+  userParamsSchema,
+  assignmentParamsSchema,
+  createRoleBodySchema,
+  updateRoleBodySchema,
+  permissionBodySchema,
+  assignmentBodySchema,
+  assignmentQuerySchema,
+] as const;
+
+const roleParamsRef = { $ref: "AdminRoleParams#" } as const;
+const userParamsRef = { $ref: "AdminUserParams#" } as const;
+const assignmentParamsRef = { $ref: "AdminAssignmentParams#" } as const;
+const createRoleBodyRef = { $ref: "AdminCreateRoleBody#" } as const;
+const updateRoleBodyRef = { $ref: "AdminUpdateRoleBody#" } as const;
+const permissionBodyRef = { $ref: "AdminPermissionBody#" } as const;
+const assignmentBodyRef = { $ref: "AdminAssignmentBody#" } as const;
+const assignmentQueryRef = { $ref: "AdminAssignmentQuery#" } as const;
 
 /** Registers the complete RBAC management surface. Authentication is supplied
  * by the session layer through x-user-id until the principal plugin lands. */
@@ -132,6 +160,12 @@ export function registerAdminAuthorizationRoutes<TLogger extends FastifyBaseLogg
   >,
   authorization: AuthorizationRepository,
 ): void {
+  for (const schema of ADMIN_SCHEMAS) {
+    if (app.getSchema(schema.$id) === undefined) {
+      app.addSchema(schema);
+    }
+  }
+
   const requirePermission = async (
     request: { headers: Record<string, string | string[] | undefined> },
     reply: { code: (status: number) => { send: (body: object) => unknown } },
@@ -157,8 +191,8 @@ export function registerAdminAuthorizationRoutes<TLogger extends FastifyBaseLogg
     return authorization.listRoles();
   });
   app.post<{ Body: CreateRoleBody }>(
-    "/admin/roles",
-    { schema: { body: createRoleBodySchema } },
+    "/roles",
+    { schema: { body: createRoleBodyRef } },
     async (request, reply) => {
       if (!(await requirePermission(request, reply, "roles:write"))) return;
       if (request.body.name.trim() === "" || request.body.description.trim() === "") {
@@ -176,25 +210,8 @@ export function registerAdminAuthorizationRoutes<TLogger extends FastifyBaseLogg
     },
   );
   app.patch<{ Params: RoleParams; Body: UpdateRoleBody }>(
-    "/admin/roles/:roleId",
-    { schema: { params: roleParamsSchema, body: updateRoleBodySchema } },
-  app.post<{ Body: CreateRoleBody }>("/roles", async (request, reply) => {
-    if (!(await requirePermission(request, reply, "roles:write"))) return;
-    if (request.body.name.trim() === "" || request.body.description.trim() === "") {
-      return reply.code(400).send({ error: "name and description are required" });
-    }
-    try {
-      const role = await authorization.createRole({
-        ...request.body,
-        isSystemRole: false,
-      });
-      return reply.code(201).send(role);
-    } catch (error) {
-      return replyError(reply, error);
-    }
-  });
-  app.patch<{ Params: RoleParams; Body: UpdateRoleBody }>(
     "/roles/:roleId",
+    { schema: { params: roleParamsRef, body: updateRoleBodyRef } },
     async (request, reply) => {
       if (!(await requirePermission(request, reply, "roles:write"))) return;
       try {
@@ -205,8 +222,8 @@ export function registerAdminAuthorizationRoutes<TLogger extends FastifyBaseLogg
     },
   );
   app.delete<{ Params: RoleParams }>(
-    "/admin/roles/:roleId",
-    { schema: { params: roleParamsSchema } },
+    "/roles/:roleId",
+    { schema: { params: roleParamsRef } },
     async (request, reply) => {
       if (!(await requirePermission(request, reply, "roles:write"))) return;
       try {
@@ -217,24 +234,13 @@ export function registerAdminAuthorizationRoutes<TLogger extends FastifyBaseLogg
       }
     },
   );
-  app.get("/admin/permissions", async (request, reply) => {
-  app.delete<{ Params: RoleParams }>("/roles/:roleId", async (request, reply) => {
-    if (!(await requirePermission(request, reply, "roles:write"))) return;
-    try {
-      await authorization.deleteRole(request.params.roleId);
-      return reply.code(204).send();
-    } catch (error) {
-      return replyError(reply, error);
-    }
-  });
   app.get("/permissions", async (request, reply) => {
     if (!(await requirePermission(request, reply, "roles:read"))) return;
     return authorization.listPermissions();
   });
   app.post<{ Params: RoleParams; Body: PermissionBody }>(
-    "/admin/roles/:roleId/permissions",
-    { schema: { params: roleParamsSchema, body: permissionBodySchema } },
     "/roles/:roleId/permissions",
+    { schema: { params: roleParamsRef, body: permissionBodyRef } },
     async (request, reply) => {
       if (!(await requirePermission(request, reply, "roles:write"))) return;
       try {
@@ -245,9 +251,8 @@ export function registerAdminAuthorizationRoutes<TLogger extends FastifyBaseLogg
     },
   );
   app.delete<{ Params: RoleParams; Body: PermissionBody }>(
-    "/admin/roles/:roleId/permissions",
-    { schema: { params: roleParamsSchema, body: permissionBodySchema } },
     "/roles/:roleId/permissions",
+    { schema: { params: roleParamsRef, body: permissionBodyRef } },
     async (request, reply) => {
       if (!(await requirePermission(request, reply, "roles:write"))) return;
       try {
@@ -258,9 +263,8 @@ export function registerAdminAuthorizationRoutes<TLogger extends FastifyBaseLogg
     },
   );
   app.get<{ Params: UserParams; Querystring: RoleQuery }>(
-    "/admin/users/:userId/roles",
-    { schema: { params: userParamsSchema, querystring: assignmentQuerySchema } },
     "/users/:userId/roles",
+    { schema: { params: userParamsRef, querystring: assignmentQueryRef } },
     async (request, reply) => {
       if (!(await requirePermission(request, reply, "roles:read"))) return;
       const callerOrganizationId = header(request, "x-organization-id");
@@ -275,9 +279,8 @@ export function registerAdminAuthorizationRoutes<TLogger extends FastifyBaseLogg
     },
   );
   app.post<{ Params: UserParams; Body: AssignmentBody }>(
-    "/admin/users/:userId/roles",
-    { schema: { params: userParamsSchema, body: assignmentBodySchema } },
     "/users/:userId/roles",
+    { schema: { params: userParamsRef, body: assignmentBodyRef } },
     async (request, reply) => {
       if (!(await requirePermission(request, reply, "roles:write"))) return;
       try {
@@ -289,7 +292,7 @@ export function registerAdminAuthorizationRoutes<TLogger extends FastifyBaseLogg
         }
         const targetRole = await authorization.getRole(request.body.roleId);
         if (targetRole === undefined) return reply.code(404).send({ error: "Role not found" });
-        if (actorId === request.params.userId) {
+        if (actorId !== undefined && actorId === request.params.userId) {
           const canGrant = await Promise.all(
             targetRole.permissions.map((permission) =>
               authorization.hasPermission(
@@ -315,9 +318,8 @@ export function registerAdminAuthorizationRoutes<TLogger extends FastifyBaseLogg
     },
   );
   app.delete<{ Params: { assignmentId: string } }>(
-    "/admin/user-role-assignments/:assignmentId",
-    { schema: { params: assignmentParamsSchema } },
     "/user-role-assignments/:assignmentId",
+    { schema: { params: assignmentParamsRef } },
     async (request, reply) => {
       if (!(await requirePermission(request, reply, "roles:write"))) return;
       try {

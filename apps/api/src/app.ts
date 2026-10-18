@@ -1,4 +1,3 @@
-import { registerAdminAuthorizationRoutes } from "@verixa/authorization";
 import { fileURLToPath } from "node:url";
 
 import fastifySwagger from "@fastify/swagger";
@@ -7,19 +6,16 @@ import { createLogger, type Logger } from "@verixa/shared-kernel";
 import Fastify from "fastify";
 
 import type { Container } from "./composition-root.js";
-import { registerSecurityHeaders } from "./plugins/security-headers.js";
-import { errorResponseSchema, handleApiError } from "./http/error-response.js";
 import { registerContextRoutes } from "./composition/register-routes.js";
+import { errorResponseSchema, handleApiError } from "./http/error-response.js";
+import { assertRouteValidationSchemas } from "./http/route-validation.js";
+import { enforceRegisteredRouteSchemas } from "./openapi/zod-registry.js";
 import {
-  NO_TRANSPORT_SECURITY,
+  DEFAULT_SECURITY_HEADERS_OPTIONS,
   registerSecurityHeaders,
   type HstsDirective,
   type SecurityHeadersOptions,
 } from "./plugins/security-headers.js";
-import { registerAuthRoutes } from "./routes/auth.js";
-import { registerVerificationRoutes } from "./routes/verification.js";
-import { enforceRegisteredRouteSchemas } from "./openapi/zod-registry.js";
-import { assertRouteValidationSchemas } from "./http/route-validation.js";
 
 /**
  * Re-exported so callers (and the integration suite) can name the policy
@@ -103,7 +99,7 @@ export function buildApp(options: BuildAppOptions = {}) {
   // every route remembering to ask (Issue 203). `/health` below is the proof:
   // it is the one endpoint a deployment is most likely to expose without
   // thinking about it.
-  registerSecurityHeaders(app);
+  registerSecurityHeaders(app, options.securityHeaders ?? DEFAULT_SECURITY_HEADERS_OPTIONS);
   app.setErrorHandler(handleApiError);
   app.addSchema(errorResponseSchema);
   app.addHook("onRoute", (route) => assertRouteValidationSchemas(route));
@@ -136,19 +132,8 @@ export function buildApp(options: BuildAppOptions = {}) {
     return { status: "ok" };
   });
 
-  // Registered on `app` itself, in the same encapsulation context as every
-  // route below, so it covers `/health` and the authenticated routes alike.
-  // See the comment on `registerSecurityHeaders` for why this is not a
-  // `register()`-style plugin.
-  registerSecurityHeaders(app, options.securityHeaders ?? NO_TRANSPORT_SECURITY);
-
   if (options.container !== undefined) {
     enforceRegisteredRouteSchemas(app);
-    registerAuthRoutes(app, options.container);
-    registerAdminAuthorizationRoutes(app, options.container.authorization);
-    // Takes only the Fastify instance: this route group resolves what it
-    // needs from the request rather than from the container.
-    registerVerificationRoutes(app);
     registerContextRoutes(app, options.container);
   }
 
