@@ -2,10 +2,9 @@ import Fastify from "fastify";
 import supertest from "supertest";
 import { describe, expect, it } from "vitest";
 
-import type {
-  AuthorizationRepository,
-  RoleRecord,
-} from "../../application/authorization-repository.js";
+import type { AuthorizationRepository } from "../application/authorization-repository.js";
+import type { RoleRecord } from "../domain/authorization.js";
+
 import { registerAdminAuthorizationRoutes } from "./admin-roles.routes.js";
 
 function createMockAuthorizationRepository(): AuthorizationRepository {
@@ -14,69 +13,55 @@ function createMockAuthorizationRepository(): AuthorizationRepository {
     id: "role_alpha",
     name: "alpha-admin",
     description: "Alpha org admin",
-    organizationId: "org_alpha",
     isSystemRole: false,
     permissions: ["roles:read", "roles:write"],
-    createdAt: new Date(),
-    updatedAt: new Date(),
   });
   roles.set("role_beta", {
     id: "role_beta",
     name: "beta-admin",
     description: "Beta org admin",
-    organizationId: "org_beta",
     isSystemRole: false,
     permissions: ["roles:read", "roles:write"],
-    createdAt: new Date(),
-    updatedAt: new Date(),
   });
 
   return {
-    hasPermission: async (userId: string, orgId: string | null, _permission: string) => {
-      // User belongs to org_alpha
-      if (userId === "usr_alpha" && (orgId === "org_alpha" || orgId === null)) return true;
-      if (userId === "usr_beta" && (orgId === "org_beta" || orgId === null)) return true;
-      return false;
-    },
-    listRoles: async (orgId?: string) => {
-      return Array.from(roles.values()).filter(
-        (r) => orgId === undefined || r.organizationId === orgId,
-      );
-    },
-    createRole: async (input) => {
+    hasPermission: (userId: string, orgId: string | null) =>
+      // User belongs to org_alpha or org_beta respectively.
+      Promise.resolve(
+        (userId === "usr_alpha" && (orgId === "org_alpha" || orgId === null)) ||
+          (userId === "usr_beta" && (orgId === "org_beta" || orgId === null)),
+      ),
+    // Roles are global in this RBAC model; organisation scoping lives on
+    // assignments, which is what the routes under test check.
+    listRoles: () => Promise.resolve(Array.from(roles.values())),
+    createRole: (input) => {
       const record: RoleRecord = {
         id: `role_${Date.now()}`,
         name: input.name,
         description: input.description,
-        organizationId: input.organizationId ?? null,
         isSystemRole: input.isSystemRole,
         permissions: [],
-        createdAt: new Date(),
-        updatedAt: new Date(),
       };
       roles.set(record.id, record);
-      return record;
+      return Promise.resolve(record);
     },
-    getRole: async (roleId: string) => roles.get(roleId),
-    updateRole: async (roleId: string, input) => {
+    getRole: (roleId: string) => Promise.resolve(roles.get(roleId)),
+    updateRole: (roleId: string, input) => {
       const existing = roles.get(roleId);
-      if (!existing) throw new Error("Role not found");
-      const updated = { ...existing, ...input, updatedAt: new Date() };
+      if (!existing) return Promise.reject(new Error("Role not found"));
+      const updated = { ...existing, ...input };
       roles.set(roleId, updated);
-      return updated;
+      return Promise.resolve(updated);
     },
-    deleteRole: async (roleId: string) => {
+    deleteRole: (roleId: string) => {
       roles.delete(roleId);
+      return Promise.resolve();
     },
-    listPermissions: async () => [],
-    grantPermission: async (_roleId, _key) => {
-      throw new Error("Not implemented in mock");
-    },
-    revokePermission: async (_roleId, _key) => {
-      throw new Error("Not implemented in mock");
-    },
-    listAssignments: async (userId: string, orgId?: string) => {
-      return [
+    listPermissions: () => Promise.resolve([]),
+    grantPermission: () => Promise.reject(new Error("Not implemented in mock")),
+    revokePermission: () => Promise.reject(new Error("Not implemented in mock")),
+    listAssignments: (userId: string, orgId?: string) =>
+      Promise.resolve([
         {
           id: `asgn_${userId}`,
           userId,
@@ -87,10 +72,9 @@ function createMockAuthorizationRepository(): AuthorizationRepository {
           expiresAt: null,
           role: roles.get("role_alpha")!,
         },
-      ];
-    },
-    assignRole: async (input) => {
-      return {
+      ]),
+    assignRole: (input) =>
+      Promise.resolve({
         id: "asgn_new",
         userId: input.userId,
         roleId: input.roleId,
@@ -99,9 +83,8 @@ function createMockAuthorizationRepository(): AuthorizationRepository {
         assignedAt: new Date(),
         expiresAt: input.expiresAt,
         role: roles.get(input.roleId)!,
-      };
-    },
-    revokeAssignment: async (_assignmentId: string) => {},
+      }),
+    revokeAssignment: () => Promise.resolve(),
   };
 }
 
@@ -111,7 +94,7 @@ describe("BOLA regression test across admin authorization routes", () => {
     const repo = createMockAuthorizationRepository();
     // Mounted at /admin prefix as done in composition root
     app.register(
-      async (scope) => {
+      (scope) => {
         registerAdminAuthorizationRoutes(scope, repo);
       },
       { prefix: "/admin" },

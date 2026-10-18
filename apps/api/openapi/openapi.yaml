@@ -81,7 +81,7 @@ paths:
             type: string
             format: date-time
       responses:
-        '200':
+        "200":
           description: Paginated audit event list
           content:
             application/json:
@@ -94,14 +94,13 @@ paths:
                     items:
                       type: object
                   nextCursor:
-                    type: string
-                    nullable: true
+                    type: [string, "null"]
                   hasMore:
                     type: boolean
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '403':
-          $ref: '#/components/responses/Forbidden'
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /v1/audit/export:
     get:
       tags:
@@ -140,7 +139,7 @@ paths:
             type: string
             format: date-time
       responses:
-        '200':
+        "200":
           description: Streamed audit log
           content:
             text/csv:
@@ -149,10 +148,10 @@ paths:
             application/x-ndjson:
               schema:
                 type: string
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '403':
-          $ref: '#/components/responses/Forbidden'
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 components:
   securitySchemes:
     bearerAuth:

@@ -1,5 +1,5 @@
+import type { Organization, OrganizationId, User } from "@verixa/identity";
 import { asId, Result } from "@verixa/shared-kernel";
-import type { Organization, OrganizationId, User, UserId } from "@verixa/identity";
 
 import type { Container } from "../../composition-root.js";
 

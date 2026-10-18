@@ -45,7 +45,7 @@ function captureLogs() {
 const REPORT = {
   "csp-report": {
     "document-uri": "https://verixa.example/docs",
-    "referrer": "",
+    referrer: "",
     "blocked-uri": "https://evil.example/script.js",
     "violated-directive": "script-src 'self' 'nonce-abc'",
     "effective-directive": "script-src",

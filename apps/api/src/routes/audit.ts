@@ -1,18 +1,8 @@
-import {
-  AUDIT_EXPORT_HEADER,
-  AuditAccessDeniedError,
-  AuditReadNotRecordedError,
-  type AuditExportFormat,
-  type AuditLogEntry,
-  type AuditReader,
-  type ExportAuditEvents,
-  type QueryAuditEvents,
-} from "@verixa/audit";
+import { AUDIT_EXPORT_HEADER, type AuditLogEntry, type AuditReader } from "@verixa/audit";
 import { Result } from "@verixa/shared-kernel";
 import type {
   FastifyBaseLogger,
   FastifyInstance,
-  FastifyReply,
   FastifyRequest,
   RawReplyDefaultExpression,
   RawRequestDefaultExpression,
@@ -23,7 +13,7 @@ import { z } from "zod";
 import type { Container } from "../composition-root.js";
 import { sendApiError, sendDomainError, sendError } from "../http/error-response.js";
 import { registerZodSchema } from "../openapi/zod-registry.js";
-import { decodeCursor, encodeCursor, sanitizeLimit } from "../pagination/cursor-pagination.js";
+import { sanitizeLimit } from "../pagination/cursor-pagination.js";
 
 /**
  * Query schema for GET /v1/audit

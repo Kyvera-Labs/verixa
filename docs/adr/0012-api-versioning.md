@@ -34,7 +34,7 @@ As APIs evolve, schema contracts, parameter semantics, and response envelopes wi
 ## Alternatives Considered
 
 - **Header / Content-Negotiation Versioning (`Accept: application/vnd.verixa.v1+json`)**:
-  - *Tradeoff*: Header versioning is often cited as "RESTfully pure" because the URI identifies the resource while headers specify the representation.
-  - *Why rejected*: Headers are invisible in browser address bars, cumbersome to test via simple curl/tools, and easily stripped or mishandled by intermediate proxies, CDNs, and client libraries. URI-path versioning makes the version boundary obvious, debuggable, and bookmarkable.
+  - _Tradeoff_: Header versioning is often cited as "RESTfully pure" because the URI identifies the resource while headers specify the representation.
+  - _Why rejected_: Headers are invisible in browser address bars, cumbersome to test via simple curl/tools, and easily stripped or mishandled by intermediate proxies, CDNs, and client libraries. URI-path versioning makes the version boundary obvious, debuggable, and bookmarkable.
 - **Query Parameter Versioning (`?v=1`)**:
-  - *Why rejected*: Query parameters can easily be omitted, conflict with pagination/filtering parameters, and encourage sloppy client configurations.
+  - _Why rejected_: Query parameters can easily be omitted, conflict with pagination/filtering parameters, and encourage sloppy client configurations.

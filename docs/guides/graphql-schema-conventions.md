@@ -6,7 +6,9 @@ This document establishes the schema design principles, naming conventions, and 
 
 ## 1. Schema-First Design (SDL-First Contract)
 
-In Verixa, GraphQL schemas are authored as `.graphql` Schema Definition Language (SDL) files in `apps/api/src/graphql/schema/`.
+In Verixa, GraphQL schemas are authored as `.graphql` Schema Definition Language (SDL) files in `apps/api/graphql/`.
+
+They live outside `src/` for the same reason `apps/api/openapi/` does: `tsc` copies only TypeScript into `dist/`, so a schema file under `src/` is missing when the built server starts. `graphql/server.ts` reads them with a path that resolves to this folder from both `src/` and `dist/`. (Older planning issues name `apps/api/src/graphql/schema/`; use `apps/api/graphql/` instead.)
 
 ### Why Schema-First Over Code-First
 

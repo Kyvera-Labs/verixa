@@ -59,6 +59,8 @@ import {
   WebAuthnAttestationVerifier,
 } from "@verixa/mfa";
 import {
+  BruteForcePolicy,
+  InMemoryBruteForceAttemptStore,
   InMemoryEventPublisher,
   NoopRateLimiter,
   type DomainEventPublisher,
@@ -347,6 +349,9 @@ export function buildContainer(
   const credentialNotifier = new NullCredentialNotifier();
   const sessionRevoker = new NoSessionsRevoker();
   const rateLimiter = new NoopRateLimiter();
+  // Counts failures the per-credential lockout cannot see (unknown addresses,
+  // password spraying). In-memory and per process until Phase 15's durable store.
+  const bruteForceAttempts = new BruteForcePolicy(new InMemoryBruteForceAttemptStore());
 
   // Audit recording. Failures are logged and never propagated -- see
   // RecordAuditEvent on why a failed audit write must not fail the operation
@@ -476,6 +481,9 @@ export function buildContainer(
         credentialsUnitOfWork,
         passwordHasher,
         rateLimiter,
+        DEFAULT_LOCKOUT_POLICY,
+        undefined, // no MFA checker wired yet
+        bruteForceAttempts,
       ),
       requestEmailVerification: new RequestEmailVerification(
         credentialsUnitOfWork,
@@ -492,6 +500,9 @@ export function buildContainer(
         passwordHasher,
         sessionRevoker,
         rateLimiter,
+        undefined, // password policy: the default
+        undefined, // password history policy: the default
+        bruteForceAttempts,
       ),
     },
     audit: {

@@ -1,6 +1,6 @@
+import type { ApiKeyRepository } from "../../application/ports/api-key-repository.js";
 import type { ApiKey, ApiKeyId } from "../../domain/entities/api-key.js";
 import type { OrganizationId } from "../../domain/entities/organization.js";
-import type { ApiKeyRepository } from "../../application/ports/api-key-repository.js";
 
 /**
  * In-memory ApiKeyRepository for testing without a database.

@@ -1,7 +1,7 @@
 import { Email, type User, type UserStatus } from "@verixa/identity";
 import type { MfaEnforcementLevel } from "@verixa/mfa";
 import { AccountLockedError, AuthenticationError, Result } from "@verixa/shared-kernel";
-import type { RateLimiter, RateLimitKey } from "@verixa/shared-kernel";
+import type { BruteForcePolicy, RateLimiter, RateLimitKey } from "@verixa/shared-kernel";
 
 import type { Credential } from "../../domain/entities/credential.js";
 import {
@@ -161,6 +161,13 @@ export class AuthenticateWithPassword {
     private readonly rateLimiter: RateLimiter,
     private readonly lockoutPolicy: LockoutPolicy = DEFAULT_LOCKOUT_POLICY,
     private readonly mfaChecker?: MfaChecker,
+    /**
+     * Optional, and that is the point: a deployment without a shared store
+     * still has the per-credential lockout, and every existing caller stays
+     * valid. When it is supplied it covers the failures the row-level counter
+     * cannot see.
+     */
+    private readonly bruteForce?: BruteForcePolicy,
   ) {}
 
   async execute(
@@ -178,6 +185,23 @@ export class AuthenticateWithPassword {
         `Rate limit exceeded for ${rateLimitKey.action} on ${rateLimitKey.identifier}. ` +
           `Resets at ${new Date(limitResult.resetAt).toISOString()}`,
       );
+    }
+
+    // Before the email is parsed or any row is read. The attempts this gate
+    // exists to throttle are the ones that never reach a credential, so a
+    // check after the lookup would spend exactly the read the throttle is
+    // meant to save.
+    //
+    // A refusal is reported as an ordinary failed login, and still burns the
+    // decoy hash. The response is therefore indistinguishable from any other
+    // failure — which is what keeps this gate from becoming the enumeration
+    // oracle the rest of this use case works to remove.
+    if (this.bruteForce !== undefined) {
+      const gate = await this.bruteForce.check("login", command.email);
+      if (!gate.allowed) {
+        await this.burnTime(command.password);
+        return Result.err(new AuthenticationError());
+      }
     }
 
     // A malformed address is not a validation error here, unlike everywhere

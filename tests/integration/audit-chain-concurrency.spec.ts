@@ -214,8 +214,8 @@ describe.skipIf(!available)("audit query index usage (Issue 188)", () => {
    * `actor_id::text`. Casting the parameter instead of the column is what
    * makes this measure the schema.
    */
-  async function explain(sql: string, ...params: unknown[]): Promise<string> {
-    const rows = await prisma.$queryRawUnsafe<PlanRow[]>(`EXPLAIN ${sql}`, ...params);
+  async function explain(statement: string, ...params: unknown[]): Promise<string> {
+    const rows = await prisma.$queryRawUnsafe<PlanRow[]>(statement, ...params);
     return rows.map((row) => row["QUERY PLAN"]).join("\n");
   }
 
@@ -262,7 +262,7 @@ describe.skipIf(!available)("audit query index usage (Issue 188)", () => {
 
   it("filters by actor using the (actor_id, sequence) index", async () => {
     const plan = await explain(
-      "SELECT * FROM audit_log_entries WHERE sequence >= $1::int AND actor_id = $2::uuid ORDER BY sequence ASC LIMIT 50",
+      "EXPLAIN SELECT * FROM audit_log_entries WHERE sequence >= $1::int AND actor_id = $2::uuid ORDER BY sequence ASC LIMIT 50",
       1,
       TARGET_ACTOR_ID,
     );
@@ -279,7 +279,7 @@ describe.skipIf(!available)("audit query index usage (Issue 188)", () => {
 
   it("filters by subject using the (subject_id, sequence) index", async () => {
     const plan = await explain(
-      "SELECT * FROM audit_log_entries WHERE sequence >= $1::int AND subject_id = $2::uuid ORDER BY sequence ASC LIMIT 50",
+      "EXPLAIN SELECT * FROM audit_log_entries WHERE sequence >= $1::int AND subject_id = $2::uuid ORDER BY sequence ASC LIMIT 50",
       1,
       TARGET_SUBJECT_ID,
     );
@@ -289,7 +289,7 @@ describe.skipIf(!available)("audit query index usage (Issue 188)", () => {
 
   it("filters by action using the (action, sequence) index", async () => {
     const plan = await explain(
-      "SELECT * FROM audit_log_entries WHERE sequence >= $1::int AND action = $2::text ORDER BY sequence ASC LIMIT 50",
+      "EXPLAIN SELECT * FROM audit_log_entries WHERE sequence >= $1::int AND action = $2::text ORDER BY sequence ASC LIMIT 50",
       1,
       TARGET_ACTION,
     );
@@ -305,7 +305,7 @@ describe.skipIf(!available)("audit query index usage (Issue 188)", () => {
     );
 
     const plan = await explain(
-      "SELECT * FROM audit_log_entries WHERE sequence >= $1::int AND occurred_at >= $2::timestamptz ORDER BY sequence ASC LIMIT 50",
+      "EXPLAIN SELECT * FROM audit_log_entries WHERE sequence >= $1::int AND occurred_at >= $2::timestamptz ORDER BY sequence ASC LIMIT 50",
       1,
       windowStart,
     );
@@ -319,7 +319,7 @@ describe.skipIf(!available)("audit query index usage (Issue 188)", () => {
 
   it("walks the keyset via the unique sequence index", async () => {
     const plan = await explain(
-      "SELECT * FROM audit_log_entries WHERE sequence >= $1::int ORDER BY sequence ASC LIMIT 50",
+      "EXPLAIN SELECT * FROM audit_log_entries WHERE sequence >= $1::int ORDER BY sequence ASC LIMIT 50",
       ROW_COUNT - 100,
     );
 

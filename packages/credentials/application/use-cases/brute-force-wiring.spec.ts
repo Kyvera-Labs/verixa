@@ -1,4 +1,9 @@
-import { BruteForcePolicy, InMemoryBruteForceAttemptStore, Result } from "@verixa/shared-kernel";
+import {
+  BruteForcePolicy,
+  InMemoryBruteForceAttemptStore,
+  NoopRateLimiter,
+  Result,
+} from "@verixa/shared-kernel";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { PasswordResetToken } from "../../domain/entities/password-reset-token.js";
@@ -52,7 +57,11 @@ describe("AuthenticateWithPassword with a brute-force gate", () => {
     store = new InMemoryBruteForceAttemptStore();
 
     const hasher = new Argon2PasswordHasher(FAST);
-    const registered = await new RegisterUserWithPassword(unitOfWork, hasher).execute({
+    const registered = await new RegisterUserWithPassword(
+      unitOfWork,
+      hasher,
+      new NoopRateLimiter(),
+    ).execute({
       email: EMAIL,
       displayName: "Alice",
       password: PASSWORD,
@@ -65,7 +74,9 @@ describe("AuthenticateWithPassword with a brute-force gate", () => {
     const useCase = new AuthenticateWithPassword(
       counting.unit,
       new Argon2PasswordHasher(FAST),
+      new NoopRateLimiter(),
       DEFAULT_LOCKOUT_POLICY,
+      undefined,
       new BruteForcePolicy(store, { threshold }),
     );
     return { counting, useCase };
@@ -164,6 +175,8 @@ describe("ConfirmPasswordReset with a brute-force gate", () => {
       counting.unit,
       new Argon2PasswordHasher(FAST),
       { revokeAllForUser: () => Promise.resolve() },
+      new NoopRateLimiter(),
+      undefined,
       undefined,
       new BruteForcePolicy(store, { threshold }),
     );

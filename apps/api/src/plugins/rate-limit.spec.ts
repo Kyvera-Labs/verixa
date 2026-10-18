@@ -1,8 +1,14 @@
 import Fastify from "fastify";
-import { describe, expect, it } from "vitest";
 import supertest from "supertest";
-import { registerRateLimit } from "./rate-limit.js";
+import { describe, expect, it } from "vitest";
+
 import { handleApiError } from "../http/error-response.js";
+
+import { registerRateLimit } from "./rate-limit.js";
+
+interface ApiErrorBody {
+  error: { code: string; message: string; requestId?: string };
+}
 
 describe("rateLimitPlugin", () => {
   it("enforces default global rate limit per principal", async () => {
@@ -13,7 +19,7 @@ describe("rateLimitPlugin", () => {
       defaultTimeWindowMs: 10_000,
     });
 
-    app.get("/test", async () => ({ status: "ok" }));
+    app.get("/test", () => ({ status: "ok" }));
     await app.ready();
 
     // First request - allowed
@@ -30,7 +36,7 @@ describe("rateLimitPlugin", () => {
     const res3 = await supertest(app.server).get("/test").set("x-user-id", "user_1");
     expect(res3.status).toBe(429);
     expect(res3.headers["retry-after"]).toBeDefined();
-    expect(res3.body.error.code).toBe("RATE_LIMITED");
+    expect((res3.body as ApiErrorBody).error.code).toBe("RATE_LIMITED");
 
     // Different user with same IP is not affected
     const resDifferentUser = await supertest(app.server).get("/test").set("x-user-id", "user_2");
@@ -57,7 +63,7 @@ describe("rateLimitPlugin", () => {
           },
         },
       },
-      async () => ({ status: "ok" }),
+      () => ({ status: "ok" }),
     );
     await app.ready();
 
@@ -67,7 +73,7 @@ describe("rateLimitPlugin", () => {
     const res2 = await supertest(app.server).post("/auth/sensitive").set("x-api-key", "key_abc");
     expect(res2.status).toBe(429);
     expect(res2.headers["retry-after"]).toBeDefined();
-    expect(res2.body.error.code).toBe("RATE_LIMITED");
+    expect((res2.body as ApiErrorBody).error.code).toBe("RATE_LIMITED");
 
     await app.close();
   });

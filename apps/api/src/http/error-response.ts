@@ -139,6 +139,7 @@ export function handleApiError(
     401: "AUTHENTICATION_FAILED",
     403: "FORBIDDEN",
     409: "CONFLICT",
+    413: "PAYLOAD_TOO_LARGE",
     429: "RATE_LIMITED",
   } as const;
   if (error.statusCode !== undefined && error.statusCode in frameworkStatusCodes) {
@@ -147,6 +148,7 @@ export function handleApiError(
       AUTHENTICATION_FAILED: "Authentication failed.",
       FORBIDDEN: "Permission denied.",
       CONFLICT: "Request conflicts with the current resource state.",
+      PAYLOAD_TOO_LARGE: "Request body is too large.",
       RATE_LIMITED: "Too many requests.",
     } as const;
     sendApiError(reply, code, messages[code]);

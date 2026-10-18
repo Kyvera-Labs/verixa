@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+
 import type {
   FastifyBaseLogger,
   FastifyInstance,
@@ -9,6 +10,7 @@ import type {
   RawServerDefault,
 } from "fastify";
 import type { Redis } from "ioredis";
+
 import { sendApiError } from "../http/error-response.js";
 
 export const IDEMPOTENCY_HEADER = "idempotency-key";

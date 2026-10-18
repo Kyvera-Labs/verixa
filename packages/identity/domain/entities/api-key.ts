@@ -1,4 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+
 import {
   createId,
   type DomainEvent,
@@ -8,6 +9,7 @@ import {
 } from "@verixa/shared-kernel";
 
 import { ApiKeyCreated } from "../events/api-key-created.js";
+
 import type { OrganizationId } from "./organization.js";
 
 export type ApiKeyId = Id<"ApiKeyId">;
@@ -111,9 +113,7 @@ export class ApiKey {
       expiresAt: params.expiresAt,
       createdAt: now,
       revokedAt: undefined,
-      domainEvents: [
-        new ApiKeyCreated(id, params.organizationId, trimmedName, keyPreview, scopes),
-      ],
+      domainEvents: [new ApiKeyCreated(id, params.organizationId, trimmedName, keyPreview, scopes)],
     });
 
     return Result.ok({ apiKey, rawKey });

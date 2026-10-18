@@ -17,7 +17,7 @@ describe("GraphQL Server Bootstrap (Issue 182 / Roadmap 241)", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    const body = response.json();
+    const body = response.json<unknown>();
     expect(body).toEqual({
       data: {
         __typename: "Query",
@@ -40,7 +40,7 @@ describe("GraphQL Server Bootstrap (Issue 182 / Roadmap 241)", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    const body = response.json();
+    const body = response.json<unknown>();
     expect(body).toEqual({
       data: {
         _service: "verixa-api",
@@ -50,8 +50,6 @@ describe("GraphQL Server Bootstrap (Issue 182 / Roadmap 241)", () => {
     await app.close();
   });
 
-  it("propagates correlation-id header on GraphQL responses", async () => {
-    const app = Fastify({ logger: false });
   it("propagates correlation-id header on GraphQL responses", async () => {
     const app = Fastify({ logger: false });
     // Simulate correlation ID hook
@@ -81,7 +79,7 @@ describe("GraphQL Server Bootstrap (Issue 182 / Roadmap 241)", () => {
 
   it("mounts alongside other routes without conflict", async () => {
     const app = Fastify({ logger: false });
-    app.get("/health", async () => ({ status: "ok" }));
+    app.get("/health", () => ({ status: "ok" }));
     await registerGraphQLServer(app);
     await app.ready();
 
@@ -99,7 +97,7 @@ describe("GraphQL Server Bootstrap (Issue 182 / Roadmap 241)", () => {
       headers: { "content-type": "application/json" },
     });
     expect(gqlRes.statusCode).toBe(200);
-    expect(gqlRes.json().data.__typename).toBe("Query");
+    expect(gqlRes.json<{ data: { __typename: string } }>().data.__typename).toBe("Query");
 
     await app.close();
   });

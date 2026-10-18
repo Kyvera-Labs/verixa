@@ -6,13 +6,17 @@ import {
   QueryAuditEvents,
   RecordAuditEvent,
 } from "@verixa/audit";
+// `./testing` is the package's published test entry point (AuditLogEntry.append), not an internal path.
+// eslint-disable-next-line no-restricted-imports
 import { AuditLogEntry } from "@verixa/audit/testing";
-import Fastify from "fastify";
+import Fastify, { type FastifyInstance } from "fastify";
 import supertest from "supertest";
 import { beforeEach, describe, expect, it } from "vitest";
 
+import type { Container } from "../composition-root.js";
 import { handleApiError } from "../http/error-response.js";
 import { versioning } from "../plugins/versioning.js";
+
 import { registerAuditRoutes } from "./audit.js";
 
 function makeChain(count: number, orgId: string, actorId = "user-1"): AuditLogEntry[] {
@@ -30,11 +34,21 @@ function makeChain(count: number, orgId: string, actorId = "user-1"): AuditLogEn
   return chain;
 }
 
+interface ApiErrorBody {
+  error: { code: string; message: string; requestId?: string };
+}
+
+interface AuditPage {
+  items: unknown[];
+  hasMore: boolean;
+  nextCursor: string | null;
+}
+
 describe("Audit REST routes", () => {
   let auditLog: InMemoryAuditLogRepository;
   let eventReader: InMemoryAuditEventReader;
   let recordAuditEvent: RecordAuditEvent;
-  let app: ReturnType<typeof Fastify>;
+  let app: FastifyInstance;
 
   beforeEach(async () => {
     auditLog = new InMemoryAuditLogRepository();
@@ -48,25 +62,15 @@ describe("Audit REST routes", () => {
     app.setErrorHandler(handleApiError);
     await app.register(versioning);
 
+    // The audit routes read only `container.audit`; nothing else is built.
+    const container = {
+      audit: { recordEvent: recordAuditEvent, anchor: undefined, queryEvents, exportEvents },
+    } as unknown as Container;
+
     // Register under /v1/audit
     await app.register(
-      async (scope) => {
-        registerAuditRoutes(scope, {
-          prisma: {} as any,
-          eventPublisher: {} as any,
-          identity: {} as any,
-          credentials: {} as any,
-          authorization: {} as any,
-          mfa: {} as any,
-          dispose: async () => {},
-          audit: {
-            recordEvent: recordAuditEvent,
-            verifyChain: {} as any,
-            anchor: undefined,
-            queryEvents,
-            exportEvents,
-          },
-        });
+      (scope) => {
+        registerAuditRoutes(scope, container);
       },
       { prefix: "/v1/audit" },
     );
@@ -88,9 +92,9 @@ describe("Audit REST routes", () => {
         .set("x-permissions", AUDIT_PERMISSIONS.query);
 
       expect(res.status).toBe(200);
-      expect(res.body.items).toHaveLength(2);
-      expect(res.body.hasMore).toBe(false);
-      expect(res.body.nextCursor).toBeNull();
+      expect((res.body as AuditPage).items).toHaveLength(2);
+      expect((res.body as AuditPage).hasMore).toBe(false);
+      expect((res.body as AuditPage).nextCursor).toBeNull();
     });
 
     it("rejects unauthorized read without audit:query permission with 403", async () => {
@@ -103,7 +107,7 @@ describe("Audit REST routes", () => {
         .set("x-permissions", "other:perm");
 
       expect(res.status).toBe(403);
-      expect(res.body.error.code).toBe("AUDIT_ACCESS_DENIED");
+      expect((res.body as ApiErrorBody).error.code).toBe("AUDIT_ACCESS_DENIED");
     });
 
     it("supports cursor pagination with limit", async () => {
@@ -117,19 +121,19 @@ describe("Audit REST routes", () => {
         .set("x-permissions", AUDIT_PERMISSIONS.query);
 
       expect(res1.status).toBe(200);
-      expect(res1.body.items).toHaveLength(2);
-      expect(res1.body.hasMore).toBe(true);
-      expect(res1.body.nextCursor).toBeTruthy();
+      expect((res1.body as AuditPage).items).toHaveLength(2);
+      expect((res1.body as AuditPage).hasMore).toBe(true);
+      expect((res1.body as AuditPage).nextCursor).toBeTruthy();
 
       const res2 = await supertest(app.server)
-        .get(`/v1/audit?cursor=${res1.body.nextCursor}&limit=2`)
+        .get(`/v1/audit?cursor=${String((res1.body as AuditPage).nextCursor)}&limit=2`)
         .set("x-actor-id", "auditor-1")
         .set("x-org-id", "org-test")
         .set("x-permissions", AUDIT_PERMISSIONS.query);
 
       expect(res2.status).toBe(200);
-      expect(res2.body.items).toHaveLength(1);
-      expect(res2.body.hasMore).toBe(false);
+      expect((res2.body as AuditPage).items).toHaveLength(1);
+      expect((res2.body as AuditPage).hasMore).toBe(false);
     });
   });
 
@@ -146,7 +150,9 @@ describe("Audit REST routes", () => {
 
       expect(res.status).toBe(200);
       expect(res.headers["content-type"]).toContain("text/csv");
-      expect(res.text).toContain("sequence,action,actor_id,subject_id,occurred_at,previous_hash,hash,metadata");
+      expect(res.text).toContain(
+        "sequence,action,actor_id,subject_id,occurred_at,previous_hash,hash,metadata",
+      );
       expect(res.text).toContain("user-1");
     });
 
@@ -173,7 +179,7 @@ describe("Audit REST routes", () => {
         .set("x-permissions", AUDIT_PERMISSIONS.query); // has query but NOT export
 
       expect(res.status).toBe(403);
-      expect(res.body.error.code).toBe("AUDIT_ACCESS_DENIED");
+      expect((res.body as ApiErrorBody).error.code).toBe("AUDIT_ACCESS_DENIED");
     });
   });
 });

@@ -99,7 +99,12 @@ export { InMemoryOrganizationMembershipRepository } from "./infrastructure/testi
 export { InMemoryUnitOfWork } from "./infrastructure/testing/in-memory-unit-of-work.js";
 
 // ApiKey exports
-export { ApiKey, type ApiKeyId, type ApiKeyStatus, type IssuedApiKey } from "./domain/entities/api-key.js";
+export {
+  ApiKey,
+  type ApiKeyId,
+  type ApiKeyStatus,
+  type IssuedApiKey,
+} from "./domain/entities/api-key.js";
 export { ApiKeyCreated } from "./domain/events/api-key-created.js";
 export type { ApiKeyRepository } from "./application/ports/api-key-repository.js";
 export {

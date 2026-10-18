@@ -1,8 +1,4 @@
-import {
-  Result,
-  ValidationError,
-  type DomainEventPublisher,
-} from "@verixa/shared-kernel";
+import { Result, ValidationError, type DomainEventPublisher } from "@verixa/shared-kernel";
 
 import { ApiKey, type IssuedApiKey } from "../../domain/entities/api-key.js";
 import type { OrganizationId } from "../../domain/entities/organization.js";
@@ -28,7 +24,9 @@ export class CreateApiKey {
     private readonly eventPublisher?: DomainEventPublisher,
   ) {}
 
-  async execute(command: CreateApiKeyCommand): Promise<Result<CreateApiKeyResult, CreateApiKeyError>> {
+  async execute(
+    command: CreateApiKeyCommand,
+  ): Promise<Result<CreateApiKeyResult, CreateApiKeyError>> {
     const creationResult = ApiKey.create({
       name: command.name,
       organizationId: command.organizationId,

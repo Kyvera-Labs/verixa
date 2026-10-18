@@ -2,7 +2,12 @@ import Fastify from "fastify";
 import { describe, expect, it } from "vitest";
 
 import { handleApiError } from "../http/error-response.js";
+
 import { versioning } from "./versioning.js";
+
+interface ApiErrorBody {
+  error: { code: string; message: string; requestId?: string };
+}
 
 describe("API Versioning plugin", () => {
   it("allows requests matching supported version /v1", async () => {
@@ -10,7 +15,7 @@ describe("API Versioning plugin", () => {
     app.setErrorHandler(handleApiError);
     await app.register(versioning);
 
-    app.get("/v1/items", async () => ({ items: [] }));
+    app.get("/v1/items", () => ({ items: [] }));
     await app.ready();
 
     const response = await app.inject({ method: "GET", url: "/v1/items" });
@@ -24,12 +29,12 @@ describe("API Versioning plugin", () => {
     app.setErrorHandler(handleApiError);
     await app.register(versioning);
 
-    app.get("/items", async () => ({ items: [] }));
+    app.get("/items", () => ({ items: [] }));
     await app.ready();
 
     const response = await app.inject({ method: "GET", url: "/items" });
     expect(response.statusCode).toBe(400);
-    const body = response.json();
+    const body = response.json<ApiErrorBody>();
     expect(body.error.code).toBe("VALIDATION_ERROR");
     expect(body.error.message).toContain("API version prefix missing");
     await app.close();
@@ -40,12 +45,12 @@ describe("API Versioning plugin", () => {
     app.setErrorHandler(handleApiError);
     await app.register(versioning);
 
-    app.get("/v2/items", async () => ({ items: [] }));
+    app.get("/v2/items", () => ({ items: [] }));
     await app.ready();
 
     const response = await app.inject({ method: "GET", url: "/v2/items" });
     expect(response.statusCode).toBe(404);
-    const body = response.json();
+    const body = response.json<ApiErrorBody>();
     expect(body.error.code).toBe("NOT_FOUND");
     expect(body.error.message).toContain("API version 'v2' is not supported");
     await app.close();
@@ -56,8 +61,8 @@ describe("API Versioning plugin", () => {
     app.setErrorHandler(handleApiError);
     await app.register(versioning);
 
-    app.get("/health", async () => ({ status: "ok" }));
-    app.get("/docs/openapi.json", async () => ({ openapi: "3.0.0" }));
+    app.get("/health", () => ({ status: "ok" }));
+    app.get("/docs/openapi.json", () => ({ openapi: "3.0.0" }));
     await app.ready();
 
     const health = await app.inject({ method: "GET", url: "/health" });
@@ -84,10 +89,10 @@ describe("API Versioning plugin", () => {
           sunset: sunsetDate,
         },
       },
-      async () => ({ legacy: true }),
+      () => ({ legacy: true }),
     );
 
-    app.get("/v1/current", async () => ({ current: true }));
+    app.get("/v1/current", () => ({ current: true }));
     await app.ready();
 
     const deprecatedRes = await app.inject({ method: "GET", url: "/v1/legacy" });

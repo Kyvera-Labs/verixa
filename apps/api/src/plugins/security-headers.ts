@@ -8,170 +8,14 @@ import type {
 } from "fastify";
 
 /**
- * The response-header policy every route serves under.
- *
- * Each value mitigates a named attack class. The table in
- * `docs/security/http-security-headers.md` is the reference; the notes here are
- * the reminders. Keep the two in step when a value changes — a header whose
- * value nobody can explain is a header someone deletes to "fix" a browser
- * problem.
- */
-export const SECURITY_HEADERS: FastifyHelmetOptions = {
-  /**
-   * Baseline CSP for a JSON-over-HTTP API.
-   *
-   * `default-src 'none'` allows no subresource of any kind. That is only safe
-   * because every route here answers `application/json` — a document a browser
-   * fetches but never *renders* as a page, so there is nothing for the policy to
-   * break. It is also the cheapest position to start from: relaxing a CSP is a
-   * decision you make later with a specific need in front of you, while
-   * tightening one shipped at `unsafe-inline` is a migration across every client
-   * that came to depend on it.
-   *
-   * `useDefaults: false` drops helmet's own baseline, which allows
-   * `script-src 'self'` and `style-src 'unsafe-inline'` on behalf of
-   * server-rendered pages this API does not have.
-   *
-   * The first HTML surface (Swagger UI in Issue 237, the verification review UI)
-   * will need this relaxed, and Issue 212 owns that change — with a per-request
-   * nonce rather than `unsafe-inline`, which is the difference between a CSP
-   * that stops injected script and one that only looks strict.
-   */
-  contentSecurityPolicy: {
-    useDefaults: false,
-    directives: {
-      defaultSrc: ["'none'"],
-      // A `<base>` tag could repoint relative URLs at an attacker's host, and
-      // `default-src` does not cover it.
-      baseUri: ["'none'"],
-      // Nothing here renders a form that may be submitted anywhere.
-      formAction: ["'none'"],
-      // Mirrored by X-Frame-Options below: CSP is the modern mechanism, the
-      // header is the fallback for clients that predate it.
-      frameAncestors: ["'none'"],
-    },
-  },
-
-  /**
-   * Clickjacking: a hostile page frames `POST /auth/login` under a transparent
-   * overlay and the victim's own click lands on it. Framing is refused outright
-   * rather than allowlisted, because no supported deployment embeds these
-   * responses in a frame today — an allowlist with no members is the same
-   * policy with more ways to get it wrong.
-   */
-  frameguard: { action: "deny" },
-
-  /**
-   * MIME sniffing: a browser is served `text/plain` containing `<script>` and
-   * decides it is HTML. `nosniff` makes the declared `Content-Type` binding,
-   * which turns an upload-as-XSS vector into an inert download.
-   */
-  noSniff: true,
-
-  /**
-   * Referrer leakage: a URL carrying a verification request id or a reset token
-   * is handed to every third party the page then loads, through the `Referer`
-   * header. `no-referrer` sends none at all.
-   *
-   * The weaker, more common `strict-origin-when-cross-origin` leaks the full
-   * path on same-origin navigations and the origin cross-origin — reasonable for
-   * a site that wants analytics, pointless for an API whose requests should not
-   * be attributable anywhere.
-   */
-  referrerPolicy: { policy: "no-referrer" },
-
-  /**
-   * TLS stripping: a hostile access point downgrades the connection and reads
-   * the session cookie or bearer token in cleartext.
-   *
-   * HSTS is deliberately **not** configured through helmet. Issue 213 owns the
-   * directive: it is derived from validated config (so development can leave it
-   * off, and `max-age=0` can lift a pin) and sent by the transport-security hook
-   * in `registerSecurityHeaders` below. Helmet's own default
-   * (`max-age=15552000`) would compete with that policy and make "no HSTS in
-   * development" impossible to express.
-   */
-  hsts: false,
-
-  /**
-   * `X-Powered-By` is a fingerprint: it names the stack before an attacker has
-   * probed it. Fastify sends nothing by default, and proxies and middleware
-   * re-add it, so removing it stays worth doing.
-   */
-  hidePoweredBy: true,
-
-  /**
-   * Legacy Flash integration: `crossdomain.xml` lets a policy-aware client read
-   * this origin from any other. `none` refuses the mechanism entirely. Listed
-   * explicitly so this object is the whole policy rather than helmet's defaults
-   * plus a few edits.
-   */
-  permittedCrossDomainPolicies: { permittedPolicies: "none" },
-
-  /**
-   * The legacy XSS auditor, switched off.
-   *
-   * IE and old Chrome re-wrote pages to highlight matched strings in order to
-   * "protect" users, which was itself exploitable — the filter could be provoked
-   * into leaking data and it weakened CSP enforcement. `0` is the modern value,
-   * and helmet already sends it. Listed here rather than left implicit because
-   * this object is meant to be the whole policy: a header that arrives only
-   * because a dependency defaults it is a header a reviewer cannot find.
-   */
-  xXssProtection: true,
-
-  /**
-   * Browser DNS pre-resolution of linked hosts leaks lookups to internal
-   * hostnames and buys a JSON API nothing.
-   */
-  dnsPrefetchControl: { allow: false },
-
-  /**
-   * IE could execute a downloaded response in the originating site's context.
-   */
-  ieNoOpen: true,
-
-  /**
-   * Clustered origins let a same-process window bypass origin checks.
-   */
-  originAgentCluster: true,
-
-  /**
-   * Cross-origin isolation headers are **not** set here, and that is a
-   * deliberate exclusion rather than an oversight.
-   *
-   * `Cross-Origin-Resource-Policy`, `Cross-Origin-Opener-Policy` and
-   * `Cross-Origin-Embedder-Policy` decide which *other origins* may read or
-   * relate to these responses — exactly the question Issue 204 (CORS) answers
-   * with an environment-specific allowlist. Setting a blanket `same-origin` here
-   * would pre-empt it, and the failure mode is a confusingly blocked front end
-   * rather than a blocked attack.
-   *
-   * Revisit when 204 lands: if the allowlist ends up single-origin, these are
-   * worth enabling alongside it.
-   */
-  crossOriginResourcePolicy: false,
-  crossOriginOpenerPolicy: false,
-  crossOriginEmbedderPolicy: false,
-};
-
-/**
- * Applies {@link SECURITY_HEADERS} to every response this instance produces.
- *
- * Registered on the root instance in `buildApp`, before any route:
- * `@fastify/helmet` is `fastify-plugin`-wrapped, so its hook is inherited by
- * child scopes rather than confined to a prefix, and every route — including
- * ones later phases add — gets the headers without opting in. Safe by default
- * only holds if the default is applied at the root: a plugin someone has to
- * remember to register is a plugin someone will forget.
- *
- * Generic over the logger for the same reason `registerAuthRoutes` is (see
- * `routes/auth.ts`) — the instance `buildApp` produces carries a concrete pino
- * `Logger`, which is not structurally identical to Fastify's
- * `FastifyBaseLogger`.
- */
  * The `Strict-Transport-Security` directive and the HTTP-to-HTTPS redirect
  * (roadmap Issue 213).
+ *
+ * This module owns the *transport-security* slice of the response headers
+ * only. `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` and the
+ * baseline CSP belong to Issue 203 and will be added here (or beside it) when
+ * that issue lands — deliberately not folded in now, so this change stays
+ * reviewable as one threat class: credentials and tokens moving in cleartext.
  */
 
 /** The header name, lower-cased the way Node stores received headers. */
@@ -217,21 +61,14 @@ export interface SecurityHeadersOptions {
 /**
  * The shape `buildApp` uses when the caller supplies no policy at all.
  *
- * Uses the default one-year `Strict-Transport-Security` directive (so baseline
- * header assertions in Issue 203 pass on `buildApp()` with no arguments) with
- * `enforceHttps: false`. Callers that explicitly want no HSTS header pass
- * `{ hsts: null, enforceHttps: false }`, and `server.ts` derives its policy
- * from validated config via `securityHeadersFromConfig(loadConfig())`.
+ * Both features off. That sounds like the wrong default for a security
+ * control, and it is only safe because of who the caller is: `server.ts`
+ * always passes `securityHeadersFromConfig(loadConfig())`, so a process that
+ * actually serves traffic always has a policy derived from a validated
+ * environment. The bare default exists for in-process tests and for
+ * `buildApp()` calls that never bind a port, where an HSTS pin or a redirect
+ * would be noise at best and a hang at worst.
  */
-export const DEFAULT_SECURITY_HEADERS_OPTIONS: SecurityHeadersOptions = {
-  hsts: {
-    maxAgeSeconds: DEFAULT_HSTS_MAX_AGE_SECONDS,
-    includeSubDomains: true,
-    preload: false,
-  },
-  enforceHttps: false,
-};
-
 export const NO_TRANSPORT_SECURITY: SecurityHeadersOptions = {
   hsts: null,
   enforceHttps: false,
@@ -454,15 +291,7 @@ export function httpsRedirectTarget(host: string | undefined, rawUrl: string): s
 }
 
 /**
- * Register the global response-header policy and the transport-security
- * controls on `app`.
- *
- * Registered on the root instance in `buildApp`, before any route:
- * `@fastify/helmet` is `fastify-plugin`-wrapped, so its hook is inherited by
- * child scopes rather than confined to a prefix, and the `onRequest` hook is
- * inherited by every route in the same encapsulation context. Applying the
- * policy before routes exist is what makes "all routes are covered" true by
- * construction rather than by each route remembering to ask.
+ * Register the transport-security controls on `app`.
  *
  * Generic over the logger type for the same reason `registerAuthRoutes` is:
  * the instance `buildApp` produces carries a concrete pino `Logger`, which
@@ -495,18 +324,6 @@ export function registerSecurityHeaders<TLogger extends FastifyBaseLogger>(
     RawReplyDefaultExpression,
     TLogger
   >,
-  options: SecurityHeadersOptions = NO_TRANSPORT_SECURITY,
-): void {
-  app.register(helmet, SECURITY_HEADERS);
-  options: SecurityHeadersOptions = DEFAULT_SECURITY_HEADERS_OPTIONS,
-): void {
-  const { hsts: _unusedHelmetHsts, ...helmetHeaders } = SECURITY_HEADERS;
-  app.register(helmet, { ...helmetHeaders, hsts: false });
-
-  options: SecurityHeadersOptions = NO_TRANSPORT_SECURITY,
-): void {
-  app.register(helmet, SECURITY_HEADERS);
-
   options: SecurityHeadersOptions,
 ): void {
   const hstsHeaderValue = options.hsts === null ? null : formatHstsHeader(options.hsts);

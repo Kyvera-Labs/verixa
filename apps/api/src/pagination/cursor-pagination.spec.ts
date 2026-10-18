@@ -31,7 +31,9 @@ describe("cursor-based pagination", () => {
   it("returns null when decoding a malformed cursor", () => {
     expect(decodeCursor("not-a-valid-cursor")).toBeNull();
     expect(decodeCursor(Buffer.from("invalid-json", "utf8").toString("base64url"))).toBeNull();
-    expect(decodeCursor(Buffer.from(JSON.stringify({ other: 123 }), "utf8").toString("base64url"))).toBeNull();
+    expect(
+      decodeCursor(Buffer.from(JSON.stringify({ other: 123 }), "utf8").toString("base64url")),
+    ).toBeNull();
   });
 
   it("sanitizes limit within bounds", () => {

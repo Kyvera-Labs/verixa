@@ -54,7 +54,9 @@ export function registerContextRoutes<TLogger extends FastifyBaseLogger>(
     },
     {
       prefix: "/audit",
-      plugin: async (scope) => registerAuditRoutes(scope, container),
+      plugin: (scope) => {
+        registerAuditRoutes(scope, container);
+      },
     },
   ];
 

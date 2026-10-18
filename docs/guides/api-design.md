@@ -144,6 +144,7 @@ The API implements correlation ID tracking via `apps/api/src/plugins/request-con
 2. **Context Binding**: The ID is bound to `request.id` and `request.requestId`, and attached to the request's child logger (`request.log`) under `reqId` and `requestId`. Every structured log line emitted during the request lifecycle carries this identifier.
 3. **Response Header & Error Envelopes**: The correlation ID is reflected in the outgoing `X-Request-Id` HTTP response header and mapped directly into the `error.requestId` property of every error response (see `apps/api/src/http/error-response.ts`). This allows clients experiencing failures to report the exact `requestId` for diagnostics without exposing internal stack traces or database errors.
 4. **Outbound Propagation**: When downstream services or third-party webhooks/notifications are dispatched from within a request, `propagateRequestContext(request, headers)` passes the correlation ID forward, preserving distributed trace boundaries until OpenTelemetry distributed tracing spans are introduced.
+
 ## API Versioning and Deprecation Policy
 
 Verixa adopts URI-path versioning (`/v1/...`) as its primary strategy (see `docs/adr/0012-api-versioning.md`).
@@ -171,5 +172,3 @@ Verixa standardizes on keyset cursor-based pagination for list and collection en
    ```
    When `hasMore` is false (last page), `nextCursor` is `null`.
 3. **OpenAPI Reusability**: Reusable cursor parameter and envelope definitions are located in `apps/api/openapi/components/pagination.yaml`.
-
-

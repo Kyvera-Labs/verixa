@@ -144,6 +144,10 @@ describe.skipIf(!available)("PrismaSessionRepository (Issue 083)", () => {
     databaseName = scratchDatabaseName();
     const admin = createTestPrismaClient();
     try {
+      // DDL: Postgres cannot bind a database name. `databaseName` comes only from
+      // `scratchDatabaseName()` (fixed prefix, pid, random hex), never from input.
+      // Listed in docs/security/injection-hardening.md.
+      // eslint-disable-next-line no-restricted-syntax
       await admin.$executeRawUnsafe(`CREATE DATABASE "${databaseName}"`);
     } finally {
       await admin.$disconnect();
@@ -172,6 +176,10 @@ describe.skipIf(!available)("PrismaSessionRepository (Issue 083)", () => {
     // for the next run to accumulate.
     const admin = createTestPrismaClient();
     try {
+      // DDL: Postgres cannot bind a database name. `databaseName` comes only from
+      // `scratchDatabaseName()` (fixed prefix, pid, random hex), never from input.
+      // Listed in docs/security/injection-hardening.md.
+      // eslint-disable-next-line no-restricted-syntax
       await admin.$executeRawUnsafe(`DROP DATABASE IF EXISTS "${databaseName}" WITH (FORCE)`);
     } finally {
       await admin.$disconnect();
@@ -270,14 +278,12 @@ describe.skipIf(!available)("PrismaSessionRepository (Issue 083)", () => {
           revokedAt: null,
         })),
       );
-      await prisma.$executeRawUnsafe("ANALYZE sessions;");
+      await prisma.$executeRaw`ANALYZE sessions`;
 
-      const explainResult = await prisma.$queryRawUnsafe<{ "QUERY PLAN": string }[]>(
-        `EXPLAIN (FORMAT JSON, ANALYZE)
-         SELECT * FROM sessions
-         WHERE user_id = $1::uuid AND revoked_at IS NULL`,
-        userId,
-      );
+      const explainResult = await prisma.$queryRaw<{ "QUERY PLAN": string }[]>`
+        EXPLAIN (FORMAT JSON, ANALYZE)
+        SELECT * FROM sessions
+        WHERE user_id = ${userId}::uuid AND revoked_at IS NULL`;
 
       const plan = JSON.stringify(explainResult);
 
@@ -317,13 +323,12 @@ describe.skipIf(!available)("PrismaSessionRepository (Issue 083)", () => {
           revokedAt: null,
         }));
       });
-      await prisma.$executeRawUnsafe("ANALYZE sessions;");
+      await prisma.$executeRaw`ANALYZE sessions`;
 
-      const explainResult = await prisma.$queryRawUnsafe<{ "QUERY PLAN": string }[]>(
-        `EXPLAIN (FORMAT JSON, ANALYZE)
-         SELECT * FROM sessions
-         WHERE expires_at < now()`,
-      );
+      const explainResult = await prisma.$queryRaw<{ "QUERY PLAN": string }[]>`
+        EXPLAIN (FORMAT JSON, ANALYZE)
+        SELECT * FROM sessions
+        WHERE expires_at < now()`;
 
       const plan = JSON.stringify(explainResult);
 

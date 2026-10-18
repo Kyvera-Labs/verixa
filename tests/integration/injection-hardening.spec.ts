@@ -53,8 +53,13 @@ describe.skipIf(!available)("injection hardening", () => {
     // a value.
     const payload = `${PRISTINE_TENANT}'; SELECT 'injected`;
 
-    const rows = await withTenantContext(prisma, tenant(payload), (tx) =>
-      tx.$queryRaw<{ value: string }[]>`SELECT current_setting(${TENANT_CONTEXT_SETTING}) AS value`,
+    const rows = await withTenantContext(
+      prisma,
+      tenant(payload),
+      (tx) =>
+        tx.$queryRaw<
+          { value: string }[]
+        >`SELECT current_setting(${TENANT_CONTEXT_SETTING}) AS value`,
     );
 
     expect(rows).toHaveLength(1);
@@ -64,8 +69,13 @@ describe.skipIf(!available)("injection hardening", () => {
   it("does not let a payload close the statement and run a second one", async () => {
     const payload = `${PRISTINE_TENANT}', true); DROP TABLE users; --`;
 
-    await withTenantContext(prisma, tenant(payload), (tx) =>
-      tx.$queryRaw<{ value: string }[]>`SELECT current_setting(${TENANT_CONTEXT_SETTING}) AS value`,
+    await withTenantContext(
+      prisma,
+      tenant(payload),
+      (tx) =>
+        tx.$queryRaw<
+          { value: string }[]
+        >`SELECT current_setting(${TENANT_CONTEXT_SETTING}) AS value`,
     );
 
     // `users` is still there, still populated. A concatenated value would have
@@ -80,8 +90,10 @@ describe.skipIf(!available)("injection hardening", () => {
     const payload = `${PRISTINE_TENANT} OR 1=1 --`;
 
     await expect(
-      withTenantContext(prisma, tenant(payload), (tx) =>
-        tx.$queryRaw`SELECT current_setting(${TENANT_CONTEXT_SETTING})::uuid AS id`,
+      withTenantContext(
+        prisma,
+        tenant(payload),
+        (tx) => tx.$queryRaw`SELECT current_setting(${TENANT_CONTEXT_SETTING})::uuid AS id`,
       ),
     ).rejects.toThrow(/uuid/i);
   });

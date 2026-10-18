@@ -1,12 +1,15 @@
-import { Result } from "@verixa/shared-kernel";
+import { asId, Result } from "@verixa/shared-kernel";
 import { describe, expect, it } from "vitest";
-import { ApiKey, type ApiKeyStatus } from "../entities/api-key.js";
+
+import { ApiKey } from "./api-key.js";
+
+const ORG_ID = asId<"OrganizationId">("org-1");
 
 describe("ApiKey", () => {
   it("creates an ApiKey with prefix vx_ and hashed key", () => {
     const result = ApiKey.create({
       name: "test-key",
-      organizationId: "org-1" as any,
+      organizationId: ORG_ID,
       scopes: ["audit:query", "audit:export"],
     });
 
@@ -26,7 +29,7 @@ describe("ApiKey", () => {
   it("verifies candidate raw key in constant time", () => {
     const result = ApiKey.create({
       name: "test-key",
-      organizationId: "org-1" as any,
+      organizationId: ORG_ID,
     });
     if (!Result.isOk(result)) return;
 
@@ -38,7 +41,7 @@ describe("ApiKey", () => {
   it("handles revocation and expiration status correctly", () => {
     const result = ApiKey.create({
       name: "test-key",
-      organizationId: "org-1" as any,
+      organizationId: ORG_ID,
       expiresAt: new Date(Date.now() + 10_000),
     });
     if (!Result.isOk(result)) return;
@@ -58,13 +61,13 @@ describe("ApiKey", () => {
   it("rejects empty name or invalid expiration date", () => {
     const emptyName = ApiKey.create({
       name: "   ",
-      organizationId: "org-1" as any,
+      organizationId: ORG_ID,
     });
     expect(Result.isErr(emptyName)).toBe(true);
 
     const pastExpiry = ApiKey.create({
       name: "valid-name",
-      organizationId: "org-1" as any,
+      organizationId: ORG_ID,
       expiresAt: new Date(Date.now() - 10_000),
     });
     expect(Result.isErr(pastExpiry)).toBe(true);

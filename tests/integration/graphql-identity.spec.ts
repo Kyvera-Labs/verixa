@@ -1,13 +1,14 @@
-import { asId, Result } from "@verixa/shared-kernel";
-import { User } from "@verixa/identity";
-import { DisplayName } from "@verixa/identity";
-import { Email } from "@verixa/identity";
-import { Organization } from "@verixa/identity";
-import { OrganizationMembership } from "@verixa/identity";
-import { InMemoryOrganizationMembershipRepository } from "@verixa/identity";
-import { InMemoryOrganizationRepository } from "@verixa/identity";
-import { InMemoryUserRepository } from "@verixa/identity";
+import { createGraphQLApp } from "@verixa/api/app";
+import type { Container } from "@verixa/api/composition-root";
 import {
+  User,
+  DisplayName,
+  Email,
+  Organization,
+  OrganizationMembership,
+  InMemoryOrganizationMembershipRepository,
+  InMemoryOrganizationRepository,
+  InMemoryUserRepository,
   GetOrganization,
   GetOrganizationUsers,
   GetUser,
@@ -15,16 +16,19 @@ import {
   GetUsersByOrganizationIds,
   ListOrganizations,
 } from "@verixa/identity";
+import { asId, Result } from "@verixa/shared-kernel";
 import { describe, expect, it, vi } from "vitest";
-
-import type { Container } from "@verixa/api/composition-root";
-import { createGraphQLApp } from "../../apps/api/src/graphql/server.js";
 
 function unwrap<T>(result: Result<T, unknown>): T {
   if (!Result.isOk(result)) {
     throw new Error(`Failed to unwrap Result: ${JSON.stringify(result)}`);
   }
   return result.value;
+}
+
+interface GqlResponse {
+  data: Record<string, Record<string, unknown>>;
+  errors?: unknown[];
 }
 
 function createMockContainer(overrides?: {
@@ -49,20 +53,7 @@ function createMockContainer(overrides?: {
   const listOrganizations = new ListOrganizations(orgRepo);
 
   const container = {
-    prisma: {} as any,
-    eventPublisher: {} as any,
-    authorization: {} as any,
-    credentials: {} as any,
-    audit: {} as any,
-    mfa: {} as any,
-    dispose: async () => {},
     identity: {
-      registerUser: {} as any,
-      updateUserProfile: {} as any,
-      suspendUser: {} as any,
-      reactivateUser: {} as any,
-      createOrganization: {} as any,
-      inviteUserToOrganization: {} as any,
       getUser,
       getOrganization,
       getOrganizationUsers,
@@ -107,7 +98,7 @@ describe("GraphQL Identity & Organization Types (Issue 243 / Roadmap 184)", () =
     });
 
     expect(response.statusCode).toBe(200);
-    const body = response.json();
+    const body = response.json<GqlResponse>();
     expect(body.errors).toBeUndefined();
     expect(body.data.user).toEqual({
       id: user.id,
@@ -154,7 +145,7 @@ describe("GraphQL Identity & Organization Types (Issue 243 / Roadmap 184)", () =
       headers: { "content-type": "application/json" },
     });
     expect(resById.statusCode).toBe(200);
-    expect(resById.json().data.organization).toEqual({
+    expect(resById.json<GqlResponse>().data.organization).toEqual({
       id: org.id,
       name: "Acme Corp",
       slug: "acme",
@@ -181,7 +172,7 @@ describe("GraphQL Identity & Organization Types (Issue 243 / Roadmap 184)", () =
       headers: { "content-type": "application/json" },
     });
     expect(resBySlug.statusCode).toBe(200);
-    expect(resBySlug.json().data.organizationBySlug).toEqual({
+    expect(resBySlug.json<GqlResponse>().data.organizationBySlug).toEqual({
       id: org.id,
       name: "Acme Corp",
       slug: "acme",
@@ -234,7 +225,7 @@ describe("GraphQL Identity & Organization Types (Issue 243 / Roadmap 184)", () =
     });
 
     expect(res.statusCode).toBe(200);
-    expect(res.json().data.organization.owner).toEqual({
+    expect(res.json<GqlResponse>().data.organization?.owner).toEqual({
       id: owner.id,
       email: "owner@example.com",
       displayName: "Owner User",
@@ -300,7 +291,7 @@ describe("GraphQL Identity & Organization Types (Issue 243 / Roadmap 184)", () =
     });
 
     expect(res.statusCode).toBe(200);
-    expect(res.json().data.user.organizations).toHaveLength(2);
+    expect(res.json<GqlResponse>().data.user?.organizations).toHaveLength(2);
 
     await app.close();
   });
@@ -369,8 +360,8 @@ describe("GraphQL Identity & Organization Types (Issue 243 / Roadmap 184)", () =
     });
 
     expect(res.statusCode).toBe(200);
-    const data = res.json().data;
-    expect(data.organization.users).toHaveLength(5);
+    const data = res.json<GqlResponse>().data;
+    expect(data.organization?.users).toHaveLength(5);
 
     // N+1 VERIFICATION:
     // 1. Memberships are retrieved in exactly 1 batched call for the organization.

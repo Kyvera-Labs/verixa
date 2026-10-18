@@ -1,14 +1,5 @@
-import { ApiKey, type ApiKeyStatus } from "@verixa/identity";
-import type {
-  FastifyBaseLogger,
-  FastifyInstance,
-  FastifyPluginAsync,
-  FastifyReply,
-  FastifyRequest,
-  RawReplyDefaultExpression,
-  RawRequestDefaultExpression,
-  RawServerDefault,
-} from "fastify";
+import { ApiKey } from "@verixa/identity";
+import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 
 import { sendApiError } from "../http/error-response.js";
 
@@ -24,12 +15,14 @@ export interface ServicePrincipal {
 declare module "fastify" {
   interface FastifyRequest {
     servicePrincipal?: ServicePrincipal | undefined;
-    principal?: {
-      userId?: string;
-      orgId?: string | null;
-      type?: "user" | "service_principal";
-      permissions?: Set<string>;
-    } | undefined;
+    principal?:
+      | {
+          userId?: string;
+          orgId?: string | null;
+          type?: "user" | "service_principal";
+          permissions?: Set<string>;
+        }
+      | undefined;
   }
 }
 
@@ -53,7 +46,6 @@ export interface ApiKeyAuthPluginOptions {
 const DEFAULT_EXCLUDED_PATHS: readonly (string | RegExp)[] = [
   "/health",
   "/docs",
-  /^\/docs(\/.*)?$/,
   "/favicon.ico",
   "/auth/login",
   "/auth/register",
@@ -77,7 +69,10 @@ export function extractApiKey(request: FastifyRequest): string | undefined {
   const authHeader = request.headers["authorization"];
   if (typeof authHeader === "string") {
     const parts = authHeader.trim().split(/\s+/);
-    if (parts.length === 2 && (parts[0]?.toLowerCase() === "apikey" || parts[0]?.toLowerCase() === "bearer")) {
+    if (
+      parts.length === 2 &&
+      (parts[0]?.toLowerCase() === "apikey" || parts[0]?.toLowerCase() === "bearer")
+    ) {
       if (parts[1]?.startsWith("vx_")) {
         return parts[1];
       }
@@ -99,7 +94,7 @@ export function extractApiKey(request: FastifyRequest): string | undefined {
  * Fastify authentication strategy accepting `Authorization: ApiKey <key>`
  * resolving to a ServicePrincipal.
  */
-const apiKeyAuthPlugin: FastifyPluginAsync<ApiKeyAuthPluginOptions> = async function apiKeyAuth(
+const apiKeyAuthPlugin: FastifyPluginAsync<ApiKeyAuthPluginOptions> = function apiKeyAuth(
   app,
   options,
 ) {
@@ -116,7 +111,11 @@ const apiKeyAuthPlugin: FastifyPluginAsync<ApiKeyAuthPluginOptions> = async func
       if (options.optional) {
         return;
       }
-      sendApiError(reply, "AUTHENTICATION_FAILED", "Authentication required. Provide an API key or bearer token.");
+      sendApiError(
+        reply,
+        "AUTHENTICATION_FAILED",
+        "Authentication required. Provide an API key or bearer token.",
+      );
       return reply;
     }
 
@@ -134,7 +133,8 @@ const apiKeyAuthPlugin: FastifyPluginAsync<ApiKeyAuthPluginOptions> = async func
     }
 
     if (!key.isActive()) {
-      const message = key.status === "revoked" ? "API key has been revoked." : "API key has expired.";
+      const message =
+        key.status === "revoked" ? "API key has been revoked." : "API key has expired.";
       sendApiError(reply, "AUTHENTICATION_FAILED", message);
       return reply;
     }
@@ -152,12 +152,13 @@ const apiKeyAuthPlugin: FastifyPluginAsync<ApiKeyAuthPluginOptions> = async func
 
     request.servicePrincipal = principal;
     request.principal = {
-      userId: key.id as any,
-      orgId: key.organizationId as any,
+      userId: key.id,
+      orgId: key.organizationId,
       type: "service_principal",
       permissions: permissionsSet,
     };
   });
+  return Promise.resolve();
 };
 
 (apiKeyAuthPlugin as unknown as Record<symbol, unknown>)[Symbol.for("skip-override")] = true;

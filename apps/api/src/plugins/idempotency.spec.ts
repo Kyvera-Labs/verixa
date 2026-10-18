@@ -1,6 +1,8 @@
 import Fastify from "fastify";
 import { describe, expect, it } from "vitest";
+
 import { errorResponseSchema, handleApiError } from "../http/error-response.js";
+
 import { registerIdempotency } from "./idempotency.js";
 
 describe("idempotency plugin", () => {
@@ -100,7 +102,7 @@ describe("idempotency plugin", () => {
     });
 
     expect(res2.statusCode).toBe(409);
-    const body = res2.json();
+    const body = res2.json<{ error: { code: string } }>();
     expect(body.error.code).toBe("CONFLICT");
     expect(sideEffects).toBe(1);
 

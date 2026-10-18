@@ -7,30 +7,23 @@ import Fastify from "fastify";
 
 import { registerContextRoutes } from "./composition/register-routes.js";
 import type { Container } from "./composition-root.js";
-import { errorResponseSchema, handleApiError } from "./http/error-response.js";
-import { registerContextRoutes } from "./composition/register-routes.js";
-import { errorResponseSchema, handleApiError } from "./http/error-response.js";
-import { assertRouteValidationSchemas } from "./http/route-validation.js";
-import { enforceRegisteredRouteSchemas } from "./openapi/zod-registry.js";
+import { registerGraphQLServer } from "./graphql/server.js";
 import { errorResponseSchema, handleApiError } from "./http/error-response.js";
 import { assertRouteValidationSchemas } from "./http/route-validation.js";
 import { enforceRegisteredRouteSchemas } from "./openapi/zod-registry.js";
-import { NO_CORS, registerCors, type CorsPolicy } from "./plugins/cors.js";
-import {
-  DEFAULT_SECURITY_HEADERS_OPTIONS,
-  registerSecurityHeaders,
-  type HstsDirective,
-  type SecurityHeadersOptions,
-} from "./plugins/security-headers.js";
 import {
   DOCS_CONTENT_SECURITY_POLICY,
   registerBaselineResponseHeaders,
 } from "./plugins/baseline-response-headers.js";
-import { registerAuthRoutes } from "./routes/auth.js";
-import { registerVerificationRoutes } from "./routes/verification.js";
-import { registerGraphQLServer } from "./graphql/server.js";
-import { enforceRegisteredRouteSchemas } from "./openapi/zod-registry.js";
-import { assertRouteValidationSchemas } from "./http/route-validation.js";
+import { NO_CORS, registerCors, type CorsPolicy } from "./plugins/cors.js";
+import {
+  NO_TRANSPORT_SECURITY,
+  registerSecurityHeaders,
+  type HstsDirective,
+  type SecurityHeadersOptions,
+} from "./plugins/security-headers.js";
+import { registerCspReportRoute } from "./routes/csp-report.js";
+import { registerSecurityTxtRoute } from "./routes/well-known/security-txt.js";
 
 /**
  * Re-exported so callers (and the integration suite) can name the policy
@@ -46,6 +39,9 @@ export type { HstsDirective, SecurityHeadersOptions };
  * into `src/plugins/`.
  */
 export type { CorsPolicy };
+
+/** Re-exported for the integration suite, which builds a GraphQL-only app around a test container. */
+export { createGraphQLApp } from "./graphql/server.js";
 
 export interface BuildAppOptions {
   readonly logger?: Logger;
@@ -126,13 +122,6 @@ export function buildApp(options: BuildAppOptions = {}) {
     },
   });
 
-  // Security headers are registered before any route exists, so "all routes
-  // return the configured header set" is true by construction rather than by
-  // every route remembering to ask (Issues 203 and 213). `/health` below is the
-  // proof: it is the one endpoint a deployment is most likely to expose without
-  // thinking about it.
-  registerSecurityHeaders(app, options.securityHeaders ?? DEFAULT_SECURITY_HEADERS_OPTIONS);
-  registerSecurityHeaders(app, options.securityHeaders ?? NO_TRANSPORT_SECURITY);
   registerCors(app, options.cors ?? NO_CORS);
   app.setErrorHandler(handleApiError);
   app.addSchema(errorResponseSchema);
@@ -181,8 +170,13 @@ export function buildApp(options: BuildAppOptions = {}) {
     return { status: "ok" };
   });
 
+  // Registered outside the container check for the same reason `/health` is:
+  // the disclosure channel describes the software, not a tenant's data, and a
+  // researcher's scanner should find it on a process that has no database.
+  registerSecurityTxtRoute(app);
+  registerCspReportRoute(app);
+
   void registerGraphQLServer(app, { container: options.container });
-  registerGraphQLServer(app);
 
   // Registered on `app` itself, in the same encapsulation context as every
   // route below, so it covers `/health` and the authenticated routes alike.

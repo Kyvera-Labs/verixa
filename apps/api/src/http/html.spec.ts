@@ -88,7 +88,7 @@ describe("renderHtmlDocument", () => {
     // Inside `<script>` the only way out is the `</script` sequence, and HTML
     // entity escaping does not work there — so the sequence itself is broken
     // up. The replacement is valid JavaScript and cannot terminate the element.
-    expect(html).not.toContain('</script><img');
+    expect(html).not.toContain("</script><img");
     expect(html).toContain("<\\/script>");
   });
 });

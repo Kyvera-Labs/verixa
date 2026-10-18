@@ -1,13 +1,4 @@
-import type {
-  FastifyBaseLogger,
-  FastifyInstance,
-  FastifyPluginAsync,
-  FastifyReply,
-  FastifyRequest,
-  RawReplyDefaultExpression,
-  RawRequestDefaultExpression,
-  RawServerDefault,
-} from "fastify";
+import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 
 import { sendApiError } from "../http/error-response.js";
 
@@ -32,12 +23,7 @@ declare module "fastify" {
 
 const DEFAULT_SUPPORTED_VERSIONS = ["v1"] as const;
 
-const DEFAULT_EXCLUDED_PATHS: readonly (string | RegExp)[] = [
-  "/health",
-  "/docs",
-  /^\/docs(\/.*)?$/,
-  "/favicon.ico",
-];
+const DEFAULT_EXCLUDED_PATHS: readonly (string | RegExp)[] = ["/health", "/docs", "/favicon.ico"];
 
 function isPathExcluded(urlPath: string, exclusions: readonly (string | RegExp)[]): boolean {
   for (const exclusion of exclusions) {
@@ -63,7 +49,7 @@ function toHttpDate(date: string | Date): string {
 /**
  * Fastify plugin enforcing URI versioning prefix (/v1/...) and managing route deprecation headers.
  */
-const versioningPlugin: FastifyPluginAsync<VersioningOptions> = async function versioningPlugin(
+const versioningPlugin: FastifyPluginAsync<VersioningOptions> = function versioningPlugin(
   app,
   options = {},
 ) {
@@ -114,6 +100,7 @@ const versioningPlugin: FastifyPluginAsync<VersioningOptions> = async function v
     }
     return payload;
   });
+  return Promise.resolve();
 };
 
 // Make plugin global so it breaks Fastify encapsulation and protects all routes across the app

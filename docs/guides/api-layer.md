@@ -18,7 +18,7 @@ A common microservices anti-pattern is creating a separate Node.js service for G
 1. **Unified Observability & Correlation**: Both REST and GraphQL routes share the exact same Fastify instance, Pino structured logger, and request correlation pipeline (`x-request-id` / `x-correlation-id`). Every GraphQL query carries the same correlation identity across audit logs and background jobs as any REST endpoint.
 2. **Consistent Security & Route Guards**: Running under a shared composition root guarantees authentication plugins, session resolution hooks, and security headers (CSP, HSTS, X-Frame-Options) apply uniformly across both protocols.
 3. **No Domain Duplication**: Resolvers and route handlers call the same underlying use cases instantiated once in `apps/api/src/composition-root.ts`. Neither REST nor GraphQL contains domain logic or direct persistence access.
-3. **No Domain Duplication**: Resolvers and route handlers call the same underlying use cases instantiated once in `apps/api/src/composition-root.ts`. Neither REST nor GraphQL contains domain logic.
+4. **No Domain Duplication**: Resolvers and route handlers call the same underlying use cases instantiated once in `apps/api/src/composition-root.ts`. Neither REST nor GraphQL contains domain logic.
 
 ---
 
@@ -50,7 +50,7 @@ export async function registerGraphQLServer(app: FastifyInstance): Promise<void>
 
 ## 3. Identity & Organization Types (Phase 13 / Issue 243)
 
-The identity domain types (`User`, `Organization`, `OrganizationMembership`) are exposed via GraphQL SDL in `apps/api/src/graphql/schema/identity.graphql`.
+The identity domain types (`User`, `Organization`, `OrganizationMembership`) are exposed via GraphQL SDL in `apps/api/graphql/identity.graphql`.
 
 ### Domain Entity Mapping
 
@@ -107,6 +107,7 @@ A fundamental rule across Verixa is that **no GraphQL resolver may bypass an app
 - Resolvers receive `Container` via options or context.
 - Reads call focused query use cases (`getUser`, `getOrganization`, `getOrganizationUsers`, `getUserOrganizations`).
 - This keeps query validation, tenant boundary checks, and future caching concentrated in the application layer rather than scattered across resolver callbacks.
+
 ### Initial Schema & Gateway Layer
 
 Phase 13 introduces GraphQL as an entry point with a foundational schema:

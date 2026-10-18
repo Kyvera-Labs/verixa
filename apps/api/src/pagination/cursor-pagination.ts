@@ -63,7 +63,7 @@ export function decodeCursor(cursor: string): CursorPayload | null {
  * Clamps and sanitizes limit within [MIN_PAGE_LIMIT, MAX_PAGE_LIMIT].
  */
 export function sanitizeLimit(
-  limit: number | string | undefined,
+  limit: number | string | null | undefined,
   defaultLimit: number = DEFAULT_PAGE_LIMIT,
   maxLimit: number = MAX_PAGE_LIMIT,
 ): number {
@@ -85,7 +85,12 @@ export function sanitizeLimit(
  */
 export const cursorPaginationQuerySchema = z.object({
   cursor: z.string().optional(),
-  limit: z.coerce.number().int().min(MIN_PAGE_LIMIT).max(MAX_PAGE_LIMIT).default(DEFAULT_PAGE_LIMIT),
+  limit: z.coerce
+    .number()
+    .int()
+    .min(MIN_PAGE_LIMIT)
+    .max(MAX_PAGE_LIMIT)
+    .default(DEFAULT_PAGE_LIMIT),
 });
 
 /**

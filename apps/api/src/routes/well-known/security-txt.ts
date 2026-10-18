@@ -49,9 +49,7 @@ function isWellFormedHost(value: string): boolean {
   // can trust, and this server has no reason to advertise an IPv6 address.
   if (separator !== value.lastIndexOf(":")) return false;
 
-  return (
-    HOST_NAME.test(value.slice(0, separator)) && PORT_NUMBER.test(value.slice(separator + 1))
-  );
+  return HOST_NAME.test(value.slice(0, separator)) && PORT_NUMBER.test(value.slice(separator + 1));
 }
 
 /**

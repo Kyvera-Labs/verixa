@@ -1,19 +1,25 @@
-import Fastify from "fastify";
 import { createLogger } from "@verixa/shared-kernel";
+import Fastify from "fastify";
 import { describe, expect, it } from "vitest";
+
 import { errorResponseSchema, handleApiError, sendApiError } from "../http/error-response.js";
+
 import {
   propagateRequestContext,
   registerRequestContext,
   REQUEST_ID_HEADER,
 } from "./request-context.js";
 
+interface ApiErrorBody {
+  error: { code: string; message: string; requestId?: string };
+}
+
 describe("request context and correlation ID plugin", () => {
   it("generates a correlation ID when request has no inbound ID and echoes it", async () => {
     const app = Fastify();
     registerRequestContext(app);
 
-    app.get("/ping", async (req, reply) => {
+    app.get("/ping", (req) => {
       return { id: req.id, requestId: req.requestId };
     });
 
@@ -28,9 +34,9 @@ describe("request context and correlation ID plugin", () => {
     const echoedId = response.headers[REQUEST_ID_HEADER];
     expect(echoedId).toBeDefined();
     expect(typeof echoedId).toBe("string");
-    expect(echoedId!.length).toBeGreaterThan(0);
+    expect(String(echoedId).length).toBeGreaterThan(0);
 
-    const body = response.json();
+    const body = response.json<{ id: string; requestId: string }>();
     expect(body.id).toBe(echoedId);
     expect(body.requestId).toBe(echoedId);
 
@@ -41,7 +47,7 @@ describe("request context and correlation ID plugin", () => {
     const app = Fastify();
     registerRequestContext(app);
 
-    app.get("/ping", async (req, reply) => {
+    app.get("/ping", (req) => {
       return { id: req.id, requestId: req.requestId };
     });
 
@@ -59,7 +65,7 @@ describe("request context and correlation ID plugin", () => {
     expect(response.statusCode).toBe(200);
     expect(response.headers[REQUEST_ID_HEADER]).toBe(inboundId);
 
-    const body = response.json();
+    const body = response.json<{ id: string; requestId: string }>();
     expect(body.id).toBe(inboundId);
     expect(body.requestId).toBe(inboundId);
 
@@ -72,7 +78,7 @@ describe("request context and correlation ID plugin", () => {
     const customStream = {
       write(msg: string) {
         try {
-          logLines.push(JSON.parse(msg));
+          logLines.push(JSON.parse(msg) as Record<string, unknown>);
         } catch {
           // ignore
         }
@@ -108,7 +114,7 @@ describe("request context and correlation ID plugin", () => {
     expect(response.statusCode).toBe(409);
     expect(response.headers[REQUEST_ID_HEADER]).toBe(testId);
 
-    const body = response.json();
+    const body = response.json<ApiErrorBody>();
     expect(body.error.code).toBe("CONFLICT");
     expect(body.error.requestId).toBe(testId);
 
@@ -126,7 +132,7 @@ describe("request context and correlation ID plugin", () => {
 
     let capturedOutboundHeaders: Record<string, string> = {};
 
-    app.get("/outbound", async (req, reply) => {
+    app.get("/outbound", (req) => {
       capturedOutboundHeaders = propagateRequestContext(req, {
         Authorization: "Bearer token",
       });

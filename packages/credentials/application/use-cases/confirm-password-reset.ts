@@ -1,6 +1,6 @@
 import type { User } from "@verixa/identity";
 import { Result, ValidationError } from "@verixa/shared-kernel";
-import type { RateLimiter, RateLimitKey } from "@verixa/shared-kernel";
+import type { BruteForcePolicy, RateLimiter, RateLimitKey } from "@verixa/shared-kernel";
 
 import { Credential } from "../../domain/entities/credential.js";
 import { PasswordResetToken } from "../../domain/entities/password-reset-token.js";
@@ -69,6 +69,12 @@ export class ConfirmPasswordReset {
     private readonly rateLimiter: RateLimiter,
     private readonly passwordPolicy?: PasswordPolicy,
     private readonly passwordHistoryPolicy: PasswordHistoryPolicy = DEFAULT_PASSWORD_HISTORY_POLICY,
+    /**
+     * Optional, for the same reason as on `AuthenticateWithPassword`: the
+     * existing callers stay valid, and a deployment without a shared store
+     * still gets the single-use and expiry rules from the domain.
+     */
+    private readonly bruteForce?: BruteForcePolicy,
   ) {}
 
   async execute(
@@ -198,6 +204,8 @@ export class ConfirmPasswordReset {
         ),
       );
     }
+
+    await this.bruteForce?.recordSuccess("password-reset", tokenHash);
 
     // Outside the transaction because it is an external system — a session
     // store, not this database. Inside, a slow or unavailable session service

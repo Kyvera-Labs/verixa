@@ -11,6 +11,7 @@ export const API_ERROR_CODES = {
   INVALID_EVIDENCE: { status: 400 },
   NOT_FOUND: { status: 404 },
   CONFLICT: { status: 409 },
+  PAYLOAD_TOO_LARGE: { status: 413 },
   INVALID_STATUS_TRANSITION: { status: 409 },
   REVIEW_CLAIM_CONFLICT: { status: 409 },
   AUDIT_CHAIN_CONFLICT: { status: 409 },
