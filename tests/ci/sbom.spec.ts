@@ -229,6 +229,11 @@ describe("generate-sbom", () => {
     expect(result.stderr).toContain("depends on tiny-lru@11.0.1, which has no packages: entry");
   });
 
+  // The one test that shells through `pnpm run`, so it pays package-manager
+  // startup on top of a tsx compile and a full-workspace parse: 17.5s warm on
+  // this machine, and past vitest's 30s default while other workers are
+  // competing for it. A subprocess assertion that fails because the box was
+  // busy teaches nobody anything.
   it("builds and validates the real repository's SBOM", () => {
     const output = outputPath();
     const result = runSbomGeneratorViaPnpmScript(["--output", output]);
@@ -244,5 +249,5 @@ describe("generate-sbom", () => {
     expect(bom.compositions).toEqual([{ aggregate: "complete" }]);
     expect(bom.components.length).toBeGreaterThan(100);
     expect(componentNamed(bom, "fastify")).toBeDefined();
-  });
+  }, 120_000);
 }, 30_000);

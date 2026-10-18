@@ -100,6 +100,25 @@ export class ConfirmPasswordReset {
     const now = new Date();
     const tokenHash = PasswordResetToken.hashToken(command.token);
 
+    // Keyed by the token's digest rather than the token: the digest is what the
+    // lookup uses, it is safe to hold in memory or log, and repeated guesses
+    // against one link share a budget.
+    //
+    // Guesses spread across freshly issued links do not share it. That case
+    // belongs to the throttle on issuance and to the request-rate limiter
+    // (Phase 15), not to this gate, and saying otherwise would overstate what
+    // is wired here.
+    if (this.bruteForce !== undefined) {
+      const gate = await this.bruteForce.check("password-reset", tokenHash);
+      if (!gate.allowed) {
+        // The same refusal as a bad token, for the same reason: "too many
+        // attempts" would confirm that a real link exists.
+        return Result.err(
+          new ValidationError("This reset link is not valid.", { token: ["invalid"] }),
+        );
+      }
+    }
+
     // Hashed outside the transaction: it is the slowest thing here and needs
     // no database. Same reasoning as `RegisterUserWithPassword`.
     //
@@ -161,6 +180,11 @@ export class ConfirmPasswordReset {
     });
 
     if (outcome.kind === "invalid") {
+      // Every invalid outcome — unknown, expired, already used, or a token
+      // whose user is gone — costs the same against this budget, which is the
+      // point: they are indistinguishable to the caller and they are all
+      // guesses.
+      await this.bruteForce?.recordFailure("password-reset", tokenHash);
       return Result.err(
         new ValidationError("This reset link is not valid.", { token: ["invalid"] }),
       );

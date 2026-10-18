@@ -52,6 +52,9 @@ describe("GraphQL Server Bootstrap (Issue 182 / Roadmap 241)", () => {
 
   it("propagates correlation-id header on GraphQL responses", async () => {
     const app = Fastify({ logger: false });
+  it("propagates correlation-id header on GraphQL responses", async () => {
+    const app = Fastify({ logger: false });
+    // Simulate correlation ID hook
     app.addHook("onRequest", async (request, reply) => {
       const id = (request.headers["x-correlation-id"] as string) || "generated-id";
       reply.header("x-correlation-id", id);

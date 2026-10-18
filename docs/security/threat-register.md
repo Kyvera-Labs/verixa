@@ -22,11 +22,12 @@ the code is right and the row is a bug.
 
 ## Sources
 
-| Prefix | Context                  | Source                                                                                                                                                                                                             |
-| :----- | :----------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CRED` | Credentials (Phase 04)   | Issue 077's scope — enumeration, brute force, token theft, credential stuffing — plus [Authentication Flows](authentication-flows.md), [Password Storage](password-storage.md), [Token Storage](token-storage.md). |
-| `AUD`  | Audit logging (Phase 10) | Issue 195's scope — tampering, silent deletion, subscriber failure / event loss, log injection — plus the audit package and [ADR-0003](../adr/0003-stellar-audit-anchoring.md).                                    |
-| `ABAC` | Policy engine (Phase 08) | [Threat Model: Policy Engine & ABAC Evaluation](threat-model-abac.md), IDs mapped one-to-one from that document.                                                                                                   |
+| Prefix  | Context                            | Source                                                                                                                                                                                                             |
+| :------ | :--------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CRED`  | Credentials (Phase 04)             | Issue 077's scope — enumeration, brute force, token theft, credential stuffing — plus [Authentication Flows](authentication-flows.md), [Password Storage](password-storage.md), [Token Storage](token-storage.md). |
+| `AUD`   | Audit logging (Phase 10)           | Issue 195's scope — tampering, silent deletion, subscriber failure / event loss, log injection — plus the audit package and [ADR-0003](../adr/0003-stellar-audit-anchoring.md).                                    |
+| `ABAC`  | Policy engine (Phase 08)           | [Threat Model: Policy Engine & ABAC Evaluation](threat-model-abac.md), IDs mapped one-to-one from that document.                                                                                                   |
+| `INFRA` | Platform infrastructure (Phase 11) | [Threat Model: Platform Infrastructure](threat-model-infrastructure.md) — transport, process boundary, container runtime, dependency graph and inter-service seams (roadmap Issue 202, GitHub #143).               |
 
 **Why the `CRED` and `AUD` rows exist before their threat models do.** The
 dedicated documents for Issues 077 (`threat-model-credentials.md`) and 195
@@ -48,7 +49,8 @@ under their own prefixes.
 | `CRED`    |        10 |             1 |      4 |     15 |
 | `AUD`     |         6 |             1 |     10 |     17 |
 | `ABAC`    |         0 |             0 |     15 |     15 |
-| **Total** |    **16** |         **2** | **29** | **47** |
+| `INFRA`   |         7 |             2 |      4 |     13 |
+| **Total** |    **23** |         **4** | **33** | **60** |
 
 The number that stands out is `ABAC`: fifteen threats, every one open. That is
 not a finding against the ABAC threat model, which is thorough; it is that
@@ -170,6 +172,28 @@ policies, cache-outage fallback latency, intra-request attribute staleness).
 They are design decisions for a component that does not exist yet, so they
 are recorded there and will be added here as `accepted-risk` rows, with their
 reasoning, when the mitigations they qualify are merged.
+
+## Infrastructure (`INFRA`)
+
+Code: `apps/api/src/plugins/`, `apps/api/src/app.ts`,
+`packages/config/index.ts`, `.github/workflows/`, `infra/ci/`.
+`docs/security/threat-model-infrastructure.md` is the long-form document.
+
+| ID          | Threat                                                        | STRIDE | Actor                                             | Entry point                                          | Mitigation                                                                                                                       | Verification                                                                                                 | Status        |
+| :---------- | :------------------------------------------------------------ | :----- | :------------------------------------------------ | :--------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------- | :------------ |
+| `INFRA-S-1` | Forged client identity through forwarded headers              | S      | Network attacker / unauthenticated client         | `X-Forwarded-Proto` / `X-Forwarded-For`              | `TRUST_PROXY=false` by default and never inferred (Issue 213)                                                                    | `tests/integration/security-headers.spec.ts` — "ignores a forged X-Forwarded-Proto when no proxy is trusted" | mitigated     |
+| `INFRA-S-2` | Attacker-controlled browser origin reading authenticated data | S      | Hostile web page                                  | Any route with an `Origin` header                    | Exact-origin allowlist, non-allowlisted origins refused, credentials off by default, wildcard+credentials refused (Issue 204)    | `tests/integration/cors.spec.ts`; `packages/config/index.spec.ts`                                            | mitigated     |
+| `INFRA-T-1` | Known-vulnerable or hostile dependency                        | T      | Registry/ecosystem attacker                       | `pnpm-lock.yaml` → runtime                           | Dependency scan fails on unexcepted high/critical with a dated exception process (Issue 207); lockfile gate and SBOM (Issue 215) | `tests/ci/dependency-scan.spec.ts`; `tests/ci/lockfile-integrity.spec.ts`                                    | mitigated     |
+| `INFRA-T-2` | Unsafe pattern reaching the codebase through review           | T      | Contributor / missed review                       | Any pull request                                     | Security lint ruleset as errors in the existing lint job (Issue 208)                                                             | `tests/ci/security-lint.spec.ts`; `pnpm lint`                                                                | mitigated     |
+| `INFRA-T-3` | Build or release chain tampering with no advisory to catch it | T      | Registry/ecosystem attacker; compromised CI dep   | CI workflow, lockfile resolution, mutable action tag | No complete control; lockfile gate, SBOM and pinned major versions reduce the window (Issue 215)                                 | none for provenance; `tests/ci/sbom.spec.ts` covers the inventory                                            | accepted-risk |
+| `INFRA-R-1` | Infrastructure events that leave no attributable record       | R      | Authenticated user / compromised process          | Process lifecycle, config load, container start      | Partial: audit integrity (Issue 195) and the incident-response runbook (Issue 218); posture logging not implemented              | none for posture history                                                                                     | open          |
+| `INFRA-I-1` | Eavesdropping on the transport                                | I      | Network attacker                                  | Client-to-proxy path; plaintext listeners            | Required TLS termination, HSTS, optional 308 redirect, validated `Host` (Issue 213)                                              | `tests/integration/security-headers.spec.ts`; `apps/api/src/plugins/security-headers.spec.ts`                | mitigated     |
+| `INFRA-I-2` | Fingerprinting through response metadata                      | I      | Unauthenticated client                            | Any response                                         | Single global header policy, `hidePoweredBy` (Issue 203)                                                                         | `apps/api/src/plugins/security-headers.spec.ts` — "does not advertise the stack"                             | mitigated     |
+| `INFRA-I-3` | Process compromise exposing environment secrets               | I      | Attacker with code execution in the process       | Process memory and `process.env`                     | Partial: no shared secret defaults, sanitized 500s, least-privilege DB role; secret manager and rotation are Issue 206           | `packages/config/index.spec.ts`; `apps/api/src/http/error-response.spec.ts`                                  | open          |
+| `INFRA-D-1` | Unthrottled credential-adjacent endpoints                     | D      | Unauthenticated client, possibly distributed      | `POST /auth/login`, MFA, reset, API-key checks       | Per-account lockout only; generalized `BruteForcePolicy` is Issue 209                                                            | `authenticate-with-password-lockout.spec.ts` (login case only)                                               | open          |
+| `INFRA-D-2` | Resource exhaustion from large or slow requests               | D      | Unauthenticated client                            | Any route; slow or oversized body                    | Partial: Fastify JSON limits and an upload size threshold; proxy/runtime timeouts undocumented as posture                        | none for the limits                                                                                          | open          |
+| `INFRA-E-1` | Container escape through a misconfigured runtime              | E      | Attacker with code execution in the container     | Image user, capabilities, filesystem, mounts         | Non-root minimal runtime image (Issue 216); OS-package scan fails CI on high/critical                                            | `.github/workflows/container-scan.yml`; `ci.yml` build-and-run job                                           | mitigated     |
+| `INFRA-E-2` | Cross-service privilege through an unconfigured seam          | E      | Attacker reaching one component of a future split | Inter-service network boundary (ARCHITECTURE §7)     | None by construction: one process, no inter-service boundary exists yet                                                          | none; no boundary to test                                                                                    | accepted-risk |
 
 ## Related documentation
 

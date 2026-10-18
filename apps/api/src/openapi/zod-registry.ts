@@ -6,12 +6,15 @@ import type {
   RawServerDefault,
   RouteOptions,
 } from "fastify";
-import { zodToJsonSchema } from "zod-to-json-schema";
 import type { ZodTypeAny } from "zod";
+import { zodToJsonSchema } from "zod-to-json-schema";
 
 type OpenApiSchema = Record<string, unknown>;
 
-const schemasByApp = new WeakMap<FastifyInstance, Map<string, OpenApiSchema>>();
+// Keyed by `object` rather than `FastifyInstance`: the registry is generic over
+// each app's concrete logger, and Fastify's instance types are not mutually
+// assignable under `exactOptionalPropertyTypes`.
+const schemasByApp = new WeakMap<object, Map<string, OpenApiSchema>>();
 
 type App<TLogger extends FastifyBaseLogger> = FastifyInstance<
   RawServerDefault,
@@ -19,6 +22,18 @@ type App<TLogger extends FastifyBaseLogger> = FastifyInstance<
   RawReplyDefaultExpression,
   TLogger
 >;
+
+function getOrCreateAppSchemas(app: FastifyInstance): Map<string, OpenApiSchema> {
+  // Walk up encapsulated child scopes if needed, or check if `app` already
+  // shares `getSchema` with a registered root instance.
+  const existing = schemasByApp.get(app);
+  if (existing !== undefined) {
+    return existing;
+  }
+  const created = new Map<string, OpenApiSchema>();
+  schemasByApp.set(app, created);
+  return created;
+}
 
 /** Register one Zod DTO as a reusable Fastify validator and OpenAPI component. */
 export function registerZodSchema<TLogger extends FastifyBaseLogger, TSchema extends ZodTypeAny>(
@@ -30,8 +45,17 @@ export function registerZodSchema<TLogger extends FastifyBaseLogger, TSchema ext
     throw new Error(`Invalid OpenAPI schema name: ${name}`);
   }
 
-  const appSchemas = schemasByApp.get(app) ?? new Map<string, OpenApiSchema>();
+  const appSchemas = getOrCreateAppSchemas(app);
   if (appSchemas.has(name) || app.getSchema(name) !== undefined) {
+  // Fastify's `addSchema`/`getSchema` are declared on the default
+  // `FastifyInstance` while this function is generic over the concrete logger
+  // `buildApp` produces, and the two are not structurally assignable under
+  // `exactOptionalPropertyTypes`. Narrowing here keeps the public signature
+  // generic so callers can pass their own instance.
+  const schemaHost = app as unknown as FastifyInstance;
+
+  const appSchemas = schemasByApp.get(app) ?? new Map<string, OpenApiSchema>();
+  if (appSchemas.has(name) || schemaHost.getSchema(name) !== undefined) {
     throw new Error(`OpenAPI schema is already registered: ${name}`);
   }
 
@@ -40,9 +64,8 @@ export function registerZodSchema<TLogger extends FastifyBaseLogger, TSchema ext
     $refStrategy: "none",
   }) as OpenApiSchema;
   const component = { ...jsonSchema, $id: name };
-  app.addSchema(component);
+  schemaHost.addSchema(component);
   appSchemas.set(name, component);
-  schemasByApp.set(app, appSchemas);
   return { $ref: `${name}#` };
 }
 
@@ -57,21 +80,44 @@ export function getOpenApiComponents(app: FastifyInstance): {
 export function enforceRegisteredRouteSchemas<TLogger extends FastifyBaseLogger>(
   app: App<TLogger>,
 ): void {
+  const rootSchemas = getOrCreateAppSchemas(app);
+  app.addHook("onRegister", (instance) => {
+    schemasByApp.set(instance, rootSchemas);
+  });
+
   app.addHook("onRoute", (route: RouteOptions) => {
+  // A regular function with an explicit `this`, not an arrow: Fastify invokes
+  // the hook with `this` bound to the instance the route is being added to,
+  // and routes are added inside encapsulated plugins (`/auth`, `/admin`,
+  // `/verification`), where the schema was registered on that same scope.
+  // Checking the root `app`'s registry instead would reject every prefixed
+  // route as "referencing an unregistered schema" — the schemas are visible to
+  // the child context that registered them and to no other.
+  app.addHook("onRoute", function (this: FastifyInstance, route: RouteOptions) {
+    // Routes that predate this registry declare hand-written JSON Schema and
+    // opt out with `config.allowJsonSchemaValidation`; see the RBAC route
+    // module. The exemption is a per-route marker rather than a URL prefix so
+    // it stays visible at the route that needs it.
+    const routeConfig = route.config as { allowJsonSchemaValidation?: boolean } | undefined;
+    if (routeConfig?.allowJsonSchemaValidation === true) return;
+
     const schema = route.schema;
     if (schema === undefined) return;
+    const method = Array.isArray(route.method) ? route.method.join(",") : route.method;
     for (const key of ["body", "params", "querystring"] as const) {
       const inputSchema = schema[key] as OpenApiSchema | undefined;
       if (inputSchema === undefined) continue;
       const ref = inputSchema.$ref;
       if (typeof ref !== "string" || !ref.endsWith("#")) {
-        throw new Error(`${route.method} ${route.url} ${key} must use a registered Zod schema`);
+        throw new Error(`${method} ${route.url} ${key} must use a registered Zod schema`);
       }
       const name = ref.slice(0, -1);
-      if (!schemasByApp.get(app)?.has(name)) {
+      if (!rootSchemas.has(name) && app.getSchema(name) === undefined) {
         throw new Error(
           `${route.method} ${route.url} ${key} references unregistered schema ${name}`,
         );
+      if (!schemasByApp.get(this)?.has(name)) {
+        throw new Error(`${method} ${route.url} ${key} references unregistered schema ${name}`);
       }
     }
   });

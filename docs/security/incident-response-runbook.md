@@ -25,12 +25,12 @@ wait for perfect certainty before containing a credible active compromise.
 Choose the highest level supported by current evidence. Reassess when scope
 changes; severity is a response aid, not a statement of blame.
 
-| Level | Meaning | Examples | Initial response |
-| --- | --- | --- | --- |
+| Level          | Meaning                                                                            | Examples                                                                                                                      | Initial response                                                                                                    |
+| -------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | SEV-1 Critical | Active compromise or credible risk to many users, signing keys, or production data | Confirmed production credential theft; unauthorized admin access; forged identity/session tokens; destructive database access | Page the incident lead and affected deployment owner immediately; contain now; establish a private incident channel |
-| SEV-2 High | A serious vulnerability is exploitable or a limited compromise is likely | Exposed secret with uncertain use; exploitable authentication bypass; confirmed access to one tenant | Incident lead and relevant maintainers respond promptly; contain the affected path; preserve evidence |
-| SEV-3 Moderate | Security weakness with no evidence of exploitation and a bounded impact | Misconfiguration exposing non-sensitive metadata; repeated suspicious traffic blocked by controls | Assign an owner, verify exposure, and set a response deadline based on risk |
-| SEV-4 Low | Hardening or low-impact issue without a plausible immediate exploit | Missing defense-in-depth header where no sensitive browser surface is served | Track privately or publicly as appropriate and fix through normal review |
+| SEV-2 High     | A serious vulnerability is exploitable or a limited compromise is likely           | Exposed secret with uncertain use; exploitable authentication bypass; confirmed access to one tenant                          | Incident lead and relevant maintainers respond promptly; contain the affected path; preserve evidence               |
+| SEV-3 Moderate | Security weakness with no evidence of exploitation and a bounded impact            | Misconfiguration exposing non-sensitive metadata; repeated suspicious traffic blocked by controls                             | Assign an owner, verify exposure, and set a response deadline based on risk                                         |
+| SEV-4 Low      | Hardening or low-impact issue without a plausible immediate exploit                | Missing defense-in-depth header where no sensitive browser surface is served                                                  | Track privately or publicly as appropriate and fix through normal review                                            |
 
 Raise severity when exploitation is confirmed, impact expands, containment fails,
 or evidence may be lost. Lower it only after the incident lead records why the

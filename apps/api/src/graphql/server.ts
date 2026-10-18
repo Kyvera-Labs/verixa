@@ -25,6 +25,22 @@ const identitySchema = readFileSync(
 export const schema = `${rootSchema}\n${identitySchema}`;
 
 const baseResolvers = {
+import type {
+  FastifyBaseLogger,
+  FastifyInstance,
+  RawReplyDefaultExpression,
+  RawRequestDefaultExpression,
+  RawServerDefault,
+} from "fastify";
+import mercurius from "mercurius";
+
+const schema = `
+  type Query {
+    _service: String!
+  }
+`;
+
+const resolvers = {
   Query: {
     _service: () => "verixa-api",
   },
@@ -40,6 +56,10 @@ export interface RegisterGraphQLServerOptions {
  * Mounted at `/graphql`, sharing the Fastify server, logger, and correlation pipeline.
  * Field-level resolvers delegate directly to application use cases from the container,
  * maintaining the architectural rule that transport adapters contain no domain logic.
+/**
+ * Registers Mercurius GraphQL server on the Fastify instance.
+ *
+ * Mounted at `/graphql` sharing the Fastify server, logger, and correlation pipeline.
  */
 export async function registerGraphQLServer<TLogger extends FastifyBaseLogger>(
   app: FastifyInstance<
@@ -70,6 +90,10 @@ export async function registerGraphQLServer<TLogger extends FastifyBaseLogger>(
     schema,
     resolvers,
     ...(identityLoaders !== undefined ? { loaders: identityLoaders } : {}),
+): Promise<void> {
+  await app.register(mercurius, {
+    schema,
+    resolvers,
     graphiql: false,
     path: "/graphql",
   });
