@@ -1,0 +1,35 @@
+{
+  "auditReportVersion": 2,
+  "vulnerabilities": {
+    "left-pad": {
+      "name": "left-pad",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 9999999,
+          "name": "left-pad",
+          "dependency": "left-pad",
+          "title": "Denial of service in left-pad",
+          "url": "https://github.com/advisories/GHSA-0000-0000-0000",
+          "severity": "moderate",
+          "range": "<2.0.0"
+        }
+      ],
+      "effects": [],
+      "range": "<2.0.0",
+      "nodes": ["node_modules/left-pad"],
+      "fixAvailable": false
+    }
+  },
+  "metadata": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 0,
+      "moderate": 1,
+      "high": 0,
+      "critical": 0,
+      "total": 1
+    }
+  }
+}

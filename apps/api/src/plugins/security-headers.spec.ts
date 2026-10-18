@@ -1,7 +1,23 @@
+import { ConfigError } from "@verixa/config";
 import supertest from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { buildApp } from "../app.js";
+import { buildApp, type SecurityHeadersOptions } from "../app.js";
+import { describe, expect, it } from "vitest";
+
+import {
+  DEFAULT_HSTS_MAX_AGE_SECONDS,
+  formatHstsHeader,
+  httpsRedirectTarget,
+  isRedirectableHost,
+  securityHeadersFromConfig,
+  type TransportSecurityConfig,
+} from "./security-headers.js";
+
+const productionHsts: SecurityHeadersOptions = {
+  hsts: { maxAgeSeconds: 31_536_000, includeSubDomains: true, preload: false },
+  enforceHttps: false,
+};
 
 /**
  * Integration coverage for the global security-headers plugin (Issue 203).
@@ -17,7 +33,7 @@ import { buildApp } from "../app.js";
  * does.
  */
 describe("security headers", () => {
-  const app = buildApp();
+  const app = buildApp({ securityHeaders: productionHsts });
 
   beforeAll(async () => {
     // A route inside an explicitly encapsulated child scope — the shape every
@@ -96,17 +112,8 @@ describe("security headers", () => {
     expect(response.status).toBe(404);
     expect(response.headers["x-content-type-options"]).toBe("nosniff");
     expect(response.headers["strict-transport-security"]).toContain("max-age=31536000");
-import { ConfigError } from "@verixa/config";
-import { describe, expect, it } from "vitest";
-
-import {
-  DEFAULT_HSTS_MAX_AGE_SECONDS,
-  formatHstsHeader,
-  httpsRedirectTarget,
-  isRedirectableHost,
-  securityHeadersFromConfig,
-  type TransportSecurityConfig,
-} from "./security-headers.js";
+  });
+});
 
 /**
  * Builds a transport-security config from defaults rather than from a partial

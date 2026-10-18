@@ -15,6 +15,7 @@ import { loadConfig } from "@verixa/config";
 import {
   Argon2PasswordHasher,
   AuthenticateWithPassword,
+  DEFAULT_LOCKOUT_POLICY,
   ConfirmEmailVerification,
   ConfirmPasswordReset,
   NoSessionsRevoker,

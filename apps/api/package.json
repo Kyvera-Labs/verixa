@@ -26,9 +26,10 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@fastify/cors": "^11.3.1",
     "@fastify/helmet": "^13.2.0",
     "@fastify/swagger": "^9.9.2",
-    "@fastify/swagger-ui": "^5.2.6",
+    "@fastify/swagger-ui": "^6.1.2",
     "@verixa/audit": "workspace:*",
     "@verixa/authorization": "workspace:*",
     "@verixa/config": "workspace:*",
