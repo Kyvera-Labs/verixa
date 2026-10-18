@@ -191,8 +191,15 @@ export function buildApp(options: BuildAppOptions = {}) {
     // duplicated each route set and made the second attempt to register the
     // same OpenAPI component (`RegisterBody`) throw during boot. It also put
     // routes at URLs no client calls (`POST /:requestId/evidence`).
-    enforceRegisteredRouteSchemas(app);
-    registerContextRoutes(app, options.container);
+    //
+    // The REST modules share one unprefixed scope so the registered-schema
+    // guard covers them and nothing else. Applied to the root it also caught
+    // Mercurius's own `/graphql` querystring schema and refused to boot.
+    const container = options.container;
+    app.register((rest) => {
+      enforceRegisteredRouteSchemas(rest);
+      registerContextRoutes(rest, container);
+    });
   }
 
   return app;
