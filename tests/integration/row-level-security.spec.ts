@@ -55,6 +55,21 @@ describe.skipIf(!available)("row-level security", () => {
   beforeAll(async () => {
     // Idempotent role creation — roles are cluster-scoped and survive
     // database resets, so a plain CREATE ROLE fails on the second run.
+    //
+    // These three statements are the one place in the repository where SQL is
+    // built by interpolation rather than bound, and the lint rule is right to
+    // ask about it. DDL genuinely cannot be parameterized: `GRANT` and
+    // `CREATE ROLE` take identifiers, not values, Postgres refuses a placeholder
+    // there, and a `DO` block's body is a string literal — so `$1` inside one
+    // would be the text `$1`. What makes this safe is not the shape of the
+    // statement but the origin of the pieces: `APP_ROLE` and `APP_PASSWORD` are
+    // constants declared above, fixed for the whole of this file, and nothing
+    // from a request or a database row can reach them. They are also plain
+    // lowercase identifiers needing no quoting. Changing either to a runtime
+    // value would make this disable wrong, which is why it is written out here
+    // and in docs/security/injection-hardening.md rather than left as a bare
+    // suppression.
+    /* eslint-disable no-restricted-syntax -- DDL identifiers cannot be bound; see the comment above */
     await admin.$executeRawUnsafe(`
       DO $$
       BEGIN
@@ -68,6 +83,7 @@ describe.skipIf(!available)("row-level security", () => {
       `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ${APP_ROLE};`,
     );
     await admin.$executeRawUnsafe(`GRANT USAGE ON SCHEMA public TO ${APP_ROLE};`);
+    /* eslint-enable no-restricted-syntax */
 
     await admin.invitation.deleteMany({});
     await admin.organizationMembership.deleteMany({});

@@ -61,6 +61,10 @@ export interface HashAnchor {
    * for a well-formed lookup that simply doesn't match (wrong hash, or the
    * reference points at something else); returns an `AnchorError` only when
    * the check itself couldn't be completed.
+   *
+   * `anchorRef` is the transaction hash `anchor()` returned. Implementations
+   * that reach a public network validate it as a 64-character hex digest first,
+   * because it becomes part of an outbound request.
    */
   verify(hash: string, anchorRef: string): Promise<Result<boolean, AnchorError>>;
 }

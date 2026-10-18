@@ -45,6 +45,14 @@ describe.skipIf(!available)("index usage (Issue 055)", () => {
   /**
    * Runs EXPLAIN (no ANALYZE) and returns the plan as one string.
    *
+   * Callers pass the *whole* statement, `EXPLAIN` included. This helper used to
+   * build it as `` `EXPLAIN ${sql}` ``, which is the exact shape Issue 210's
+   * lint rule exists to catch: a raw-query call fed a string assembled at
+   * runtime. Here the pieces were always literals inside this file, so it was
+   * safe — and safe-by-inspection is precisely what a reviewer cannot check on
+   * a diff. Moving the keyword into each call site makes every statement this
+   * suite runs a single fixed literal, with nothing concatenated.
+   *
    * Every placeholder below carries an explicit `::type` cast, and that is
    * load-bearing rather than decorative. `$queryRawUnsafe` binds parameters
    * as `text`, so an uncast `WHERE email = $1` asks Postgres to compare
@@ -58,8 +66,8 @@ describe.skipIf(!available)("index usage (Issue 055)", () => {
    * generated queries bind with the correct types. Casting the parameter
    * instead of the column is what makes these assertions measure the schema.
    */
-  async function explain(sql: string, ...params: unknown[]): Promise<string> {
-    const rows = await prisma.$queryRawUnsafe<PlanRow[]>(`EXPLAIN ${sql}`, ...params);
+  async function explain(statement: string, ...params: unknown[]): Promise<string> {
+    const rows = await prisma.$queryRawUnsafe<PlanRow[]>(statement, ...params);
     return rows.map((row) => row["QUERY PLAN"]).join("\n");
   }
 
@@ -209,7 +217,7 @@ describe.skipIf(!available)("index usage (Issue 055)", () => {
 
   it("looks up a user by email via the unique index", async () => {
     const plan = await explain(
-      "SELECT * FROM users WHERE email = $1::citext",
+      "EXPLAIN SELECT * FROM users WHERE email = $1::citext",
       "index-owner@example.com",
     );
 
@@ -219,14 +227,17 @@ describe.skipIf(!available)("index usage (Issue 055)", () => {
   });
 
   it("looks up an organization by slug via the unique index", async () => {
-    const plan = await explain("SELECT * FROM organizations WHERE slug = $1::citext", "index-org");
+    const plan = await explain(
+      "EXPLAIN SELECT * FROM organizations WHERE slug = $1::citext",
+      "index-org",
+    );
 
     expectIndexed(plan, "organizations");
   });
 
   it("looks up an invitation by token hash via the unique index", async () => {
     const plan = await explain(
-      "SELECT * FROM invitations WHERE token_hash = $1::text",
+      "EXPLAIN SELECT * FROM invitations WHERE token_hash = $1::text",
       "0".repeat(64),
     );
 
@@ -235,7 +246,7 @@ describe.skipIf(!available)("index usage (Issue 055)", () => {
 
   it("finds a user's membership in an organization via the composite index", async () => {
     const plan = await explain(
-      "SELECT * FROM organization_memberships WHERE user_id = $1::uuid AND organization_id = $2::uuid",
+      "EXPLAIN SELECT * FROM organization_memberships WHERE user_id = $1::uuid AND organization_id = $2::uuid",
       OWNER_ID,
       ORG_ID,
     );
@@ -245,7 +256,7 @@ describe.skipIf(!available)("index usage (Issue 055)", () => {
 
   it("finds pending invitations for an organization via the composite index", async () => {
     const plan = await explain(
-      "SELECT * FROM invitations WHERE organization_id = $1::uuid AND status = 'pending' LIMIT 50",
+      "EXPLAIN SELECT * FROM invitations WHERE organization_id = $1::uuid AND status = 'pending' LIMIT 50",
       ORG_ID,
     );
 
@@ -257,7 +268,7 @@ describe.skipIf(!available)("index usage (Issue 055)", () => {
     // invitations expiring in the next minute is selective, so an index is
     // the right plan. Asking for all of them would correctly seq-scan.
     const plan = await explain(
-      "SELECT * FROM invitations WHERE expires_at < $1::timestamptz",
+      "EXPLAIN SELECT * FROM invitations WHERE expires_at < $1::timestamptz",
       new Date(Date.now() - 86_400_000),
     );
 
@@ -270,7 +281,7 @@ describe.skipIf(!available)("index usage (Issue 055)", () => {
     // column. That is why `@@index([organizationId])` exists separately and
     // is not redundant, which is the least obvious call in this schema.
     const plan = await explain(
-      "SELECT * FROM organization_memberships WHERE organization_id = $1::uuid LIMIT 50",
+      "EXPLAIN SELECT * FROM organization_memberships WHERE organization_id = $1::uuid LIMIT 50",
       ORG_ID,
     );
 
@@ -282,7 +293,7 @@ describe.skipIf(!available)("index usage (Issue 055)", () => {
     // index would be slower than reading it straight through, and Postgres
     // knows that. A test suite that treated every seq scan as a failure would
     // push toward indexes that make things worse.
-    const plan = await explain("SELECT * FROM users WHERE status = 'active'");
+    const plan = await explain("EXPLAIN SELECT * FROM users WHERE status = 'active'");
 
     expect(plan).toMatch(/Seq Scan/);
   });
