@@ -18,6 +18,7 @@ import {
 } from "./plugins/security-headers.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerVerificationRoutes } from "./routes/verification.js";
+import { registerGraphQLServer } from "./graphql/server.js";
 import { enforceRegisteredRouteSchemas } from "./openapi/zod-registry.js";
 import { assertRouteValidationSchemas } from "./http/route-validation.js";
 
@@ -135,6 +136,8 @@ export function buildApp(options: BuildAppOptions = {}) {
     // *does* check dependencies is a separate concern (Phase 18).
     return { status: "ok" };
   });
+
+  registerGraphQLServer(app);
 
   // Registered on `app` itself, in the same encapsulation context as every
   // route below, so it covers `/health` and the authenticated routes alike.
