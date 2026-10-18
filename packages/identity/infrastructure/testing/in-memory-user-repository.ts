@@ -17,6 +17,14 @@ export class InMemoryUserRepository implements UserRepository {
     return Promise.resolve(user?.isDeleted === false ? user : undefined);
   }
 
+  findManyByIds(ids: readonly UserId[]): Promise<User[]> {
+    const idSet = new Set(ids);
+    const users = [...this.usersById.values()].filter(
+      (user) => idSet.has(user.id) && !user.isDeleted,
+    );
+    return Promise.resolve(users);
+  }
+
   findByIdIncludingDeleted(id: UserId): Promise<User | undefined> {
     return Promise.resolve(this.usersById.get(id));
   }

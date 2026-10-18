@@ -1,0 +1,93 @@
+"""
+Lifecycle status of a user in the identity domain.
+"""
+enum UserStatus {
+  pending
+  active
+  suspended
+  deleted
+}
+
+"""
+Lifecycle status of an organization.
+"""
+enum OrganizationStatus {
+  active
+  suspended
+  deleted
+}
+
+"""
+Membership status within an organization.
+"""
+enum MembershipStatus {
+  active
+  revoked
+}
+
+"""
+User identity aggregate root.
+"""
+type User {
+  id: ID!
+  email: String!
+  displayName: String!
+  givenName: String
+  familyName: String
+  status: UserStatus!
+  createdAt: String!
+  updatedAt: String!
+  deletedAt: String
+  organizations: [Organization!]!
+}
+
+"""
+Organization aggregate root representing a multi-tenant workspace.
+"""
+type Organization {
+  id: ID!
+  name: String!
+  slug: String!
+  ownerId: ID!
+  owner: User
+  status: OrganizationStatus!
+  createdAt: String!
+  updatedAt: String!
+  users: [User!]!
+  memberships: [OrganizationMembership!]!
+}
+
+"""
+Join entity linking a user to an organization with domain status and timestamp.
+"""
+type OrganizationMembership {
+  id: ID!
+  userId: ID!
+  organizationId: ID!
+  status: MembershipStatus!
+  joinedAt: String!
+  user: User!
+  organization: Organization!
+}
+
+extend type Query {
+  """
+  Look up a user by their unique identifier.
+  """
+  user(id: ID!): User
+
+  """
+  Look up an organization by its unique identifier.
+  """
+  organization(id: ID!): Organization
+
+  """
+  Look up an organization by its unique URL slug.
+  """
+  organizationBySlug(slug: String!): Organization
+
+  """
+  List all organizations.
+  """
+  organizations: [Organization!]!
+}

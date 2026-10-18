@@ -18,10 +18,28 @@ export class PrismaOrganizationRepository implements OrganizationRepository {
     return row === null ? undefined : OrganizationMapper.toDomain(row);
   }
 
+  async findManyByIds(ids: readonly OrganizationId[]): Promise<Organization[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+    const rows = await this.prisma.organization.findMany({
+      where: { id: { in: [...ids] }, status: { not: "deleted" } },
+    });
+    return rows.map((row) => OrganizationMapper.toDomain(row));
+  }
+
   async findBySlug(slug: string): Promise<Organization | undefined> {
     // `citext` column, so this is case-insensitive without a LOWER() wrapper.
     const row = await this.prisma.organization.findUnique({ where: { slug } });
     return row === null ? undefined : OrganizationMapper.toDomain(row);
+  }
+
+  async findAll(): Promise<Organization[]> {
+    const rows = await this.prisma.organization.findMany({
+      where: { status: { not: "deleted" } },
+      orderBy: { createdAt: "desc" },
+    });
+    return rows.map((row) => OrganizationMapper.toDomain(row));
   }
 
   async save(organization: Organization): Promise<void> {
@@ -66,6 +84,27 @@ export class PrismaOrganizationMembershipRepository implements OrganizationMembe
   async findAllByOrganization(organizationId: OrganizationId): Promise<OrganizationMembership[]> {
     const rows = await this.prisma.organizationMembership.findMany({
       where: { organizationId },
+      orderBy: { joinedAt: "asc" },
+    });
+    return rows.map((row) => OrganizationMembershipMapper.toDomain(row));
+  }
+
+  async findAllByUser(userId: UserId): Promise<OrganizationMembership[]> {
+    const rows = await this.prisma.organizationMembership.findMany({
+      where: { userId },
+      orderBy: { joinedAt: "asc" },
+    });
+    return rows.map((row) => OrganizationMembershipMapper.toDomain(row));
+  }
+
+  async findAllByOrganizationIds(
+    organizationIds: readonly OrganizationId[],
+  ): Promise<OrganizationMembership[]> {
+    if (organizationIds.length === 0) {
+      return [];
+    }
+    const rows = await this.prisma.organizationMembership.findMany({
+      where: { organizationId: { in: [...organizationIds] } },
       orderBy: { joinedAt: "asc" },
     });
     return rows.map((row) => OrganizationMembershipMapper.toDomain(row));

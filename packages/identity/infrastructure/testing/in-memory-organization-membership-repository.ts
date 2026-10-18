@@ -32,6 +32,23 @@ export class InMemoryOrganizationMembershipRepository implements OrganizationMem
     );
   }
 
+  findAllByUser(userId: UserId): Promise<OrganizationMembership[]> {
+    return Promise.resolve(
+      [...this.membershipsById.values()].filter((membership) => membership.userId === userId),
+    );
+  }
+
+  findAllByOrganizationIds(
+    organizationIds: readonly OrganizationId[],
+  ): Promise<OrganizationMembership[]> {
+    const idSet = new Set(organizationIds);
+    return Promise.resolve(
+      [...this.membershipsById.values()].filter((membership) =>
+        idSet.has(membership.organizationId),
+      ),
+    );
+  }
+
   save(membership: OrganizationMembership): Promise<void> {
     this.membershipsById.set(membership.id, membership);
     return Promise.resolve();

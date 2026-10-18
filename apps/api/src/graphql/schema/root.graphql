@@ -1,0 +1,19 @@
+"""
+Root Query type for Verixa GraphQL API.
+"""
+type Query {
+  """
+  Liveness probe for the GraphQL engine, returning the service name.
+  """
+  _service: String!
+}
+
+"""
+Root Mutation type for Verixa GraphQL API.
+"""
+type Mutation {
+  """
+  Placeholder field until write operations are introduced in subsequent phases.
+  """
+  _empty: String
+}
