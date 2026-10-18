@@ -202,6 +202,9 @@ export class AuthenticateWithPassword {
       // wearing the clothes of a method name.
       const user = await repositories.users.findByEmail(emailResult.value);
       if (user === undefined) {
+        // Counted here and only here: there is no row to count against, so
+        // without this the per-identifier budget never moves.
+        await this.bruteForce?.recordFailure("login", command.email);
         await this.burnTime(command.password);
         return { kind: "failed" };
       }
@@ -211,6 +214,11 @@ export class AuthenticateWithPassword {
         // An SSO-only or passkey-only account. Legitimately has no password,
         // and must not reveal that by failing faster or differently than a
         // wrong password would.
+        //
+        // Also counted: like a missing user, nothing advances a `Credential`,
+        // and a probe list of addresses that exist-but-have-no-password is the
+        // same enumeration.
+        await this.bruteForce?.recordFailure("login", command.email);
         await this.burnTime(command.password);
         return { kind: "failed" };
       }
@@ -295,6 +303,12 @@ export class AuthenticateWithPassword {
     if (outcome.kind === "failed") {
       return Result.err(new AuthenticationError());
     }
+    // The owner proved who they are, so the run is over. Cleared outside the
+    // transaction because a failed write here must not fail a login that
+    // already succeeded — the worst case is one stale counter until the next
+    // successful attempt.
+    await this.bruteForce?.recordSuccess("login", command.email);
+
     const verified = { user: outcome.user, credential: outcome.credential };
 
     // Reset rate limit counter on successful authentication

@@ -173,6 +173,66 @@ export default tseslint.config(
     files: ["tests/**/*.ts", "**/*.spec.ts", "infra/ci/**/*.ts"],
     rules: {
       "security/detect-non-literal-fs-filename": "warn",
+    // Injection hardening (Issue 210, docs/security/injection-hardening.md).
+    //
+    // Prisma parameterizes by default, which is exactly why this needs a rule:
+    // the escape hatches it offers (`$queryRawUnsafe`, and any raw call fed a
+    // built string) look like ordinary API and behave like concatenating user
+    // input into a shell command. Every raw site in this repo is safe today;
+    // nothing here stops the next one from being otherwise, and a reviewer
+    // reading `EXPLAIN ${sql}` in a diff will not always notice.
+    //
+    // What is deliberately NOT flagged: the tagged-template form
+    // `prisma.$executeRaw\`WHERE id = ${value}\``. It reads like a template
+    // literal and is the safe pattern — Prisma emits `$1` and binds `value`.
+    // Those are `TaggedTemplateExpression` nodes, not `CallExpression`s, so
+    // these selectors do not reach them.
+    files: ["**/*.ts"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            'CallExpression[callee.property.name=/^\\$(query|execute)Raw(Unsafe)?$/] :matches(TemplateLiteral, BinaryExpression[operator="+"])',
+          message:
+            "Raw SQL must be built with placeholders, not string concatenation or an interpolated template literal. Use the tagged-template form (prisma.$executeRaw`... ${value} ...`), which binds `value`; or pass a literal statement plus bound parameters. A justified exception must say why in a disable comment. See docs/security/injection-hardening.md.",
+        },
+        {
+          selector:
+            'CallExpression[callee.name=/^(exec|execSync)$/] :matches(TemplateLiteral, BinaryExpression[operator="+"])',
+          message:
+            "Do not build a shell command by concatenation or interpolation. Call `execFileSync`/`spawnSync` with an argument array instead, which never reaches a shell. See docs/security/injection-hardening.md.",
+        },
+      ],
+    },
+  },
+  {
+    // The same concern, one step stricter for code that ships. Test suites may
+    // need DDL (`CREATE ROLE`, `GRANT`) that Postgres cannot bind — those sites
+    // carry a disable comment and are listed in docs/security/injection-hardening.md.
+    // Production code has no such need: every statement it runs can be
+    // parameterized, so the unsafe functions are simply absent.
+    files: [
+      "apps/**/*.ts",
+      "packages/*/domain/**/*.ts",
+      "packages/*/application/**/*.ts",
+      "packages/*/infrastructure/**/*.ts",
+    ],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "CallExpression[callee.property.name=/^\\$(query|execute)RawUnsafe$/]",
+          message:
+            "`$queryRawUnsafe`/`$executeRawUnsafe` take a runtime-built string and cannot bind parameters. Use the tagged-template prisma.$queryRaw`...` form. See docs/security/injection-hardening.md.",
+        },
+        {
+          selector:
+            'CallExpression[callee.name=/^(exec|execSync|eval)$/] , NewExpression[callee.name="Function"]',
+          message:
+            "Shell execution and dynamic evaluation are not permitted in shipped code. Use `execFileSync` with an argument array, and replace `eval`/`new Function` with code that does not need to generate itself. See docs/security/injection-hardening.md.",
+        },
+      ],
     },
   },
   eslintConfigPrettier,

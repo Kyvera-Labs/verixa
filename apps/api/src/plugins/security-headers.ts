@@ -1,4 +1,3 @@
-import helmet, { type FastifyHelmetOptions } from "@fastify/helmet";
 import { ConfigError, type Config } from "@verixa/config";
 import type {
   FastifyBaseLogger,
@@ -485,6 +484,8 @@ export function registerSecurityHeaders<TLogger extends FastifyBaseLogger>(
 ): void {
   app.register(helmet, SECURITY_HEADERS);
 
+  options: SecurityHeadersOptions,
+): void {
   const hstsHeaderValue = options.hsts === null ? null : formatHstsHeader(options.hsts);
 
   app.addHook("onRequest", async (request, reply) => {

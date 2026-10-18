@@ -17,6 +17,14 @@ import {
   type HstsDirective,
   type SecurityHeadersOptions,
 } from "./plugins/security-headers.js";
+import {
+  DOCS_CONTENT_SECURITY_POLICY,
+  registerBaselineResponseHeaders,
+} from "./plugins/baseline-response-headers.js";
+import { registerAuthRoutes } from "./routes/auth.js";
+import { registerVerificationRoutes } from "./routes/verification.js";
+import { enforceRegisteredRouteSchemas } from "./openapi/zod-registry.js";
+import { assertRouteValidationSchemas } from "./http/route-validation.js";
 
 /**
  * Re-exported so callers (and the integration suite) can name the policy
@@ -122,6 +130,16 @@ export function buildApp(options: BuildAppOptions = {}) {
   app.setErrorHandler(handleApiError);
   app.addSchema(errorResponseSchema);
   app.addHook("onRoute", (route) => assertRouteValidationSchemas(route));
+
+  // Baseline response headers (Issue 203), registered before any route exists
+  // so "all routes return the configured header set" is true by construction
+  // rather than by every route remembering to ask. `/health` below is the proof:
+  // it is the one endpoint a deployment is most likely to expose without
+  // thinking about it. The `Strict-Transport-Security` pin is a separate,
+  // config-driven concern (`./plugins/security-headers.js`, Issue 213) and is
+  // deliberately not set here.
+  registerBaselineResponseHeaders(app);
+
   if (process.env["NODE_ENV"] !== "production") {
     app.register(fastifySwagger, {
       mode: "static",
@@ -132,7 +150,12 @@ export function buildApp(options: BuildAppOptions = {}) {
     });
     app.register(fastifySwaggerUi, {
       routePrefix: "/docs",
-      staticCSP: true,
+      // The documentation page is the one response here a browser renders, so it
+      // is the one place the baseline `default-src 'none'` cannot be used. This
+      // replaces swagger-ui's own `staticCSP: true` policy with a tighter one;
+      // every difference is reasoned out in
+      // `plugins/baseline-response-headers.ts`, next to the value.
+      staticCSP: DOCS_CONTENT_SECURITY_POLICY,
       uiConfig: {
         docExpansion: "list",
         deepLinking: true,
