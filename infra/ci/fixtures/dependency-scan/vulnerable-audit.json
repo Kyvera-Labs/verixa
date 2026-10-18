@@ -1,0 +1,93 @@
+{
+  "auditReportVersion": 2,
+  "vulnerabilities": {
+    "minimist": {
+      "name": "minimist",
+      "severity": "high",
+      "isDirect": true,
+      "via": [
+        {
+          "source": 1095808,
+          "name": "minimist",
+          "dependency": "minimist",
+          "title": "Prototype Pollution in minimist",
+          "url": "https://github.com/advisories/GHSA-vh95-rmgr-6w4m",
+          "severity": "high",
+          "cwe": ["CWE-1321"],
+          "range": "<1.2.6"
+        }
+      ],
+      "effects": [],
+      "range": "<1.2.6",
+      "nodes": ["node_modules/minimist"],
+      "fixAvailable": {
+        "name": "minimist",
+        "version": "1.2.6",
+        "isSemVerMajor": false
+      }
+    },
+    "lodash": {
+      "name": "lodash",
+      "severity": "critical",
+      "isDirect": true,
+      "via": [
+        {
+          "source": 1088244,
+          "name": "lodash",
+          "dependency": "lodash",
+          "title": "Prototype Pollution in lodash",
+          "url": "https://github.com/advisories/GHSA-35jh-r3h4-6jhm",
+          "severity": "critical",
+          "cwe": ["CWE-1321"],
+          "range": "<4.17.19"
+        }
+      ],
+      "effects": [],
+      "range": "<4.17.19",
+      "nodes": ["node_modules/lodash"],
+      "fixAvailable": {
+        "name": "lodash",
+        "version": "4.17.19",
+        "isSemVerMajor": false
+      }
+    },
+    "left-pad": {
+      "name": "left-pad",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 9999999,
+          "name": "left-pad",
+          "dependency": "left-pad",
+          "title": "Denial of service in left-pad",
+          "url": "https://github.com/advisories/GHSA-0000-0000-0000",
+          "severity": "moderate",
+          "range": "<2.0.0"
+        }
+      ],
+      "effects": [],
+      "range": "<2.0.0",
+      "nodes": ["node_modules/left-pad"],
+      "fixAvailable": false
+    }
+  },
+  "metadata": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 0,
+      "moderate": 1,
+      "high": 1,
+      "critical": 1,
+      "total": 3
+    },
+    "dependencies": {
+      "prod": 3,
+      "dev": 1,
+      "optional": 0,
+      "peer": 0,
+      "peerOptional": 0,
+      "total": 4
+    }
+  }
+}

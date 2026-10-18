@@ -53,6 +53,12 @@ export class ConfirmEmailVerification {
 
     return this.unitOfWork.run(async (repositories) => {
       const token = await repositories.emailVerificationTokens.findByTokenHash(tokenHash);
+      // `security/detect-possible-timing-attacks` matches the operand name
+      // "token" and assumes a secret comparison (Issue 208). This is a null
+      // check on a lookup result, and its timing reveals only whether the row
+      // exists — which the response already reveals. The actual secret
+      // comparison, `matchesToken`, is constant-time below.
+      // eslint-disable-next-line security/detect-possible-timing-attacks
       if (token === undefined) {
         return Result.err(
           new ValidationError("This verification link is not valid.", { token: ["invalid"] }),

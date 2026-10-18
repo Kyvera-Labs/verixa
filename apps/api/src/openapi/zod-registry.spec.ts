@@ -1,4 +1,4 @@
-import Fastify from "fastify";
+import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
@@ -13,7 +13,9 @@ describe("Zod OpenAPI schema registry", () => {
     const app = Fastify();
     const payload = z.object({ name: z.string().min(3) }).strict();
     const body = registerZodSchema(app, "CreateWidgetBody", payload);
-    const handler = vi.fn((_request, reply) => reply.send({ ok: true }));
+    const handler = vi.fn((_request: FastifyRequest, reply: FastifyReply) =>
+      reply.send({ ok: true }),
+    );
     app.post("/widgets", { schema: { body } }, handler);
 
     await app.ready();
@@ -36,7 +38,7 @@ describe("Zod OpenAPI schema registry", () => {
     const app = Fastify();
     enforceRegisteredRouteSchemas(app);
     expect(() =>
-      app.post("/widgets", { schema: { body: { type: "object" } } }, async () => ({ ok: true })),
+      app.post("/widgets", { schema: { body: { type: "object" } } }, () => ({ ok: true })),
     ).toThrow(/must use a registered Zod schema/);
     await app.close();
   });

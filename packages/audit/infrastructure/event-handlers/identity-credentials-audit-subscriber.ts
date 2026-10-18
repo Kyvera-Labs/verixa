@@ -56,6 +56,12 @@ function toAuditCommand(event: DomainEvent): AuditCommand | undefined {
         subjectId: event.aggregateId,
         metadata: stringMetadata(data, ["organizationId", "email"]),
       };
+    case "identity.api_key.created":
+      return {
+        action: "api_key.created",
+        subjectId: event.aggregateId,
+        metadata: stringMetadata(data, ["organizationId", "name", "keyPreview"]),
+      };
     default: {
       const action = CREDENTIAL_EVENT_ACTIONS[event.eventName];
       return action === undefined
@@ -95,6 +101,7 @@ export class IdentityCredentialsAuditSubscriber {
     "identity.user.status_changed",
     "identity.user.profile_updated",
     "identity.organization_invitation.created",
+    "identity.api_key.created",
     ...Object.keys(CREDENTIAL_EVENT_ACTIONS),
   ];
 

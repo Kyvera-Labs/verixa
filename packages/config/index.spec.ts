@@ -32,6 +32,8 @@ describe("loadConfig", () => {
       HSTS_PRELOAD: false,
       ENFORCE_HTTPS: false,
       TRUST_PROXY: false,
+      CORS_ALLOWED_ORIGINS: [],
+      CORS_ALLOW_CREDENTIALS: false,
       MFA_ENFORCEMENT_LEVEL: "optional",
       MFA_ALLOWED_METHODS: [],
     });
@@ -66,6 +68,8 @@ describe("loadConfig", () => {
       HSTS_PRELOAD: false,
       ENFORCE_HTTPS: false,
       TRUST_PROXY: false,
+      CORS_ALLOWED_ORIGINS: [],
+      CORS_ALLOW_CREDENTIALS: false,
       MFA_ENFORCEMENT_LEVEL: "optional",
       MFA_ALLOWED_METHODS: [],
     });
@@ -282,5 +286,81 @@ describe("loadConfig", () => {
         HSTS_MAX_AGE_SECONDS: "1.5",
       }),
     ).toThrowError(ConfigError);
+  });
+
+  it("defaults CORS to an empty allowlist with credentials off", () => {
+    // The safe default for an API: a deployment that has not thought about
+    // CORS has no cross-origin browser client to break, while one that has can
+    // name its origins explicitly.
+    const config = loadConfig({ SESSION_ACCESS_TOKEN_SECRET: VALID_SESSION_SECRET });
+
+    expect(config.CORS_ALLOWED_ORIGINS).toEqual([]);
+    expect(config.CORS_ALLOW_CREDENTIALS).toBe(false);
+  });
+
+  it("parses a comma-separated CORS allowlist and trims whitespace", () => {
+    const config = loadConfig({
+      SESSION_ACCESS_TOKEN_SECRET: VALID_SESSION_SECRET,
+      CORS_ALLOWED_ORIGINS: " https://app.example.com , https://admin.example.com:8443 ,",
+    });
+
+    expect(config.CORS_ALLOWED_ORIGINS).toEqual([
+      "https://app.example.com",
+      "https://admin.example.com:8443",
+    ]);
+  });
+
+  it("accepts the wildcard origin while credentials are off", () => {
+    const config = loadConfig({
+      SESSION_ACCESS_TOKEN_SECRET: VALID_SESSION_SECRET,
+      CORS_ALLOWED_ORIGINS: "*",
+    });
+
+    expect(config.CORS_ALLOWED_ORIGINS).toEqual(["*"]);
+  });
+
+  it("refuses the wildcard origin combined with credentialed requests", () => {
+    // A browser refuses credentialed responses whose Allow-Origin is `*`, so
+    // this pairing cannot do what it looks like it does. Failing at startup is
+    // the only honest outcome — and the error must name both variables.
+    expect(() =>
+      loadConfig({
+        SESSION_ACCESS_TOKEN_SECRET: VALID_SESSION_SECRET,
+        CORS_ALLOWED_ORIGINS: "*",
+        CORS_ALLOW_CREDENTIALS: "true",
+      }),
+    ).toThrowError(ConfigError);
+
+    try {
+      loadConfig({
+        SESSION_ACCESS_TOKEN_SECRET: VALID_SESSION_SECRET,
+        CORS_ALLOWED_ORIGINS: "*",
+        CORS_ALLOW_CREDENTIALS: "true",
+      });
+      expect.unreachable("loadConfig should have thrown");
+    } catch (error) {
+      const message = (error as ConfigError).message;
+      expect(message).toContain("CORS_ALLOW_CREDENTIALS");
+      expect(message).toContain("*");
+    }
+  });
+
+  it("rejects an allowlist entry that is not a bare origin", () => {
+    // A trailing slash or a path is equivalent to a real origin to a human and
+    // never equal to one on the wire, so it is exactly the misconfiguration
+    // that must not reach production silently.
+    for (const entry of [
+      "https://app.example.com/",
+      "https://app.example.com/path",
+      "app.example.com",
+      "ftp://app.example.com",
+    ]) {
+      expect(() =>
+        loadConfig({
+          SESSION_ACCESS_TOKEN_SECRET: VALID_SESSION_SECRET,
+          CORS_ALLOWED_ORIGINS: entry,
+        }),
+      ).toThrowError(ConfigError);
+    }
   });
 });

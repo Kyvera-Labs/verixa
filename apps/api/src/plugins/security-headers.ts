@@ -1,4 +1,3 @@
-import helmet, { type FastifyHelmetOptions } from "@fastify/helmet";
 import { ConfigError, type Config } from "@verixa/config";
 import type {
   FastifyBaseLogger,
@@ -82,25 +81,17 @@ export const SECURITY_HEADERS: FastifyHelmetOptions = {
   referrerPolicy: { policy: "no-referrer" },
 
   /**
-   * TLS stripping: once a browser has seen this header it upgrades every later
-   * request to HTTPS without consulting the network, so a hostile access point
-   * cannot downgrade the connection and read the session cookie or bearer token
-   * in cleartext.
+   * TLS stripping: a hostile access point downgrades the connection and reads
+   * the session cookie or bearer token in cleartext.
    *
-   * One year, `includeSubDomains` on, and **no `preload`** — preload is a
-   * submission to a browser-shipped list that is awkward to reverse and breaks
-   * every plaintext subdomain, including provisioning hosts. That decision, and
-   * the TLS-termination topology it depends on, belongs to Issue 213.
-   *
-   * The header goes out over plaintext local HTTP too. That is harmless rather
-   * than wrong: browsers ignore HSTS for a non-secure origin, so local
-   * development is unaffected, and gating it on `request.protocol` would make
-   * the policy depend on proxy headers a misconfigured deployment can lie about.
+   * HSTS is deliberately **not** configured through helmet. Issue 213 owns the
+   * directive: it is derived from validated config (so development can leave it
+   * off, and `max-age=0` can lift a pin) and sent by the transport-security hook
+   * in `registerSecurityHeaders` below. Helmet's own default
+   * (`max-age=15552000`) would compete with that policy and make "no HSTS in
+   * development" impossible to express.
    */
-  hsts: {
-    maxAge: 31_536_000,
-    includeSubDomains: true,
-  },
+  hsts: false,
 
   /**
    * `X-Powered-By` is a fingerprint: it names the stack before an attacker has
@@ -449,7 +440,15 @@ export function httpsRedirectTarget(host: string | undefined, rawUrl: string): s
 }
 
 /**
- * Register the transport-security controls on `app`.
+ * Register the global response-header policy and the transport-security
+ * controls on `app`.
+ *
+ * Registered on the root instance in `buildApp`, before any route:
+ * `@fastify/helmet` is `fastify-plugin`-wrapped, so its hook is inherited by
+ * child scopes rather than confined to a prefix, and the `onRequest` hook is
+ * inherited by every route in the same encapsulation context. Applying the
+ * policy before routes exist is what makes "all routes are covered" true by
+ * construction rather than by each route remembering to ask.
  *
  * Generic over the logger type for the same reason `registerAuthRoutes` is:
  * the instance `buildApp` produces carries a concrete pino `Logger`, which
@@ -487,6 +486,12 @@ export function registerSecurityHeaders<TLogger extends FastifyBaseLogger>(
   const { hsts: _unusedHelmetHsts, ...helmetHeaders } = SECURITY_HEADERS;
   app.register(helmet, { ...helmetHeaders, hsts: false });
 
+  options: SecurityHeadersOptions = NO_TRANSPORT_SECURITY,
+): void {
+  app.register(helmet, SECURITY_HEADERS);
+
+  options: SecurityHeadersOptions,
+): void {
   const hstsHeaderValue = options.hsts === null ? null : formatHstsHeader(options.hsts);
 
   app.addHook("onRequest", async (request, reply) => {

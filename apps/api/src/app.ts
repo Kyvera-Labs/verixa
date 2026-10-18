@@ -5,17 +5,31 @@ import fastifySwaggerUi from "@fastify/swagger-ui";
 import { createLogger, type Logger } from "@verixa/shared-kernel";
 import Fastify from "fastify";
 
+import { registerContextRoutes } from "./composition/register-routes.js";
 import type { Container } from "./composition-root.js";
 import { registerContextRoutes } from "./composition/register-routes.js";
 import { errorResponseSchema, handleApiError } from "./http/error-response.js";
 import { assertRouteValidationSchemas } from "./http/route-validation.js";
 import { enforceRegisteredRouteSchemas } from "./openapi/zod-registry.js";
+import { errorResponseSchema, handleApiError } from "./http/error-response.js";
+import { assertRouteValidationSchemas } from "./http/route-validation.js";
+import { enforceRegisteredRouteSchemas } from "./openapi/zod-registry.js";
+import { NO_CORS, registerCors, type CorsPolicy } from "./plugins/cors.js";
 import {
   DEFAULT_SECURITY_HEADERS_OPTIONS,
   registerSecurityHeaders,
   type HstsDirective,
   type SecurityHeadersOptions,
 } from "./plugins/security-headers.js";
+import {
+  DOCS_CONTENT_SECURITY_POLICY,
+  registerBaselineResponseHeaders,
+} from "./plugins/baseline-response-headers.js";
+import { registerAuthRoutes } from "./routes/auth.js";
+import { registerVerificationRoutes } from "./routes/verification.js";
+import { registerGraphQLServer } from "./graphql/server.js";
+import { enforceRegisteredRouteSchemas } from "./openapi/zod-registry.js";
+import { assertRouteValidationSchemas } from "./http/route-validation.js";
 
 /**
  * Re-exported so callers (and the integration suite) can name the policy
@@ -24,6 +38,13 @@ import {
  * `package.json` for two types would be more ceremony than content.
  */
 export type { HstsDirective, SecurityHeadersOptions };
+
+/**
+ * Re-exported for the same reason the security-header types are: callers and
+ * the integration suite should be able to name the policy without reaching
+ * into `src/plugins/`.
+ */
+export type { CorsPolicy };
 
 export interface BuildAppOptions {
   readonly logger?: Logger;
@@ -52,6 +73,16 @@ export interface BuildAppOptions {
    * next to `@verixa/config`, which is the thing this package exists to avoid.
    */
   readonly securityHeaders?: SecurityHeadersOptions;
+  /**
+   * The cross-origin browser policy (Issue 204).
+   *
+   * Defaults to `NO_CORS` — an empty allowlist — for the same reason
+   * `securityHeaders` defaults to the nothing-on shape: the callers that pass
+   * nothing are in-process tests, and `server.ts` always derives this from
+   * validated configuration. Reading the environment here would create a
+   * second, unvalidated config path.
+   */
+  readonly cors?: CorsPolicy;
   /**
    * Honour `X-Forwarded-Proto` / `X-Forwarded-For` from an upstream proxy.
    *
@@ -96,13 +127,25 @@ export function buildApp(options: BuildAppOptions = {}) {
 
   // Security headers are registered before any route exists, so "all routes
   // return the configured header set" is true by construction rather than by
-  // every route remembering to ask (Issue 203). `/health` below is the proof:
-  // it is the one endpoint a deployment is most likely to expose without
+  // every route remembering to ask (Issues 203 and 213). `/health` below is the
+  // proof: it is the one endpoint a deployment is most likely to expose without
   // thinking about it.
   registerSecurityHeaders(app, options.securityHeaders ?? DEFAULT_SECURITY_HEADERS_OPTIONS);
+  registerSecurityHeaders(app, options.securityHeaders ?? NO_TRANSPORT_SECURITY);
+  registerCors(app, options.cors ?? NO_CORS);
   app.setErrorHandler(handleApiError);
   app.addSchema(errorResponseSchema);
   app.addHook("onRoute", (route) => assertRouteValidationSchemas(route));
+
+  // Baseline response headers (Issue 203), registered before any route exists
+  // so "all routes return the configured header set" is true by construction
+  // rather than by every route remembering to ask. `/health` below is the proof:
+  // it is the one endpoint a deployment is most likely to expose without
+  // thinking about it. The `Strict-Transport-Security` pin is a separate,
+  // config-driven concern (`./plugins/security-headers.js`, Issue 213) and is
+  // deliberately not set here.
+  registerBaselineResponseHeaders(app);
+
   if (process.env["NODE_ENV"] !== "production") {
     app.register(fastifySwagger, {
       mode: "static",
@@ -113,7 +156,12 @@ export function buildApp(options: BuildAppOptions = {}) {
     });
     app.register(fastifySwaggerUi, {
       routePrefix: "/docs",
-      staticCSP: true,
+      // The documentation page is the one response here a browser renders, so it
+      // is the one place the baseline `default-src 'none'` cannot be used. This
+      // replaces swagger-ui's own `staticCSP: true` policy with a tighter one;
+      // every difference is reasoned out in
+      // `plugins/baseline-response-headers.ts`, next to the value.
+      staticCSP: DOCS_CONTENT_SECURITY_POLICY,
       uiConfig: {
         docExpansion: "list",
         deepLinking: true,
@@ -132,7 +180,21 @@ export function buildApp(options: BuildAppOptions = {}) {
     return { status: "ok" };
   });
 
+  registerGraphQLServer(app);
+
+  // Registered on `app` itself, in the same encapsulation context as every
+  // route below, so it covers `/health` and the authenticated routes alike.
+  // See the comment on `registerSecurityHeaders` for why this is not a
+  // `register()`-style plugin.
+  registerSecurityHeaders(app, options.securityHeaders ?? NO_TRANSPORT_SECURITY);
+
   if (options.container !== undefined) {
+    // One registration path, not two. `registerContextRoutes` already mounts
+    // every module at its public prefix — auth at `/auth`, admin at `/admin`,
+    // verification at `/verification`. Mounting them here as well, unprefixed,
+    // duplicated each route set and made the second attempt to register the
+    // same OpenAPI component (`RegisterBody`) throw during boot. It also put
+    // routes at URLs no client calls (`POST /:requestId/evidence`).
     enforceRegisteredRouteSchemas(app);
     registerContextRoutes(app, options.container);
   }

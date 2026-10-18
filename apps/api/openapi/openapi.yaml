@@ -31,7 +31,128 @@ tags:
     description: Administrative governance operations.
   - name: Notifications
     description: Delivery and notification preferences.
-paths: {}
+paths:
+  /v1/audit:
+    get:
+      tags:
+        - Audit
+      summary: Query organization audit log
+      description: Returns a paginated list of audit events for the authenticated reader's organization.
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          description: Keyset cursor from previous page
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          description: Max number of items to return (1-100, default 50)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: actorId
+          in: query
+          required: false
+          description: Filter by actor ID
+          schema:
+            type: string
+        - name: subjectId
+          in: query
+          required: false
+          description: Filter by subject ID
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: false
+          description: Lower bound on occurredAt (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          description: Upper bound on occurredAt (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Paginated audit event list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, hasMore]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                  nextCursor:
+                    type: string
+                    nullable: true
+                  hasMore:
+                    type: boolean
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/audit/export:
+    get:
+      tags:
+        - Audit
+      summary: Stream audit log export
+      description: Streams organization audit log as CSV or JSONL.
+      parameters:
+        - name: format
+          in: query
+          required: false
+          description: Export format (csv or jsonl)
+          schema:
+            type: string
+            enum: [csv, jsonl]
+            default: jsonl
+        - name: actorId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: subjectId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Streamed audit log
+          content:
+            text/csv:
+              schema:
+                type: string
+            application/x-ndjson:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 components:
   securitySchemes:
     bearerAuth:
@@ -99,22 +220,22 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ValidationError'
+            $ref: "#/components/schemas/ValidationError"
     Unauthorized:
       description: Authentication is missing or invalid.
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErrorResponse'
+            $ref: "#/components/schemas/ErrorResponse"
     Forbidden:
       description: The authenticated principal is not permitted to perform this operation.
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErrorResponse'
+            $ref: "#/components/schemas/ErrorResponse"
     NotFound:
       description: The requested resource does not exist or is not visible to this principal.
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErrorResponse'
+            $ref: "#/components/schemas/ErrorResponse"

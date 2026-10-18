@@ -84,3 +84,15 @@ export { withTenantContext } from "./infrastructure/persistence/prisma-tenant-co
 // repositories, rather than each re-implementing one that drifts.
 export { InMemoryUserRepository } from "./infrastructure/testing/in-memory-user-repository.js";
 export { InMemoryUnitOfWork } from "./infrastructure/testing/in-memory-unit-of-work.js";
+
+// ApiKey exports
+export { ApiKey, type ApiKeyId, type ApiKeyStatus, type IssuedApiKey } from "./domain/entities/api-key.js";
+export { ApiKeyCreated } from "./domain/events/api-key-created.js";
+export type { ApiKeyRepository } from "./application/ports/api-key-repository.js";
+export {
+  CreateApiKey,
+  type CreateApiKeyCommand,
+  type CreateApiKeyError,
+  type CreateApiKeyResult,
+} from "./application/use-cases/create-api-key.js";
+export { InMemoryApiKeyRepository } from "./infrastructure/testing/in-memory-api-key-repository.js";

@@ -6,3 +6,7 @@ pnpm-workspace.yaml
 planning
 # Generated release artifact (Issue 215), not source — see .gitignore.
 sbom
+# Deliberately vulnerable snippets (Issue 208). They are lint input, not source:
+# prettier would reflow the exact line shapes the security rules are meant to
+# match, and one fixture contains a bidi control character on purpose.
+infra/ci/lint-security-fixtures

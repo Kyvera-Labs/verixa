@@ -26,9 +26,10 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@fastify/cors": "^11.3.1",
     "@fastify/helmet": "^13.2.0",
     "@fastify/swagger": "^9.9.2",
-    "@fastify/swagger-ui": "^5.2.6",
+    "@fastify/swagger-ui": "^6.1.2",
     "@verixa/audit": "workspace:*",
     "@verixa/authorization": "workspace:*",
     "@verixa/config": "workspace:*",
@@ -40,7 +41,10 @@
     "@verixa/shared-kernel": "workspace:*",
     "@verixa/stellar-anchor": "workspace:*",
     "fastify": "^5.12.1",
+    "graphql": "^17.0.2",
     "ioredis": "^5.4.1",
+    "mercurius": "^16.12.0",
+    "openapi-response-validator": "^12.1.3",
     "zod": "^3.24.1",
     "zod-to-json-schema": "^3.25.2"
   },

@@ -224,6 +224,19 @@ export class StellarHashAnchor implements HashAnchor {
       return Result.err(new AnchorError("Expected a 64-character lowercase hex SHA-256 digest."));
     }
 
+    // `anchorRef` is the one piece of this call that reaches out to the
+    // network: it becomes a path segment in the Horizon URL, and the error
+    // below repeats it back to whoever asked. A Stellar transaction hash is a
+    // 64-character hex digest, so anything else is either a mistake or
+    // somebody seeing what an unvalidated string does to an outbound request.
+    // The SDK percent-encodes path segments, so this cannot escape the URL —
+    // it is still the right place to refuse.
+    if (!isValidSha256Hex(anchorRef)) {
+      return Result.err(
+        new AnchorError("Expected a 64-character lowercase hex transaction hash for anchorRef."),
+      );
+    }
+
     try {
       const transaction = await this.server.transactions().transaction(anchorRef).call();
 
