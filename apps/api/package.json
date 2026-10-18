@@ -26,22 +26,31 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@fastify/helmet": "^13.2.0",
+    "@fastify/swagger": "^9.9.2",
+    "@fastify/swagger-ui": "^5.2.6",
     "@verixa/audit": "workspace:*",
+    "@verixa/authorization": "workspace:*",
     "@verixa/config": "workspace:*",
     "@verixa/credentials": "workspace:*",
     "@verixa/database": "workspace:*",
     "@verixa/identity": "workspace:*",
+    "@verixa/mfa": "workspace:*",
+    "@verixa/sessions": "workspace:*",
     "@verixa/shared-kernel": "workspace:*",
     "@verixa/stellar-anchor": "workspace:*",
-    "fastify": "^5.12.1"
+    "fastify": "^5.12.1",
+    "ioredis": "^5.4.1",
+    "zod": "^3.24.1",
+    "zod-to-json-schema": "^3.25.2"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "@types/supertest": "^6.0.2",
-    "@vitest/coverage-v8": "^2.1.9",
+    "@vitest/coverage-v8": "^3.2.6",
     "supertest": "^7.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "vitest": "^3.2.6"
   }
 }

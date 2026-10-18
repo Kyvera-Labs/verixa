@@ -1,0 +1,8 @@
+{
+  "name": "verixa-ci-tools",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "CI-only tooling (Issue 215). Not a workspace package: it declares no dependencies, resolving them from the repository root, and is deliberately absent from pnpm-workspace.yaml so it is never built, published, or shipped in an image.",
+  "license": "MIT"
+}

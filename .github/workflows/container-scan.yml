@@ -1,0 +1,164 @@
+name: Container scan
+
+# Vulnerability scan of the image `apps/api/Dockerfile` produces (Issue 216).
+#
+# ## Why this is its own workflow rather than a step in `ci.yml`
+#
+# The `docker` job in `ci.yml` asks "does the image build and start". This asks
+# "what is inside it that has a CVE". They fail for different reasons, on
+# different schedules, and — the part that matters — a scan can go red with no
+# change to this repository at all, because the advisory was published last
+# night against a package the image has always contained.
+#
+# Keeping it separate means that event arrives on its own, with the scan output
+# as the whole story, instead of appearing as a mysterious red X on a pull
+# request that touched a README.
+#
+# ## Why the gate is OS packages only
+#
+# `--vuln-type os` is the acceptance criterion: high and critical
+# vulnerabilities in the operating-system packages of the final image break the
+# build. That is the narrowest thing the scan can enforce without turning into
+# noise, and it is the one class the application cannot fix for itself — an
+# Alpine `libcrypto` advisory means the base image has to move, and nothing in
+# this repository's source does.
+#
+# The npm dependency half is scanned and published as an artifact but does not
+# fail the job. Dependency advisories are Issue 207 and Issue 208's territory
+# (lockfile integrity, `pnpm audit` in CI, Dependabot), and a second blocking
+# gate on the same advisories would mean every pull request is red for as long
+# as any transitive package has an unfixed HIGH — which is most of the time. A
+# check that is always failing is not a check, it is background noise with an
+# emoji.
+#
+# ## `--ignore-unfixed`
+#
+# Unfixed advisories are reported but do not break the build. There is no action
+# available for them: waiting for an upstream patch is the only response, and a
+# pipeline that goes red for something a contributor cannot fix trains everyone
+# to ignore it. When a fix is issued for something that matters, the advisory
+# stops being ignored and the gate closes on its own. Accepted risk that should
+# *not* be re-reported lives in `.trivyignore` at the repo root, which the scan
+# picks up automatically.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  # The reason a scan has to run on a schedule: an image that passed on the day
+  # it was built can contain a vulnerability by Friday. A weekly pass on `main`
+  # is how that is noticed without anyone having to remember it.
+  #
+  # Not on the hour — scheduled workflows for public repositories run out of a
+  # shared queue that is heavily congested at round times.
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: container-scan-${{ github.ref }}
+  # A new push supersedes the previous one, except for the scheduled run: that
+  # one has no push behind it, and cancelling it would quietly delete the only
+  # check that catches advisories published after a merge.
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+
+# The scan reads the repository and the Docker daemon, and writes nothing back.
+# No `issues: write`, deliberately: auto-filing issues from a scanner is a
+# shared-state action nobody approved here, and a bot that opens one issue per
+# CVE is how a project ends up muting its own scanner.
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: Scan the runtime image
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The scan runs against the real artifact, so the real artifact is built
+      # here. There is no published image to pull: this repository does not push
+      # to a registry yet, and scanning a registry image would not be scanning
+      # the Dockerfile under review.
+      - name: Build image
+        run: docker build -f apps/api/Dockerfile -t verixa-api:scan .
+
+      - name: Report image size and layer count
+        # Printed rather than asserted. The hardening doc describes the image's
+        # contents; the number that belongs in a doc is the one measured here,
+        # on the commit, rather than one copied from a laptop that has no Docker
+        # daemon on it.
+        run: |
+          set -eu
+          docker images verixa-api:scan --format 'image: {{.Repository}}:{{.Tag}}  size: {{.Size}}  id: {{.ID}}'
+          echo "layers: $(docker history -q verixa-api:scan | wc -l)"
+          echo "largest layers:"
+          docker history --no-trunc --format '{{.Size}}\t{{.CreatedBy}}' verixa-api:scan \
+            | head -6 | cut -c1-160
+
+      # -----------------------------------------------------------------------
+      # The gate.
+      # -----------------------------------------------------------------------
+      - name: Scan OS packages (blocking on HIGH and CRITICAL)
+        # Pinned to a commit rather than a tag: this action is the thing that
+        # decides whether a vulnerable image ships, so the version that decides
+        # it should not be able to move underneath the review.
+        # aquasecurity/trivy-action v0.36.0.
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          scan-type: image
+          image-ref: verixa-api:scan
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          vuln-type: os
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+          hide-progress: true
+
+      # -----------------------------------------------------------------------
+      # Advisory: reported, not enforced. See the header.
+      # -----------------------------------------------------------------------
+      - name: Scan application dependencies (report only)
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          scan-type: image
+          image-ref: verixa-api:scan
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          vuln-type: library
+          ignore-unfixed: true
+          exit-code: "0"
+          format: json
+          output: trivy-dependencies.json
+
+      - name: Publish the dependency report
+        # An artifact rather than a console dump: the JSON is what gets compared
+        # week over week, and the 400-line table it would otherwise be is exactly
+        # the reason nobody reads scan output.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-dependencies-${{ github.run_number }}
+          path: trivy-dependencies.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: What to do if this job went red
+        if: failure()
+        run: |
+          echo "A HIGH or CRITICAL vulnerability was found in an OS package of the final image."
+          echo ""
+          echo "1. Identify the package and the fixed Alpine release in the table above."
+          echo "2. Update the base image in apps/api/Dockerfile to a Node 22 Alpine tag that"
+          echo "   carries the fix, or add the patch release the advisory names."
+          echo "3. Re-run this workflow. Rebuild the image and re-check the non-root and"
+          echo "   pruned-contents assertions in the 'docker' job of ci.yml at the same time,"
+          echo "   since a base image change can move both."
+          echo ""
+          echo "If the risk genuinely does not apply to this image (a vulnerable binary that"
+          echo "nothing here executes), record it in .trivyignore at the repo root with the"
+          echo "advisory id and one line explaining why — that is the audit trail, not a"
+          echo "quiet --exit-code 0."

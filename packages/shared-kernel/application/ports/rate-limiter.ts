@@ -1,29 +1,65 @@
 /**
- * The request-rate gate Issue 074 declared and Phase 15 implements (Issue 209).
+ * RateLimiter port — cross-cutting concern for abuse-sensitive operations.
  *
- * Interface only, deliberately: a limiter that counts requests per window is a
- * different mechanism from a policy that counts *failed* attempts per secret,
- * and the two have to compose. Declaring the port here is what lets
- * `BruteForcePolicy` reason about both today, against whatever the composition
- * root supplies — including nothing at all.
+ * Defines the seam between use cases and rate limiting infrastructure.
+ * Wired from day one even before the real limiter exists (no-op until Phase 15).
+ * Avoids a painful retrofit later.
+ *
+ * See `docs/security/authentication-flows.md` for the rate limiting strategy.
  */
 
-export interface RateLimitDecision {
-  readonly allowed: boolean;
-  /**
-   * Seconds the caller should wait, when the limiter knows. `undefined` means
-   * it does not, and is different from `0`.
-   */
-  readonly retryAfterSeconds?: number;
+export interface RateLimitKey {
+  /** The type of action being rate-limited */
+  action: "login" | "register" | "password-reset" | "email-verification";
+  /** Identifier for the subject — IP address, email, or userId */
+  identifier: string;
+  /** Optional namespace for multi-tenant isolation */
+  namespace?: string;
+}
+
+export interface RateLimitResult {
+  /** Whether the request is allowed to proceed */
+  allowed: boolean;
+  /** Remaining attempts before limit is hit */
+  remaining: number;
+  /** When the limit resets (Unix timestamp in ms) */
+  resetAt: number;
+  /** Total limit for this window */
+  limit: number;
 }
 
 export interface RateLimiter {
   /**
-   * Whether `key` may make a request now.
-   *
-   * Checking never consumes budget — recording is a separate concern, and a
-   * caller that checks then fails for another reason must not pay for a
-   * request it did not get to make.
+   * Check if the action is allowed for this identifier.
+   * Must be called BEFORE the use case executes its core logic.
+   * If not allowed, the use case must throw RateLimitExceededError.
    */
-  check(key: string): Promise<RateLimitDecision>;
+  check(key: RateLimitKey): Promise<RateLimitResult>;
+
+  /**
+   * Record a failed attempt (e.g. wrong password).
+   * Increments the counter for stricter limiting on abuse patterns.
+   */
+  recordFailure(key: RateLimitKey): Promise<void>;
+
+  /**
+   * Reset the limit for a key after a successful operation.
+   * e.g. successful login resets the login attempt counter.
+   */
+  reset(key: RateLimitKey): Promise<void>;
+}
+
+/** Thrown by use cases when rate limit is exceeded */
+export class RateLimitExceededError extends Error {
+  constructor(
+    public readonly key: RateLimitKey,
+    public readonly resetAt: number,
+    public readonly limit: number,
+  ) {
+    super(
+      `Rate limit exceeded for ${key.action} on ${key.identifier}. ` +
+        `Resets at ${new Date(resetAt).toISOString()}`,
+    );
+    this.name = "RateLimitExceededError";
+  }
 }

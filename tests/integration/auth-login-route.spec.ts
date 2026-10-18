@@ -29,7 +29,8 @@ interface ApiErrorBody {
   error: {
     code: string;
     message: string;
-    fields?: Record<string, string[]>;
+    details?: { fields?: Record<string, string[]> };
+    requestId: string;
   };
 }
 
@@ -137,7 +138,12 @@ describe.skipIf(!available)("POST /auth/login", () => {
 
       expect(unknownUser.status).toBe(401);
       expect(wrongPassword.status).toBe(unknownUser.status);
-      expect(unknownUser.body).toEqual(wrongPassword.body);
+      expect(asError(unknownUser.body).error).toMatchObject({
+        code: "AUTHENTICATION_FAILED",
+        message: "Invalid email or password.",
+      });
+      expect(asError(unknownUser.body).error.requestId).toBeTruthy();
+      expect(asError(wrongPassword.body).error.requestId).toBeTruthy();
       expect(asError(unknownUser.body).error.code).toBe("AUTHENTICATION_FAILED");
     });
 
@@ -156,7 +162,13 @@ describe.skipIf(!available)("POST /auth/login", () => {
         .send({ ...CREDENTIALS, password: "wrong password entirely" });
 
       expect(malformed.status).toBe(401);
-      expect(malformed.body).toEqual(wrongPassword.body);
+      expect(asError(malformed.body).error).toMatchObject({
+        code: "AUTHENTICATION_FAILED",
+        message: "Invalid email or password.",
+      });
+      expect(asError(malformed.body).error.requestId).not.toBe(
+        asError(wrongPassword.body).error.requestId,
+      );
     });
 
     it("returns that same 401 when the account has no password credential", async () => {
@@ -179,7 +191,7 @@ describe.skipIf(!available)("POST /auth/login", () => {
     });
 
     it("carries no field errors that would distinguish the cause", async () => {
-      // `ValidationError` attaches `fields`, and a failure that grew one would
+      // `ValidationError` attaches field details, and a failure that grew one would
       // name what was wrong with the attempt. The authentication error has
       // none, and this asserts the response shape does not acquire any.
       await registerAlice();
@@ -188,7 +200,7 @@ describe.skipIf(!available)("POST /auth/login", () => {
         .post("/auth/login")
         .send({ ...CREDENTIALS, password: "wrong password entirely" });
 
-      expect(asError(response.body).error.fields).toBeUndefined();
+      expect(asError(response.body).error.details).toBeUndefined();
     });
   });
 
@@ -266,7 +278,13 @@ describe.skipIf(!available)("POST /auth/login", () => {
         .send({ email: "nobody@example.com", password: CREDENTIALS.password });
 
       expect(locked.status).toBe(unknownAccount.status);
-      expect(locked.body).toEqual(unknownAccount.body);
+      expect(asError(locked.body).error).toMatchObject({
+        code: "AUTHENTICATION_FAILED",
+        message: "Invalid email or password.",
+      });
+      expect(asError(locked.body).error.requestId).not.toBe(
+        asError(unknownAccount.body).error.requestId,
+      );
       expect(asError(locked.body).error.code).toBe("AUTHENTICATION_FAILED");
       expect(locked.headers["retry-after"]).toBeUndefined();
     });

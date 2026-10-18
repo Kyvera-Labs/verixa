@@ -1,0 +1,206 @@
+# Quarantined packages
+
+All previously quarantined packages have now been lifted — see the
+"Lifted" sections below. This document is kept as the record of what
+happened and why, for the next time a merge compounds unverified changes.
+
+**No contributor's work has been deleted.** Every file is still in the
+repository, exactly as merged.
+
+## What happened
+
+These packages were not broken by a bug. They were broken by merges.
+
+A scan of the repository found **24 files** sharing one signature:
+
+- unbalanced braces,
+- the same class or interface declared two or three times,
+- a second block of `import` statements starting partway down the file.
+
+That is what a conflict resolved as "keep both sides" looks like. One file had
+three complete copies of the same entity. Another had a concrete class and an
+interface of the same name. `packages/sessions/index.ts` contained **four**
+versions of the public API concatenated, with 14 duplicate export names.
+
+Some files were also truncated to one-line stubs by a single commit
+(`b56b63a`), and in one package template literals arrived with their backticks
+replaced by backslashes, so `` `active` `` became `\ctive` and an
+`otpauth://` URI no longer parsed.
+
+## Why these are not simply fixed
+
+The syntax damage is repairable, and was repaired — that is how the deeper
+problem became visible. Underneath it, these packages contain **two or three
+different designs for the same thing**, each with its own use cases and tests:
+
+- `TotpAlgorithm` exists as a port that six use cases inject, and as a
+  concrete class verified against the RFC 6238 test vectors.
+- `packages/sessions` cannot be recovered file-by-file: each file's last clean
+  revision is from a different point in history, so restoring them
+  individually produces a package whose parts no longer agree. Doing so left
+  102 type errors that are all version-skew, not logic.
+
+Choosing one design means rewriting other contributors' use cases and tests.
+That is a maintainer decision about direction, not a merge conflict, and it
+should not be made silently while unblocking unrelated work.
+
+## The actual root cause
+
+`master` had **no branch protection**. Nothing required CI to pass before a
+merge, so red pull requests landed and compounded on each other. Every one of
+the 24 damaged files traces back to a merge that was never verified.
+
+Fixing the packages without fixing that would just rebuild the same wreck.
+
+## How to lift a quarantine
+
+1. Pick one design per concept and delete the others.
+2. Make the use cases and specs agree with the chosen entity.
+3. Restore the real scripts in that package's `package.json`.
+4. Remove it from the `ignores` list in `eslint.config.mjs`.
+5. Confirm `pnpm build`, `pnpm test` and `pnpm lint` pass from a clean clone.
+
+Several open pull requests rebuild parts of these packages properly. Merging
+those — with CI green — is likely to be a faster route than reconciling the
+current state by hand.
+
+## Lifted: `packages/mfa` (2026-10-04)
+
+Released from quarantine. Kept as the worked example for the other two, because
+the interesting part was not the syntax repair.
+
+**One design was chosen.** `MfaMethod` survives as the props-object aggregate,
+because it was the only version carrying the lockout and replay state the TOTP
+use cases need. The others were deleted.
+
+**The one real collision was `recordUse`.** TOTP called
+`recordUse(matchedStep, now)`, protecting against replay by refusing a step not
+strictly greater than the last consumed one -- clock-drift tolerance means a
+single code is valid across several seconds. WebAuthn called `recordUse(now)`,
+because its replay protection is the authenticator's monotonic `signCount`,
+which lives on `WebAuthnCredential` and is where clone detection reads it.
+
+Neither caller was wrong, so neither was forced into the other's shape:
+
+- `recordUse(now)` records a success and clears the failure counter, with no
+  replay semantics of its own.
+- `recordTotpUse(matchedStep, now)` adds the step check, then delegates. The
+  step is validated before anything mutates, so a rejected replay leaves the
+  method untouched.
+
+`createActive` was added for the same reason. TOTP enrolls as `pending` and is
+confirmed by a first valid code, because the server cannot otherwise know the
+user stored the secret. WebAuthn has no equivalent: the registration ceremony
+verifies an attestation before anything persists.
+
+**A security bug was found underneath.** `infrastructure/crypto/encryption.ts`
+fell back to `Buffer.alloc(32, 1)` when `MFA_ENCRYPTION_KEY` was unset -- and
+the variable was set nowhere in the repository. Every TOTP secret would have
+been encrypted at rest under a constant visible in this source tree, with
+nothing thrown or logged. `encrypt` now refuses to run without a key and
+validates its length.
+
+**`docs/security/mfa-design.md` held three concatenated documents.** They
+covered different ground -- WebAuthn, TOTP, and step-up/backup-codes/policy --
+rather than contradicting each other, so all three became sections of one
+document. Not every concatenation is a conflict of substance; check before
+choosing.
+
+**`index.ts` held two versions**, one wildcard and one curated. The curated form
+was kept: `export *` makes the public surface whatever the files happen to
+contain, which is how internals become someone else's dependency by accident.
+
+The package now builds, typechecks, lints with zero errors, and passes its
+suite at 93% statement coverage against a 90/90/85/85 gate.
+
+## Lifted: `packages/sessions` (2026-10-06)
+
+Two complete designs were concatenated across every layer — domain entities,
+every application port, every use case, and the infrastructure adapters.
+The tell was `Session`: one version held no token material at all (the
+bearer secret lives on a separate `RefreshToken`, rotated independently,
+with flat `ipAddress`/`userAgent` fields); the other was fully
+self-contained (`refreshTokenHash`, a `metadataHistory` array, and a
+`currentAccessToken` reference, all inline on the entity).
+
+**The real, working infrastructure settled which design was current.**
+`PrismaSessionRepository`'s row mapping, `JwtTokenSigner`'s HS256
+implementation, and `RedisRevocationList` all agreed on the first design —
+and only the first design has a migration backing it
+(`sessions`/`refresh_tokens` as two tables; no column anywhere stores a
+serialized metadata history or an inline access-token reference). The
+self-contained design was the earlier, abandoned branch. A third design for
+`TokenSigner` specifically (RS256 via `jose`, rich claims with `kid`) had no
+implementation at all and was pure dead weight.
+
+**Choosing the design didn't mean discarding the other branch's real
+feature.** Concurrent-session-limit eviction (Issue 094) and
+`SessionAuditLogger` — tied to the already-wired
+`SESSION_MAX_CONCURRENT_SESSIONS` config option — existed only in the
+self-contained branch's `IssueSession`, written against a
+`findActiveByUserId(userId, now)` signature the real repository never
+implemented. That logic was re-expressed against the kept design: eviction
+denylists the evicted session by its own `id` on `RevocationList` (keyed by
+session, not by a per-token id the entity no longer tracks), and
+`PrismaSessionRepository.findActiveByUserId` now orders by `lastSeenAt`
+ascending so eviction actually targets the oldest session, which neither
+concatenated version did correctly on its own.
+
+**A real bug surfaced once the suite could run against a live Postgres**:
+`prisma-session-repository.spec.ts`'s own `canConnect` helper called
+`net.createConnection()` and returned `true` immediately, without ever
+waiting for the socket's `connect` or `error` event — so the database-backed
+contract suite silently believed a database was reachable when none was.
+Replaced with the same wait-for-the-actual-event implementation already
+used in this package's own `redis-harness.ts` and in
+`tests/integration/helpers/tcp-connect.ts`.
+
+The package now builds, typechecks, lints with zero errors, and its full
+suite passes (database- and Redis-backed specs correctly skip without
+Docker, and CI's `REQUIRE_DATABASE_TESTS=1`/`REQUIRE_REDIS_TESTS=1` turn
+that skip into a failure if either is unexpectedly unreachable there).
+
+## Lifted: `packages/verification` (2026-10-11)
+
+Smaller than `sessions`: only one file had drifted from the rest of the
+package, not every layer. `RunAutomatedCheck` and its spec were written
+against an entity and a port that no longer existed in this form —
+`VerificationRequest.register`/public `transitionTo`/`providerResult` and
+a single-method `VerificationProvider.check(request)` returning
+`{ outcome: "pass" | "fail" | "inconclusive", score, details }`. Every
+other file in the package (the aggregate, `checkDocument`/`checkLiveness`,
+`ProviderCheckResult.{passed,failed,inconclusive}`, the reviewer-queue and
+decision use cases) already agreed with each other and built cleanly —
+`RunAutomatedCheck` just hadn't been updated to match.
+
+**Rewritten against the real shapes**, not restored: the real
+`VerificationRequest` has no field for a provider's opinion, and this
+package has no `EvidenceRepository` yet (evidence persistence is Issues
+166/168), so the use case now takes the evidence to check as part of its
+command (the upload flow that triggers a check already has it in hand)
+rather than fetching it, and returns the per-evidence `ProviderCheckResult`s
+to the caller instead of trying to store them on an aggregate that has
+nowhere to put them. It still does what the port's own doc always said
+`RunAutomatedCheck` does: run the provider, then move the request to
+`in_review` regardless of outcome — a provider holds an opinion, never the
+authority to decide.
+
+Also removed two leftover exports nothing used — `InMemoryTokenSigner`
+and `TokenVerificationError` in `packages/sessions`, found while chasing
+that package's coverage gate below 90% after a prior fix (see commit
+history on #297) — unrelated to `verification` but caught by the same
+"does every exported thing have a real caller" pass.
+
+The package now builds, typechecks, lints with zero errors, and its full
+suite passes at 96% statement coverage against the same 90/90/85/85 gate
+`mfa`, `sessions`, `identity`, `credentials` and `audit` are held to
+(database-backed specs correctly skip without Docker, and CI's
+`REQUIRE_DATABASE_TESTS=1` turns that skip into a failure if the database
+is unexpectedly unreachable there).
+
+## What is still verified
+
+Everything: `shared-kernel`, `config`, `database`, `identity`,
+`credentials`, `audit`, `authorization`, `mfa`, `sessions`, `verification`,
+`stellar-anchor`, `apps/api` and the integration suite all build,
+typecheck, lint and test.

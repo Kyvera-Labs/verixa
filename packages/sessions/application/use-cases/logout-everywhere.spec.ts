@@ -1,94 +1,87 @@
-import { asId } from "@verixa/shared-kernel";
+import { asId, Result } from "@verixa/shared-kernel";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { Session, type SessionUserId } from "../../domain/entities/session.js";
+import { SessionExpiryPolicy } from "../../domain/value-objects/session-expiry-policy.js";
 import { InMemoryRevocationList } from "../../infrastructure/testing/in-memory-revocation-list.js";
 import { InMemorySessionRepository } from "../../infrastructure/testing/in-memory-session-repository.js";
 
 import { LogoutEverywhere } from "./logout-everywhere.js";
 
-const userId: SessionUserId = asId("11111111-1111-1111-1111-111111111111");
-const otherUserId: SessionUserId = asId("22222222-2222-2222-2222-222222222222");
-
-function issueSessionFor(userId: SessionUserId, tokenId: string, now = new Date()) {
-  return Session.issue({
-    userId,
-    metadata: {},
-    accessToken: { tokenId, expiresAt: new Date(now.getTime() + 60_000) },
-    now,
-  }).session;
-}
+const alice = asId<"UserId">("00000000-0000-0000-0000-00000000a11c") as SessionUserId;
+const bob = asId<"UserId">("00000000-0000-0000-0000-00000000b0b0") as SessionUserId;
+const policy = SessionExpiryPolicy.default();
 
 describe("LogoutEverywhere", () => {
-  let sessionRepository: InMemorySessionRepository;
+  let repository: InMemorySessionRepository;
   let revocationList: InMemoryRevocationList;
   let logoutEverywhere: LogoutEverywhere;
 
   beforeEach(() => {
-    sessionRepository = new InMemorySessionRepository();
+    repository = new InMemorySessionRepository();
     revocationList = new InMemoryRevocationList();
-    logoutEverywhere = new LogoutEverywhere(sessionRepository, revocationList);
+    logoutEverywhere = new LogoutEverywhere(repository, revocationList);
   });
 
-  it("revokes every active session for the user across multiple concurrent sessions", async () => {
-    const sessionA = issueSessionFor(userId, "token-a");
-    const sessionB = issueSessionFor(userId, "token-b");
-    const sessionC = issueSessionFor(userId, "token-c");
-    await sessionRepository.save(sessionA);
-    await sessionRepository.save(sessionB);
-    await sessionRepository.save(sessionC);
+  it("revokes every session belonging to the user", async () => {
+    const first = Session.open({ userId: alice, policy });
+    const second = Session.open({ userId: alice, policy });
+    await repository.save(first);
+    await repository.save(second);
 
-    const result = await logoutEverywhere.execute({ userId });
+    const result = await logoutEverywhere.execute({ userId: alice });
 
-    expect(result.kind).toBe("ok");
-    if (result.kind !== "ok") throw new Error("unreachable");
-    expect(result.value.revokedCount).toBe(3);
-
-    for (const session of [sessionA, sessionB, sessionC]) {
-      const stored = await sessionRepository.findById(session.id);
-      expect(stored!.isRevoked).toBe(true);
-    }
+    expect(Result.isOk(result)).toBe(true);
+    expect((await repository.findById(first.id))?.isRevoked).toBe(true);
+    expect((await repository.findById(second.id))?.isRevoked).toBe(true);
   });
 
-  it("denylists every revoked session's current access token", async () => {
-    await sessionRepository.save(issueSessionFor(userId, "token-a"));
-    await sessionRepository.save(issueSessionFor(userId, "token-b"));
+  it("adds every one of the user's sessions to the revocation list", async () => {
+    const first = Session.open({ userId: alice, policy });
+    const second = Session.open({ userId: alice, policy });
+    await repository.save(first);
+    await repository.save(second);
 
-    await logoutEverywhere.execute({ userId });
+    await logoutEverywhere.execute({ userId: alice });
 
-    expect(await revocationList.isRevoked("token-a")).toBe(true);
-    expect(await revocationList.isRevoked("token-b")).toBe(true);
+    await expect(revocationList.isRevoked(first.id)).resolves.toBe(true);
+    await expect(revocationList.isRevoked(second.id)).resolves.toBe(true);
   });
 
   it("does not touch another user's sessions", async () => {
-    const ownSession = issueSessionFor(userId, "token-a");
-    const otherSession = issueSessionFor(otherUserId, "token-other");
-    await sessionRepository.save(ownSession);
-    await sessionRepository.save(otherSession);
+    const bobsSession = Session.open({ userId: bob, policy });
+    await repository.save(bobsSession);
 
-    await logoutEverywhere.execute({ userId });
+    await logoutEverywhere.execute({ userId: alice });
 
-    const stored = await sessionRepository.findById(otherSession.id);
-    expect(stored!.isRevoked).toBe(false);
+    expect((await repository.findById(bobsSession.id))?.isRevoked).toBe(false);
+    await expect(revocationList.isRevoked(bobsSession.id)).resolves.toBe(false);
+  });
+
+  it("is a successful no-op for a user with no active sessions", async () => {
+    const result = await logoutEverywhere.execute({ userId: alice });
+
+    expect(Result.isOk(result)).toBe(true);
+  });
+
+  it("rejects an empty userId", async () => {
+    const result = await logoutEverywhere.execute({ userId: "" });
+
+    expect(Result.isErr(result)).toBe(true);
+    if (Result.isErr(result)) {
+      expect(result.error.code).toBe("VALIDATION_ERROR");
+    }
   });
 
   it("leaves a session created after the call unaffected", async () => {
-    await sessionRepository.save(issueSessionFor(userId, "token-a"));
+    const existing = Session.open({ userId: alice, policy });
+    await repository.save(existing);
 
-    await logoutEverywhere.execute({ userId });
+    await logoutEverywhere.execute({ userId: alice });
 
-    const newSession = issueSessionFor(userId, "token-b");
-    await sessionRepository.save(newSession);
+    const newSession = Session.open({ userId: alice, policy });
+    await repository.save(newSession);
 
-    const stored = await sessionRepository.findById(newSession.id);
-    expect(stored!.isRevoked).toBe(false);
-  });
-
-  it("succeeds with a zero count when the user has no active sessions", async () => {
-    const result = await logoutEverywhere.execute({ userId });
-
-    expect(result.kind).toBe("ok");
-    if (result.kind !== "ok") throw new Error("unreachable");
-    expect(result.value.revokedCount).toBe(0);
+    expect((await repository.findById(newSession.id))?.isRevoked).toBe(false);
   });
 });

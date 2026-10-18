@@ -1,0 +1,104 @@
+name: Release
+
+# Issue 215 — a Software Bill of Materials has to be produced at the same
+# moment, and from the same commit, as the thing it describes. Generating one
+# later, from whatever `pnpm install` resolves today, produces a document that
+# is confidently wrong about a release nobody can rebuild: the lockfile is the
+# only input here that was reviewed, so the SBOM is generated from it and from
+# nothing else.
+#
+# Scope is deliberately narrow. This builds and publishes the SBOM and nothing
+# else — pushing a container image belongs to Issue 216 (the image is not
+# hardened yet, so an SBOM claiming it is would be a liability rather than an
+# asset), and vulnerability scanning of the packages listed here belongs to
+# Issue 207. Both consume this file's output; neither is this file's job.
+
+on:
+  push:
+    tags:
+      # A full semver tag, not `v*`. A half-matching trigger is worse than none:
+      # a tag like `v2-migration-experiment` would produce an SBOM that looks
+      # like a release artifact for a release that never happened, and the
+      # people downstream reading it have no way to tell the two apart.
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+# Runs are not cancelled: a tag is immutable in practice, and two concurrent
+# runs for the same tag would race on the same release asset. The group is
+# per-ref so releasing two versions in quick succession does not serialize them.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  # The only write this workflow performs is attaching the SBOM to the release,
+  # and GitHub gates release assets behind the `contents` scope — there is no
+  # narrower scope that gets the asset uploaded. Everything else it does reads.
+  # The SBOM is additionally uploaded as a workflow artifact below, which needs
+  # no write permission at all.
+  contents: write
+
+jobs:
+  sbom:
+    name: Generate and publish the CycloneDX SBOM
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The same gate CI runs first, for the same reason, one level up in
+      # stakes: a test suite run against a drifted graph produces a wrong
+      # answer, but an SBOM of one produces a document an auditor relies on.
+      # Runs before any install, and as plain `node` — see the note on the
+      # equivalent step in ci.yml.
+      - name: Check lockfile integrity
+        run: node infra/ci/check-lockfile-integrity.mjs
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Writes sbom/verixa.cdx.json (gitignored — see .gitignore) and refuses to
+      # write it at all if the document does not validate against the CycloneDX
+      # 1.6 schema, because a malformed BOM that ships anyway reads as evidence
+      # a supply-chain review happened when it did not.
+      - name: Generate the SBOM
+        run: pnpm sbom:generate
+
+      # Re-reads the file from disk instead of trusting that the string the
+      # generator validated in memory is the string that got written. Cheap, and
+      # it is the artifact downstream tooling will actually open.
+      - name: Validate the artifact on disk
+        run: pnpm sbom:generate --validate-only sbom/verixa.cdx.json
+
+      # Always available straight from the workflow run, even for a tag that
+      # never becomes a release, and even if the step below is denied by
+      # branch-protection rules on token permissions.
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: verixa-sbom-${{ github.ref_name }}
+          path: sbom/verixa.cdx.json
+
+      - name: Attach the SBOM to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -eu
+
+          # An existing release is never rewritten. Whoever published it chose
+          # its title, notes and prerelease flag, and a workflow that clobbers
+          # that is a surprising neighbour to have. It is only created here when
+          # the tag was pushed by hand and has no release at all, which would
+          # otherwise leave the SBOM with nowhere to live.
+          gh release view "$TAG" --json tagName >/dev/null 2>&1 ||
+            gh release create "$TAG" --verify-tag --generate-notes
+
+          # --clobber replaces a previous SBOM for the same tag rather than
+          # leaving two conflicting inventories attached to one release.
+          gh release upload "$TAG" sbom/verixa.cdx.json --clobber

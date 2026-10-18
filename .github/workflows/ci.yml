@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches: [main]
   pull_request:
 
 jobs:
@@ -65,6 +65,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Issue 215. Runs before the install it guards, and deliberately invoked
+      # as `node` rather than `pnpm run check:lockfile`: the gate has to work on
+      # a tree that has never been installed, so it takes no dependencies, no
+      # package-manager setup and no build. It is also the first thing to fail
+      # when `pnpm-lock.yaml` is missing at all, which would otherwise surface
+      # as setup-node's `cache: pnpm` complaining that it cannot find a
+      # lockfile — true, but three steps downstream of the actual mistake.
+      - name: Check lockfile integrity
+        run: node infra/ci/check-lockfile-integrity.mjs
+
       - uses: pnpm/action-setup@v4
 
       - uses: actions/setup-node@v4
@@ -74,6 +84,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Validate OpenAPI contract
+        run: npx --yes @redocly/cli@2.53.3 lint --extends minimal apps/api/openapi/openapi.yaml
 
       # The Prisma client is generated, not committed (it's platform-specific
       # — see .gitignore), so it has to be generated before anything that
@@ -156,6 +169,15 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      # `pnpm typecheck` is recursive over *workspace packages*, and infra/ci is
+      # deliberately not one (it declares no dependencies and must never be
+      # built, published, or installed as a package — see infra/ci/package.json).
+      # So the tooling that decides whether a release is installable gets
+      # typechecked here instead, rather than first failing in release.yml, where
+      # nothing else runs before the SBOM step.
+      - name: Typecheck CI tooling
+        run: pnpm typecheck:ci
+
       - name: Test
         run: pnpm test
 
@@ -166,6 +188,37 @@ jobs:
       # doesn't need to run for every package on every push yet.
       - name: Identity coverage gate
         run: pnpm --filter @verixa/identity run test:coverage
+
+      # Same pattern applied to packages/sessions (Issue 097): session and
+      # token logic is among the highest-stakes code in the system, so it's
+      # held to the same enforced floor as identity rather than trusted to
+      # `pnpm test` alone.
+      - name: Sessions coverage gate
+        run: pnpm --filter @verixa/sessions run test:coverage
+      # packages/credentials is the second fully-built bounded context,
+      # following the Phase 02 coverage-gate pattern established in Issue 037.
+      # Enforced separately from the plain `pnpm test` above to keep coverage
+      # collection overhead isolated to contexts that require it.
+      - name: Credentials coverage gate
+        run: pnpm --filter @verixa/credentials run test:coverage
+
+      # packages/audit is the third context under the Phase 02 coverage-gate
+      # pattern (Issue 037), applied in Issue 197. The floor matters more here
+      # than anywhere else in the monorepo: this is the code that decides
+      # whether tampering is *detectable*, and an untested branch in chain
+      # verification is a security property that silently does not hold. The
+      # gate excludes the Prisma adapters and the operator CLI for the reason
+      # stated in packages/audit/vitest.config.ts — they need a live Postgres,
+      # and are covered by the database-backed suite instead.
+      - name: Audit coverage gate
+        run: pnpm --filter @verixa/audit run test:coverage
+
+      # packages/verification was lifted out of quarantine (docs/QUARANTINE.md)
+      # alongside packages/sessions; held to the same enforced floor rather
+      # than trusted to `pnpm test` alone, for the same reason the contexts
+      # above are.
+      - name: Verification coverage gate
+        run: pnpm --filter @verixa/verification run test:coverage
 
   # Verifies the *other* database strategy. The `ci` job above points
   # TEST_DATABASE_URL at a service container, so it never exercises the
@@ -220,10 +273,13 @@ jobs:
       - name: Re-link workspace packages
         run: pnpm install --frozen-lockfile
 
-      # Only the identity package: it owns the Prisma repository contract
-      # suite, which is what actually needs a database here.
-      - name: Run repository contract tests against a Testcontainers Postgres
+      # These packages own Prisma repository contract suites that need a
+      # real database.
+      - name: Run identity repository contract tests against Testcontainers Postgres
         run: pnpm --filter @verixa/identity run test
+
+      - name: Run authorization repository contract tests against Testcontainers Postgres
+        run: pnpm --filter @verixa/authorization run test
 
   # Verifies the *compose* stack's database roles, which nothing else covers.
   #
@@ -342,7 +398,10 @@ jobs:
         run: docker build -f apps/api/Dockerfile -t verixa-api:ci .
 
       - name: Run container
-        run: docker run -d --name verixa-api -p 3000:3000 verixa-api:ci
+        run: |
+          docker run -d --name verixa-api -p 3000:3000 \
+            -e SESSION_ACCESS_TOKEN_SECRET="ci-smoke-test-secret-at-least-32-characters" \
+            verixa-api:ci
 
       - name: Wait for /health
         run: |
@@ -364,6 +423,88 @@ jobs:
             echo "::error::apps/api container must not run as root"
             exit 1
           fi
+
+      # `whoami` says the name; the number is what an orchestrator enforces.
+      # `runAsNonRoot: true` is satisfied by any non-zero UID, and a
+      # `securityContext` or a pre-chowned volume that names a UID needs the
+      # value to be the one the Dockerfile pins.
+      - name: Verify the container runs as an unprivileged UID
+        run: |
+          set -eu
+          uid="$(docker exec verixa-api id -u)"
+          gid="$(docker exec verixa-api id -g)"
+          echo "Container uid/gid: $uid/$gid"
+          if [ "$uid" = "0" ] || [ "$gid" = "0" ]; then
+            echo "::error::the API must not run as UID or GID 0"
+            exit 1
+          fi
+
+      # A package manager inside a production container is a download primitive:
+      # `npm install <anything>` turns a foothold into code the operator never
+      # approved, fetched from a registry the operator does not control. The
+      # runtime stage deletes it, and this is the assertion that it stayed gone.
+      - name: Verify the image has no package manager or compiler headers
+        run: |
+          set -eu
+          found="$(docker exec verixa-api sh -c \
+            'for tool in /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/lib/node_modules/npm /usr/local/include/node; do [ -e "$tool" ] && echo "$tool"; done' || true)"
+          if [ -n "$found" ]; then
+            echo "::error::the runtime image still ships build tooling:"
+            printf '%s\n' "$found"
+            exit 1
+          fi
+          echo "no npm, npx, corepack or node headers in the image"
+
+      # Issue 216: source maps are the original TypeScript, a `*.spec.js` is an
+      # executable description of every assumption the test suite makes about the
+      # code, and `pnpm deploy` copies each workspace package directory whole —
+      # so `apps/api/src/**`, every package's `domain/` tree and the last test
+      # run's `coverage/` output all ride into the image unless something
+      # removes them. None of it is read at runtime; all of it is useful to
+      # whoever ends up with a shell in here.
+      - name: Verify the image carries no build residue or first-party source
+        run: |
+          set -eu
+          found="$(docker exec verixa-api sh -c '
+            find /app -name "*.js.map" -o -name "*.d.ts.map" -o -name "*.d.ts" -o -name "*.spec.js"
+            find /app -name "*.ts" -not -path "*/node_modules/*"
+            find /app -path "*/@verixa/*" -name "*.ts"
+            find /app -type d -name coverage
+          ' 2>&1 | head -20 || true)"
+          if [ -n "$found" ]; then
+            echo "::error::the runtime image still contains pruned files:"
+            printf '%s\n' "$found"
+            echo "See scripts/prune-runtime-bundle.mjs and docs/security/container-hardening.md."
+            exit 1
+          fi
+          echo "no source maps, declarations, compiled specs, sources or coverage in the image"
+
+      # `pnpm deploy --prod` is supposed to be what guarantees this, and it does,
+      # until something changes the hoisting or the manifest. `testcontainers`
+      # and `supertest` reappearing here would be invisible from the diff that
+      # caused it.
+      - name: Verify the image has no dev dependencies
+        run: |
+          set -eu
+          dev="$(docker exec verixa-api sh -c 'ls /app/node_modules /app/node_modules/.pnpm 2>/dev/null' \
+            | grep -E '^(typescript|vitest|tsx|eslint|prettier|husky|lint-staged|supertest|testcontainers|@vitest\+|@types\+|prisma@)' || true)"
+          if [ -n "$dev" ]; then
+            echo "::error::dev dependencies are present in the runtime image:"
+            printf '%s\n' "$dev"
+            exit 1
+          fi
+          echo "no dev dependencies in the bundle"
+
+      # Recorded, not asserted: the size number belongs in the hardening doc only
+      # if it was measured on a machine that could build the image, and CI is the
+      # only place that is. `docker`'s own size is unpacked-layer metadata, so the
+      # in-container figure is the one that says what the filesystem holds.
+      - name: Record the image size and contents
+        run: |
+          set -eu
+          docker images verixa-api:ci --format 'image {{.Repository}}:{{.Tag}}  size {{.Size}}'
+          docker exec verixa-api sh -c 'du -sh /app; printf "files in /app: "; find /app -type f | wc -l'
+          docker exec verixa-api sh -c 'du -sh /app/node_modules /app/dist 2>/dev/null || true'
 
       - name: Stop container
         if: always()

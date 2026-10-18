@@ -1,47 +1,3 @@
-// The public API of @verixa/sessions. Consumers import from the package root
-// (`@verixa/sessions`), never a deep path — a context's domain/application
-// internals are not part of its public surface. See
-// docs/guides/domain-modeling.md ("Package encapsulation").
-//
-// This package is being built incrementally across Phase 05. What is exported
-// here today is the slice landed so far: session identity, the access-token
-// signer with key rotation (Issue 085), and the Redis revocation deny-list
-// (Issue 088). The session aggregate, refresh tokens, and the issue/refresh/
-// logout use cases arrive with their own issues.
-
-// Domain: value objects
-export { asSessionId, createSessionId } from "./domain/value-objects/session-id.js";
-export type { SessionId } from "./domain/value-objects/session-id.js";
-
-// Domain: errors
-export { TokenVerificationError } from "./domain/errors/token-verification-error.js";
-export type { TokenVerificationFailure } from "./domain/errors/token-verification-error.js";
-
-// Application: ports (implemented by the infrastructure adapters below, and
-// depended on by the use cases that will follow)
-export type { RevocationList } from "./application/ports/revocation-list.js";
-export type {
-  AccessTokenInput,
-  TokenSigner,
-  VerifiedAccessToken,
-} from "./application/ports/token-signer.js";
-
-// Infrastructure: token signing & key rotation (Issue 084/085)
-export { JwtTokenSigner } from "./infrastructure/jwt-token-signer.js";
-export type { JwtTokenSignerOptions } from "./infrastructure/jwt-token-signer.js";
-export { createConfigSigningKeyProvider } from "./infrastructure/signing-key-provider.js";
-export type {
-  ActiveSigningKey,
-  SigningKeyProvider,
-  VerificationKey,
-} from "./infrastructure/signing-key-provider.js";
-
-// Infrastructure: revocation deny-list (Issue 088)
-export { RedisRevocationList } from "./infrastructure/redis-revocation-list.js";
-export type { RedisRevocationListOptions } from "./infrastructure/redis-revocation-list.js";
-
-// Testing: in-memory fake for consumers unit-testing against the revocation port
-export { InMemoryRevocationList } from "./infrastructure/testing/in-memory-revocation-list.js";
 // Curated public surface of @verixa/sessions. Nothing outside this package
 // should import from a deep path (`@verixa/sessions/domain/...`,
 // `@verixa/sessions/application/...`) — see docs/guides/domain-modeling.md
@@ -49,63 +5,82 @@ export { InMemoryRevocationList } from "./infrastructure/testing/in-memory-revoc
 // `no-restricted-imports` rule, which enforces it.
 
 // Domain: entities
-export type {
-  AccessTokenReference,
-  IssuedSession,
-  SessionId,
-  SessionMetadata,
-  SessionMetadataObservation,
-  SessionUserId,
-} from "./domain/entities/session.js";
+export type { SessionId, SessionMetadata, SessionUserId } from "./domain/entities/session.js";
 export { Session } from "./domain/entities/session.js";
+export type { IssuedRefreshToken, RefreshTokenId } from "./domain/entities/refresh-token.js";
 export { RefreshToken } from "./domain/entities/refresh-token.js";
 
 // Domain: value objects
 export { SessionExpiryPolicy } from "./domain/value-objects/session-expiry-policy.js";
-export {
-  generateToken,
-  hashToken,
-  tokenMatchesDigest,
-} from "./domain/value-objects/token-digest.js";
 
 // Domain: events
 export { RefreshTokenReuseDetected } from "./domain/events/refresh-token-reuse-detected.js";
 
 // Application: ports (for infrastructure adapters to implement)
 export type { SessionRepository } from "./application/ports/session-repository.js";
-export type { IssuedAccessToken, TokenSigner } from "./application/ports/token-signer.js";
+export type { AccessTokenPayload, TokenSigner } from "./application/ports/token-signer.js";
 export type { RevocationList } from "./application/ports/revocation-list.js";
 export type { SessionAuditLogger } from "./application/ports/session-audit-logger.js";
 
 // Application: use cases
-export {
-  IssueSession,
-  type IssueSessionCommand,
-  type IssueSessionResult,
+export type {
+  IssueSessionCommand,
+  IssuedSession,
+  IssueSessionError,
 } from "./application/use-cases/issue-session.js";
-export {
-  RefreshAccessToken,
-  type RefreshAccessTokenCommand,
-  type RefreshAccessTokenResult,
+export { IssueSession } from "./application/use-cases/issue-session.js";
+export type {
+  RefreshAccessTokenCommand,
+  RefreshedAccessToken,
+  RefreshAccessTokenError,
 } from "./application/use-cases/refresh-access-token.js";
-export { Logout, type LogoutCommand } from "./application/use-cases/logout.js";
-export {
-  LogoutEverywhere,
-  type LogoutEverywhereCommand,
-  type LogoutEverywhereResult,
+export { RefreshAccessToken } from "./application/use-cases/refresh-access-token.js";
+export type { LogoutCommand, LogoutError } from "./application/use-cases/logout.js";
+export { Logout } from "./application/use-cases/logout.js";
+export type {
+  LogoutEverywhereCommand,
+  LogoutEverywhereError,
 } from "./application/use-cases/logout-everywhere.js";
+export { LogoutEverywhere } from "./application/use-cases/logout-everywhere.js";
+export type {
+  ListActiveSessionsCommand,
+  ListActiveSessionsError,
+  SessionSummary,
+} from "./application/use-cases/list-active-sessions.js";
 export { ListActiveSessions } from "./application/use-cases/list-active-sessions.js";
 
-// Infrastructure: adapters (Exported so the composition root can construct them)
+// Infrastructure: adapters (exported so the composition root can construct them)
 export { PrismaSessionRepository } from "./infrastructure/persistence/prisma-session-repository.js";
 export { JwtTokenSigner } from "./infrastructure/jwt-token-signer.js";
-export { RedisRevocationList } from "./infrastructure/redis-revocation-list.js";
 export { SigningKeyProvider } from "./infrastructure/signing-key-provider.js";
+export {
+  RedisRevocationList,
+  type RedisRevocationListOptions,
+} from "./infrastructure/redis-revocation-list.js";
+export { SessionsPackageRevoker } from "./infrastructure/session-revoker-adapter.js";
+
+// Infrastructure: HTTP surface. The cookie *policy* lives here rather than in
+// `apps/api`, because which cookie is `HttpOnly` is a property of the session
+// model, not of the framework that happens to carry it — and the sessions
+// package is where that model is defined. The transport layer's job is to put
+// the returned strings in a `Set-Cookie` header and nothing else.
+export type { CookieAttributes, SameSiteMode } from "./infrastructure/http/cookie-config.js";
+export {
+  CSRF_COOKIE_NAME,
+  CSRF_COOKIE_PATH,
+  REFRESH_COOKIE_NAME,
+  REFRESH_COOKIE_PATH,
+  clearedSessionCookies,
+  csrfTokenCookie,
+  expireCookie,
+  refreshTokenCookie,
+  serializeCookie,
+  sessionCookies,
+} from "./infrastructure/http/cookie-config.js";
 
 // Testing fakes
 export { InMemorySessionRepository } from "./infrastructure/testing/in-memory-session-repository.js";
 export { InMemoryRevocationList } from "./infrastructure/testing/in-memory-revocation-list.js";
-export { InMemoryTokenSigner } from "./infrastructure/testing/in-memory-token-signer.js";
 export {
   InMemorySessionAuditLogger,
   type RecordedSessionAuditEntry,
