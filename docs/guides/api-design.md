@@ -23,6 +23,7 @@ or business policy stay in the application or domain layer.
 Errors should use the shared API error envelope and stable error codes. Do not
 return stack traces or internal exception messages to clients. See
 `apps/api/src/http/error-response.ts` for the transport boundary.
+
 # API Design
 
 The REST API is a transport boundary around application use cases. Routes parse HTTP input, call a use case, and translate its result into an HTTP response. They do not own business rules or data access.
@@ -55,6 +56,7 @@ Common codes include `VALIDATION_ERROR` (400), `AUTHENTICATION_FAILED` (401), `F
 The API uses one global Fastify error handler instead of per-route `try/catch` mappings. This ensures framework errors, validation failures, and uncaught exceptions share the same response shape. Keeping domain-to-HTTP mappings in one table also makes adding a new domain failure an explicit API decision rather than an accidental result of a generic catch-all.
 
 The response schema is exported as `ErrorResponse` for reuse as the shared OpenAPI component. It intentionally describes the common envelope; operation-specific responses can reference it without redefining the envelope or drifting on required fields.
+
 ## Request validation
 
 Routes declare schemas for every accepted body, path parameter, and query
@@ -69,6 +71,7 @@ the assignment listing route without its query schema. This makes missing
 validation fail during CI app setup instead of allowing an unvalidated route
 to ship. Validation failures use the shared `VALIDATION_ERROR` response with
 field-level details.
+
 # API Design: contract before routes
 
 `apps/api/openapi/openapi.yaml` is the source of truth for the REST API
@@ -109,3 +112,11 @@ as YAML but violates the OpenAPI schema must not merge.
 The contract does not try to describe internal persistence details. That
 boundary keeps clients stable when adapters change and makes compatibility
 review a question about requests and responses, not the database schema.
+
+## Rate limiting
+
+The API applies rate limiting globally across all routes, with support for per-route overrides on abuse-sensitive endpoints (such as `/auth/login` and export routes).
+
+Rate limiting is tracked primarily by authenticated principal (`x-user-id` session/user header or `x-api-key`), falling back to client IP only when unauthenticated. This ensures that attackers cannot bypass quotas by rotating source IP addresses while using stolen credentials or automated scripts.
+
+When a client breaches their allocated quota, the server responds with HTTP status 429 and the standard `RATE_LIMITED` error envelope. In accordance with HTTP standards, a `Retry-After` header is included alongside standard rate limit metadata (`X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset`). Redis backs the distributed counters, with an in-memory sliding/fixed window fallback when running in standalone or local testing environments.
