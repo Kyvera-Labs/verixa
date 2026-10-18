@@ -47,15 +47,28 @@ describe("IdentityCredentialsAuditSubscriber", () => {
     await publisher.publish(
       event("credentials.user.account_locked", "user-1", { reason: "too many attempts" }),
     );
+    await publisher.publish(
+      event("identity.api_key.created", "key-1", {
+        organizationId: "org-1",
+        name: "ci-service",
+        keyPreview: "a1b2",
+      }),
+    );
 
-    expect(repository.all()).toHaveLength(3);
+    expect(repository.all()).toHaveLength(4);
     expect(repository.all().map((entry) => entry.action)).toEqual([
       "user.registered",
       "user.password_changed",
       "user.locked_out",
+      "api_key.created",
     ]);
     expect(repository.all()[0]?.metadata).toEqual({ email: "user@example.test" });
     expect(repository.all()[1]?.metadata).toEqual({ method: "reset" });
+    expect(repository.all()[3]?.metadata).toEqual({
+      organizationId: "org-1",
+      name: "ci-service",
+      keyPreview: "a1b2",
+    });
   });
 
   it("maps identity status changes without leaking an unknown event shape", async () => {
