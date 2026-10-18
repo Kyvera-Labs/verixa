@@ -3,11 +3,14 @@ import { randomUUID } from "node:crypto";
 import {
   AnchorAuditLog,
   BatchedAuditWriter,
+  ExportAuditEvents,
   PrismaAnchorRecordRepository,
   PrismaAuditLogRepository,
+  QueryAuditEvents,
   RecordAuditEvent,
   VerifyAuditChain,
   type AuditDelegate,
+  type AuditEventReader,
   type AuditTransaction,
 } from "@verixa/audit";
 import { PrismaAuthorizationRepository, type AuthorizationRepository } from "@verixa/authorization";
@@ -235,6 +238,8 @@ export interface AuditUseCases {
    * when nothing has ever been committed anywhere.
    */
   readonly anchor: AnchorAuditLog | undefined;
+  readonly queryEvents?: QueryAuditEvents | undefined;
+  readonly exportEvents?: ExportAuditEvents | undefined;
 }
 
 /** Multi-factor authentication use cases. */
@@ -274,6 +279,9 @@ export interface ContainerOverrides {
    * problem back where it started.
    */
   readonly signer?: TransactionSigner | undefined;
+  readonly auditEventReader?: AuditEventReader | undefined;
+  readonly queryAuditEvents?: QueryAuditEvents | undefined;
+  readonly exportAuditEvents?: ExportAuditEvents | undefined;
 }
 
 /**
@@ -475,6 +483,16 @@ export function buildContainer(
         hashAnchor === undefined
           ? undefined
           : new AnchorAuditLog(auditLog, anchorRecords, hashAnchor),
+      queryEvents:
+        overrides.queryAuditEvents ??
+        (overrides.auditEventReader
+          ? new QueryAuditEvents(overrides.auditEventReader, recordAuditEvent)
+          : undefined),
+      exportEvents:
+        overrides.exportAuditEvents ??
+        (overrides.auditEventReader
+          ? new ExportAuditEvents(overrides.auditEventReader, recordAuditEvent)
+          : undefined),
     },
     authorization,
     mfa: {
