@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { InMemoryBruteForceAttemptStore } from "../../infrastructure/in-memory-brute-force-attempt-store.js";
-import type { RateLimitDecision, RateLimiter } from "../ports/rate-limiter.js";
+import type { RateLimiter, RateLimitResult } from "../ports/rate-limiter.js";
 
 import { BruteForcePolicy, DEFAULT_BRUTE_FORCE_THRESHOLDS } from "./brute-force-policy.js";
 
@@ -16,18 +16,36 @@ function policyWith(overrides: Partial<typeof DEFAULT_BRUTE_FORCE_THRESHOLDS> = 
   return { store, policy };
 }
 
-function limiterReturning(decision: RateLimitDecision): RateLimiter {
-  return { check: () => Promise.resolve(decision) };
+interface LimiterAnswer {
+  readonly allowed: boolean;
+  /** Omitted when the limiter cannot say when it will admit again. */
+  readonly retryAfterSeconds?: number;
+}
+
+/** The port reports a reset timestamp; a past one stands for "unknown". */
+function toResult({ allowed, retryAfterSeconds }: LimiterAnswer): RateLimitResult {
+  const resetAt = retryAfterSeconds === undefined ? 0 : Date.now() + retryAfterSeconds * 1000;
+  return { allowed, remaining: allowed ? 1 : 0, resetAt, limit: 10 };
+}
+
+function limiterReturning(answer: LimiterAnswer): RateLimiter {
+  return {
+    check: () => Promise.resolve(toResult(answer)),
+    recordFailure: () => Promise.resolve(),
+    reset: () => Promise.resolve(),
+  };
 }
 
 /** A limiter that counts calls, so a test can assert asking is not spending. */
-function countingLimiter(decision: RateLimitDecision = { allowed: true }) {
+function countingLimiter(answer: LimiterAnswer = { allowed: true }) {
   let calls = 0;
   const limiter: RateLimiter = {
     check: () => {
       calls += 1;
-      return Promise.resolve(decision);
+      return Promise.resolve(toResult(answer));
     },
+    recordFailure: () => Promise.resolve(),
+    reset: () => Promise.resolve(),
   };
   return {
     get calls() {

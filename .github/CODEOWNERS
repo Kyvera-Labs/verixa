@@ -2,4 +2,31 @@
 # pattern overrides it. See https://docs.github.com/articles/about-codeowners
 # for how GitHub matches these patterns (last match wins).
 
-*       @Kyvera-Labs/verixa-maintainers
+*       @BigManly4
+
+# Paths that run code on a contributor's machine or in CI without anyone
+# invoking it directly: on folder open, on install, on lint, on commit. This is
+# where the October 2026 PolinRider injection hid
+# (docs/security/incidents/2026-10-polinrider.md), so a maintainer must read
+# every change here in full — including to the end of long lines.
+/.vscode/               @BigManly4
+/.devcontainer/         @BigManly4
+/.husky/                @BigManly4
+/.github/               @BigManly4
+/infra/ci/              @BigManly4
+**/package.json         @BigManly4
+/pnpm-lock.yaml         @BigManly4
+/pnpm-workspace.yaml    @BigManly4
+/.npmrc                 @BigManly4
+**/.gitignore           @BigManly4
+*.config.js             @BigManly4
+*.config.mjs            @BigManly4
+*.config.cjs            @BigManly4
+*.config.ts             @BigManly4
+*.woff                  @BigManly4
+*.woff2                 @BigManly4
+*.eot                   @BigManly4
+*.ttf                   @BigManly4
+*.otf                   @BigManly4
+*.bat                   @BigManly4
+*.sh                    @BigManly4

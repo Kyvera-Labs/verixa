@@ -4,11 +4,8 @@ import eslintConfigPrettier from "eslint-config-prettier";
 import { createTypeScriptImportResolver } from "eslint-import-resolver-typescript";
 import importPlugin from "eslint-plugin-import-x";
 import tseslint from "typescript-eslint";
-import { createRequire } from "module";
 
 import { securityPlugin, securityRules } from "./infra/ci/security-lint-rules.mjs";
-
-const require = createRequire(import.meta.url);
 
 export default tseslint.config(
   {
@@ -173,6 +170,9 @@ export default tseslint.config(
     files: ["tests/**/*.ts", "**/*.spec.ts", "infra/ci/**/*.ts"],
     rules: {
       "security/detect-non-literal-fs-filename": "warn",
+    },
+  },
+  {
     // Injection hardening (Issue 210, docs/security/injection-hardening.md).
     //
     // Prisma parameterizes by default, which is exactly why this needs a rule:

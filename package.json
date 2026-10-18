@@ -29,6 +29,7 @@
     "db:benchmark:audit": "pnpm --filter @verixa/database run benchmark:audit",
     "audit:verify-chain": "pnpm --filter @verixa/audit^... run build && pnpm --filter @verixa/audit run verify-chain",
     "check:lockfile": "node infra/ci/check-lockfile-integrity.mjs",
+    "check:malware": "node infra/ci/check-malware-indicators.mjs",
     "sbom:generate": "tsx infra/ci/generate-sbom.ts",
     "typecheck:ci": "tsc -p infra/ci/tsconfig.json --noEmit"
   },

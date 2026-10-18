@@ -28,6 +28,7 @@ const moduleDirectory = dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = join(moduleDirectory, "..", "..", "..");
 
 const LOCKFILE_GATE = join(REPO_ROOT, "infra", "ci", "check-lockfile-integrity.mjs");
+const MALWARE_INDICATOR_GATE = join(REPO_ROOT, "infra", "ci", "check-malware-indicators.mjs");
 const SBOM_GENERATOR = join(REPO_ROOT, "infra", "ci", "generate-sbom.ts");
 const DEPENDENCY_SCAN_GATE = join(REPO_ROOT, "infra", "ci", "dependency-scan.mjs");
 const SECURITY_FIXTURE_CONFIG = join(
@@ -88,6 +89,11 @@ function run(command: string, args: readonly string[], cwd: string): ToolResult 
 /** `node infra/ci/check-lockfile-integrity.mjs --repo <dir>` — the CI step's command. */
 export function runLockfileGate(repositoryDirectory: string): ToolResult {
   return run(process.execPath, [LOCKFILE_GATE, "--repo", repositoryDirectory], REPO_ROOT);
+}
+
+/** `node infra/ci/check-malware-indicators.mjs --repo <dir>` — the CI step's command. */
+export function runMalwareIndicatorGate(repositoryDirectory: string): ToolResult {
+  return run(process.execPath, [MALWARE_INDICATOR_GATE, "--repo", repositoryDirectory], REPO_ROOT);
 }
 
 /** `pnpm run check:lockfile` at the repository root — the script developers and docs point at. */

@@ -2,7 +2,6 @@ export type {
   AttemptRecord,
   BruteForceAttemptStore,
 } from "./application/ports/brute-force-attempt-store.js";
-export type { RateLimitDecision, RateLimiter } from "./application/ports/rate-limiter.js";
 export {
   BruteForcePolicy,
   DEFAULT_BRUTE_FORCE_THRESHOLDS,

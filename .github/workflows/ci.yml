@@ -75,6 +75,12 @@ jobs:
       - name: Check lockfile integrity
         run: node infra/ci/check-lockfile-integrity.mjs
 
+      # Runs before install and lint for the same reason as the lockfile gate,
+      # and one more: the PolinRider payload it looks for executes during
+      # install and lint, so finding it afterwards is too late.
+      - name: Check for malware indicators
+        run: node infra/ci/check-malware-indicators.mjs
+
       - uses: pnpm/action-setup@v4
 
       - uses: actions/setup-node@v4

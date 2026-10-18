@@ -51,6 +51,3 @@ backups/
 # would create a second, staler copy of the dependency graph that says nothing
 # about the build it sits next to.
 sbom/
-branch_structure.json
-temp_auto_push.bat
-temp_interactive_push.bat

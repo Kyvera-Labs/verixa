@@ -153,7 +153,10 @@ export class BruteForcePolicy {
       await this.store.clear(key);
     }
 
-    const limit = await this.limiter?.check(key);
+    const limit = await this.limiter?.check({
+      action: scope,
+      identifier: identifier.trim().toLowerCase(),
+    });
     const limited = limit !== undefined && !limit.allowed;
     const locked = remainingMs > 0;
 
@@ -162,7 +165,7 @@ export class BruteForcePolicy {
     }
 
     const lockoutSeconds = locked ? Math.ceil(remainingMs / 1000) : undefined;
-    const limiterSeconds = limited ? limit?.retryAfterSeconds : undefined;
+    const limiterSeconds = limited ? secondsUntil(limit.resetAt) : undefined;
     const seconds =
       lockoutSeconds !== undefined && limiterSeconds !== undefined
         ? Math.max(lockoutSeconds, limiterSeconds)
@@ -208,6 +211,12 @@ export class BruteForcePolicy {
     if (durationMs === 0) return null;
     return new Date(Date.now() + durationMs);
   }
+}
+
+/** A reset time that is not in the future tells the caller nothing about when to retry. */
+function secondsUntil(resetAt: number): number | undefined {
+  const remainingMs = resetAt - Date.now();
+  return remainingMs > 0 ? Math.ceil(remainingMs / 1000) : undefined;
 }
 
 /**

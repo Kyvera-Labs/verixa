@@ -79,12 +79,9 @@ async function seed(): Promise<void> {
   await prisma.$executeRawUnsafe("ANALYZE audit_log_entries;");
 }
 
-async function explain(label: string, sql: string, ...params: unknown[]): Promise<void> {
+async function explain(label: string, statement: string, ...params: unknown[]): Promise<void> {
   const started = performance.now();
-  const rows = await prisma.$queryRawUnsafe<PlanRow[]>(
-    `EXPLAIN (ANALYZE, BUFFERS) ${sql}`,
-    ...params,
-  );
+  const rows = await prisma.$queryRawUnsafe<PlanRow[]>(statement, ...params);
   const elapsed = performance.now() - started;
   const plan = rows.map((row) => row["QUERY PLAN"]).join("\n");
 
@@ -119,36 +116,36 @@ async function main(): Promise<void> {
 
     await explain(
       "actor filter — (actor_id, sequence)",
-      "SELECT * FROM audit_log_entries WHERE sequence >= $1::int AND actor_id = $2::uuid ORDER BY sequence ASC LIMIT 50",
+      "EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM audit_log_entries WHERE sequence >= $1::int AND actor_id = $2::uuid ORDER BY sequence ASC LIMIT 50",
       1,
       TARGET_ACTOR_ID,
     );
     await explain(
       "subject filter — (subject_id, sequence)",
-      "SELECT * FROM audit_log_entries WHERE sequence >= $1::int AND subject_id = $2::uuid ORDER BY sequence ASC LIMIT 50",
+      "EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM audit_log_entries WHERE sequence >= $1::int AND subject_id = $2::uuid ORDER BY sequence ASC LIMIT 50",
       1,
       TARGET_SUBJECT_ID,
     );
     await explain(
       "action filter — (action, sequence)",
-      "SELECT * FROM audit_log_entries WHERE sequence >= $1::int AND action = $2::text ORDER BY sequence ASC LIMIT 50",
+      "EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM audit_log_entries WHERE sequence >= $1::int AND action = $2::text ORDER BY sequence ASC LIMIT 50",
       1,
       TARGET_ACTION,
     );
     await explain(
       "date range — (occurred_at, sequence)",
-      "SELECT * FROM audit_log_entries WHERE sequence >= $1::int AND occurred_at >= $2::timestamptz ORDER BY sequence ASC LIMIT 50",
+      "EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM audit_log_entries WHERE sequence >= $1::int AND occurred_at >= $2::timestamptz ORDER BY sequence ASC LIMIT 50",
       1,
       windowStart,
     );
     await explain(
       "keyset only — unique (sequence)",
-      "SELECT * FROM audit_log_entries WHERE sequence >= $1::int ORDER BY sequence ASC LIMIT 50",
+      "EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM audit_log_entries WHERE sequence >= $1::int ORDER BY sequence ASC LIMIT 50",
       ROWS - 100,
     );
     await explain(
       "organisation metadata (known limitation: no index)",
-      "SELECT * FROM audit_log_entries WHERE sequence >= $1::int AND metadata->>'organizationId' = $2::text ORDER BY sequence ASC LIMIT 50",
+      "EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM audit_log_entries WHERE sequence >= $1::int AND metadata->>'organizationId' = $2::text ORDER BY sequence ASC LIMIT 50",
       1,
       "no-such-organisation",
     );
