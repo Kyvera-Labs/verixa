@@ -179,18 +179,6 @@ export const SECURITY_HEADERS: FastifyHelmetOptions = {
  * `Logger`, which is not structurally identical to Fastify's
  * `FastifyBaseLogger`.
  */
-export function registerSecurityHeaders<TLogger extends FastifyBaseLogger = FastifyBaseLogger>(
- * The `Strict-Transport-Security` directive and the HTTP-to-HTTPS redirect
- * (roadmap Issue 213).
- *
- * This module owns the *transport-security* slice of the response headers
- * only. `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` and the
- * baseline CSP belong to Issue 203 and will be added here (or beside it) when
- * that issue lands — deliberately not folded in now, so this change stays
- * reviewable as one threat class: credentials and tokens moving in cleartext.
- */
-
-/** The header name, lower-cased the way Node stores received headers. */
 export const HSTS_HEADER_NAME = "strict-transport-security";
 
 /**
@@ -496,10 +484,9 @@ export function registerSecurityHeaders<TLogger extends FastifyBaseLogger>(
     RawReplyDefaultExpression,
     TLogger
   >,
+  options: SecurityHeadersOptions = NO_TRANSPORT_SECURITY,
 ): void {
   app.register(helmet, SECURITY_HEADERS);
-  options: SecurityHeadersOptions,
-): void {
   const hstsHeaderValue = options.hsts === null ? null : formatHstsHeader(options.hsts);
 
   app.addHook("onRequest", async (request, reply) => {

@@ -1,5 +1,6 @@
 import supertest from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { ConfigError } from "@verixa/config";
 
 import { buildApp } from "../app.js";
 
@@ -96,8 +97,8 @@ describe("security headers", () => {
     expect(response.status).toBe(404);
     expect(response.headers["x-content-type-options"]).toBe("nosniff");
     expect(response.headers["strict-transport-security"]).toContain("max-age=31536000");
-import { ConfigError } from "@verixa/config";
-import { describe, expect, it } from "vitest";
+  });
+});
 
 import {
   DEFAULT_HSTS_MAX_AGE_SECONDS,
