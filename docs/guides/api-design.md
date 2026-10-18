@@ -120,3 +120,14 @@ The API applies rate limiting globally across all routes, with support for per-r
 Rate limiting is tracked primarily by authenticated principal (`x-user-id` session/user header or `x-api-key`), falling back to client IP only when unauthenticated. This ensures that attackers cannot bypass quotas by rotating source IP addresses while using stolen credentials or automated scripts.
 
 When a client breaches their allocated quota, the server responds with HTTP status 429 and the standard `RATE_LIMITED` error envelope. In accordance with HTTP standards, a `Retry-After` header is included alongside standard rate limit metadata (`X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset`). Redis backs the distributed counters, with an in-memory sliding/fixed window fallback when running in standalone or local testing environments.
+
+## Idempotency keys for unsafe write operations
+
+Network communication is inherently unreliable. Flaky clients and distributed networks may retry write requests (such as registration, credentials creation, and verification submissions) when an HTTP timeout or dropped connection occurs. Without idempotency support, retrying a create operation risks creating duplicate resources or triggering invalid state transitions.
+
+The API supports an `Idempotency-Key` header on state-mutating write operations (`POST`, `PATCH`):
+
+1. **Deduplication**: When a client sends a request with an `Idempotency-Key`, the key and a SHA-256 fingerprint of the request (method, URL, and body payload) are stored in Redis (or in-memory cache) with a bounded 24-hour TTL (`DEFAULT_IDEMPOTENCY_TTL_SECONDS = 86400`).
+2. **Deterministic Replay**: If an identical request with the same `Idempotency-Key` arrives within the TTL window, the original response status code and body are immediately returned with the `Idempotency-Replayed: true` header. The underlying route handler and domain use case are executed exactly once.
+3. **Conflict Detection**: If a client reuses an active `Idempotency-Key` with a different payload or URL, the request is rejected with HTTP 409 (`CONFLICT`), preventing accidental or malicious parameter alteration.
+4. **Bounded Lifespan**: Once the key expires after its TTL, subsequent requests with the same key are treated as fresh operations.
