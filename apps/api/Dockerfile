@@ -89,6 +89,17 @@ RUN set -eu; \
 COPY scripts/prune-runtime-bundle.mjs scripts/
 RUN node scripts/prune-runtime-bundle.mjs /out
 
+# `@prisma/client` declares the `prisma` CLI and `typescript` as optional peers,
+# and the workspace's `autoInstallPeers` makes `pnpm deploy --prod` install
+# them. Neither is read at runtime — the client loads only the generated
+# `.prisma` output copied above — and both are dev tooling the image must not
+# ship (CI's dev-dependency check). Removed before the load proof below, so a
+# client that did need either one fails the build here rather than in a
+# running container. The symlinks that pointed at them go too.
+RUN set -eu; \
+    find /out/node_modules/.pnpm -mindepth 1 -maxdepth 1 -type d \( -name 'prisma@*' -o -name 'typescript@*' \) -print -exec rm -rf {} +; \
+    find /out/node_modules -type l \( -name prisma -o -name typescript \) -print -delete
+
 # Prove the bundle actually loads before shipping it.
 #
 # Two separate production-only failures reached CI from this Dockerfile —
