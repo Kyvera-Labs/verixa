@@ -131,3 +131,16 @@ The API supports an `Idempotency-Key` header on state-mutating write operations 
 2. **Deterministic Replay**: If an identical request with the same `Idempotency-Key` arrives within the TTL window, the original response status code and body are immediately returned with the `Idempotency-Replayed: true` header. The underlying route handler and domain use case are executed exactly once.
 3. **Conflict Detection**: If a client reuses an active `Idempotency-Key` with a different payload or URL, the request is rejected with HTTP 409 (`CONFLICT`), preventing accidental or malicious parameter alteration.
 4. **Bounded Lifespan**: Once the key expires after its TTL, subsequent requests with the same key are treated as fresh operations.
+
+## Observability and Request Correlation
+
+Traceability across distributed components, background workers, and structured logs is critical when operating authentication, verification, and audit pipelines under real traffic.
+
+### Correlation ID (`X-Request-Id`)
+
+The API implements correlation ID tracking via `apps/api/src/plugins/request-context.ts`:
+
+1. **Inbound Preservation vs Generation**: If an incoming request carries an `X-Request-Id` header (e.g., from an upstream reverse proxy, mobile client, or frontend application), that identifier is preserved without mutation. If missing, the server generates a new UUID v4.
+2. **Context Binding**: The ID is bound to `request.id` and `request.requestId`, and attached to the request's child logger (`request.log`) under `reqId` and `requestId`. Every structured log line emitted during the request lifecycle carries this identifier.
+3. **Response Header & Error Envelopes**: The correlation ID is reflected in the outgoing `X-Request-Id` HTTP response header and mapped directly into the `error.requestId` property of every error response (see `apps/api/src/http/error-response.ts`). This allows clients experiencing failures to report the exact `requestId` for diagnostics without exposing internal stack traces or database errors.
+4. **Outbound Propagation**: When downstream services or third-party webhooks/notifications are dispatched from within a request, `propagateRequestContext(request, headers)` passes the correlation ID forward, preserving distributed trace boundaries until OpenTelemetry distributed tracing spans are introduced.
