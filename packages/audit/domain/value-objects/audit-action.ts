@@ -35,6 +35,7 @@ export type AuditAction =
   | "identity.user.profile_updated"
   | "identity.organization.created"
   | "identity.organization.invitation_sent"
+  | "identity.api_key.created"
   // Credentials context
   | "credentials.user.registered_with_password"
   | "credentials.password.authentication_succeeded"
@@ -77,6 +78,7 @@ export function isAuditAction(value: string): value is AuditAction {
     "identity.user.profile_updated",
     "identity.organization.created",
     "identity.organization.invitation_sent",
+    "identity.api_key.created",
     "credentials.user.registered_with_password",
     "credentials.password.authentication_succeeded",
     "credentials.password.authentication_failed",

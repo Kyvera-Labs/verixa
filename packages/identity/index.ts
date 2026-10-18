@@ -64,6 +64,17 @@ export type {
   UpdateUserProfileError,
 } from "./application/use-cases/update-user-profile.js";
 export { UpdateUserProfile } from "./application/use-cases/update-user-profile.js";
+export type { GetUserCommand } from "./application/use-cases/get-user.js";
+export { GetUser } from "./application/use-cases/get-user.js";
+export type { GetOrganizationCommand } from "./application/use-cases/get-organization.js";
+export { GetOrganization } from "./application/use-cases/get-organization.js";
+export type { GetOrganizationUsersCommand } from "./application/use-cases/get-organization-users.js";
+export { GetOrganizationUsers } from "./application/use-cases/get-organization-users.js";
+export type { GetUserOrganizationsCommand } from "./application/use-cases/get-user-organizations.js";
+export { GetUserOrganizations } from "./application/use-cases/get-user-organizations.js";
+export type { GetUsersByOrganizationIdsCommand } from "./application/use-cases/get-users-by-organization-ids.js";
+export { GetUsersByOrganizationIds } from "./application/use-cases/get-users-by-organization-ids.js";
+export { ListOrganizations } from "./application/use-cases/list-organizations.js";
 
 // Infrastructure: Prisma-backed adapters. Exported so the composition root
 // (apps/api) can construct them — it is the one place allowed to know which
@@ -83,4 +94,18 @@ export { withTenantContext } from "./infrastructure/persistence/prisma-tenant-co
 // sessions) can test their own use cases against the same fake identity
 // repositories, rather than each re-implementing one that drifts.
 export { InMemoryUserRepository } from "./infrastructure/testing/in-memory-user-repository.js";
+export { InMemoryOrganizationRepository } from "./infrastructure/testing/in-memory-organization-repository.js";
+export { InMemoryOrganizationMembershipRepository } from "./infrastructure/testing/in-memory-organization-membership-repository.js";
 export { InMemoryUnitOfWork } from "./infrastructure/testing/in-memory-unit-of-work.js";
+
+// ApiKey exports
+export { ApiKey, type ApiKeyId, type ApiKeyStatus, type IssuedApiKey } from "./domain/entities/api-key.js";
+export { ApiKeyCreated } from "./domain/events/api-key-created.js";
+export type { ApiKeyRepository } from "./application/ports/api-key-repository.js";
+export {
+  CreateApiKey,
+  type CreateApiKeyCommand,
+  type CreateApiKeyError,
+  type CreateApiKeyResult,
+} from "./application/use-cases/create-api-key.js";
+export { InMemoryApiKeyRepository } from "./infrastructure/testing/in-memory-api-key-repository.js";

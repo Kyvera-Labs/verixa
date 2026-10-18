@@ -42,7 +42,9 @@ export type AuditAction =
   // Reads of the audit log itself — see `domain/policies/audit-access-policy.ts`.
   | "audit.queried"
   | "audit.exported"
-  | "audit.access_denied";
+  | "audit.access_denied"
+  // API key lifecycle (Issue 233)
+  | "api_key.created";
 
 /**
  * The genesis link.

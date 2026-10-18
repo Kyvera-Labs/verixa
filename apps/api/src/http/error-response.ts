@@ -116,7 +116,12 @@ export function handleApiError(
   }
 
   if (fastifyError.validation !== undefined) {
-    sendApiError(reply, "VALIDATION_ERROR", "Request validation failed.", validationDetails(fastifyError));
+    sendApiError(
+      reply,
+      "VALIDATION_ERROR",
+      "Request validation failed.",
+      validationDetails(fastifyError),
+    );
     return;
   }
 

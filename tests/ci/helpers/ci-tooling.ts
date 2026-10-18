@@ -29,6 +29,28 @@ export const REPO_ROOT = join(moduleDirectory, "..", "..", "..");
 
 const LOCKFILE_GATE = join(REPO_ROOT, "infra", "ci", "check-lockfile-integrity.mjs");
 const SBOM_GENERATOR = join(REPO_ROOT, "infra", "ci", "generate-sbom.ts");
+const DEPENDENCY_SCAN_GATE = join(REPO_ROOT, "infra", "ci", "dependency-scan.mjs");
+const SECURITY_FIXTURE_CONFIG = join(
+  REPO_ROOT,
+  "infra",
+  "ci",
+  "lint-security-fixtures",
+  "eslint.config.mjs",
+);
+const SECURITY_FIXTURE_DIRECTORY = "infra/ci/lint-security-fixtures";
+
+/** Captured reports and manifests for the dependency-scan gate (Issue 207). */
+export const DEPENDENCY_SCAN_FIXTURES = join(
+  REPO_ROOT,
+  "infra",
+  "ci",
+  "fixtures",
+  "dependency-scan",
+);
+
+export function dependencyScanFixture(name: string): string {
+  return join(DEPENDENCY_SCAN_FIXTURES, name);
+}
 
 /**
  * tsx's CLI, resolved by path instead of invoked by name.
@@ -40,7 +62,7 @@ const SBOM_GENERATOR = join(REPO_ROOT, "infra", "ci", "generate-sbom.ts");
  */
 const TSX_CLI = createRequire(import.meta.url).resolve("tsx/cli");
 
-interface ToolResult {
+export interface ToolResult {
   readonly exitCode: number;
   readonly stdout: string;
   readonly stderr: string;
@@ -71,6 +93,29 @@ export function runLockfileGate(repositoryDirectory: string): ToolResult {
 /** `pnpm run check:lockfile` at the repository root — the script developers and docs point at. */
 export function runLockfileGateViaPnpmScript(): ToolResult {
   return run("pnpm", ["run", "check:lockfile"], REPO_ROOT);
+}
+
+/**
+ * Runs ESLint against the deliberately vulnerable fixture snippets with the
+ * fixture-only config (Issue 208).
+ *
+ * Spawning the CLI rather than importing ESLint's Node API keeps this test
+ * free of a typed import for `eslint-plugin-security`, which ships no types —
+ * and it is closer to what CI runs, which is the point of a lint gate test.
+ */
+export function runSecurityLintFixtureConfig(args: readonly string[]): ToolResult {
+  return run(
+    "pnpm",
+    ["exec", "eslint", "--no-config-lookup", "--config", SECURITY_FIXTURE_CONFIG, ...args],
+    REPO_ROOT,
+  );
+}
+
+export const SECURITY_LINT_FIXTURES = SECURITY_FIXTURE_DIRECTORY;
+
+/** `node infra/ci/dependency-scan.mjs <args>` — the Issue 207 gate step. */
+export function runDependencyScan(args: readonly string[]): ToolResult {
+  return run(process.execPath, [DEPENDENCY_SCAN_GATE, ...args], REPO_ROOT);
 }
 
 /** `tsx infra/ci/generate-sbom.ts <args>` */

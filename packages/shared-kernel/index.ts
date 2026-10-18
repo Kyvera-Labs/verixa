@@ -1,3 +1,18 @@
+export type {
+  AttemptRecord,
+  BruteForceAttemptStore,
+} from "./application/ports/brute-force-attempt-store.js";
+export type { RateLimitDecision, RateLimiter } from "./application/ports/rate-limiter.js";
+export {
+  BruteForcePolicy,
+  DEFAULT_BRUTE_FORCE_THRESHOLDS,
+} from "./application/services/brute-force-policy.js";
+export type {
+  BruteForceDecision,
+  BruteForceDenialSource,
+  BruteForceScope,
+  BruteForceThresholds,
+} from "./application/services/brute-force-policy.js";
 export { ValidationErrorAggregator } from "./application/validation.js";
 export { asId, createId } from "./domain/branded-id.js";
 export type { Branded, Id } from "./domain/branded-id.js";

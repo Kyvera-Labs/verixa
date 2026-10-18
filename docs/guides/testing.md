@@ -47,6 +47,11 @@ directory (git-ignored, regenerated on every `test:coverage` run).
   tests, but they catch bugs unit tests structurally can't: wrong content
   type, a validation rule that only fires at the HTTP layer, a SQL query
   that's syntactically fine but wrong.
+- **Contract tests** (`apps/api/tests/contract/openapi-contract.test.ts`)
+  replay representative recorded/fixture requests against OpenAPI 3.1
+  schemas using tools such as `openapi-response-validator`. They enforce that
+  the published contract actually matches what the API produces, preventing
+  specification drift between design artifacts and runtime implementations.
 - **End-to-end tests** (Phase 21) exercise a fully running system — the kind
   of test that would still catch a bug even if every individual unit and
   integration test passed, because it's the only kind that includes _every_
@@ -59,7 +64,8 @@ The rule of thumb for where a _new_ test belongs: test the smallest thing
 that would actually catch the bug you're worried about. A validation rule
 belongs in a unit test next to the validator; "does this route return the
 right status code for a duplicate email" belongs in an integration test
-that goes through real HTTP; "can a user actually register end-to-end" is
+that goes through real HTTP; "does the response structure match the OpenAPI contract"
+belongs in a contract test; "can a user actually register end-to-end" is
 the rare case that justifies an e2e test.
 
 ## The HTTP integration test harness

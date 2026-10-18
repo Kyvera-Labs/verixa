@@ -1,4 +1,8 @@
+import { execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { createConnection } from "node:net";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { PrismaClient } from "@verixa/database";
 import { createId } from "@verixa/shared-kernel";
@@ -55,8 +59,40 @@ async function databaseAvailability(): Promise<boolean> {
   return available;
 }
 
-function createTestPrismaClient(): PrismaClient {
-  return new PrismaClient({ datasources: { db: { url: testDatabaseUrl() } } });
+/** A client for `url`, defaulting to the configured test database. */
+function createTestPrismaClient(url = testDatabaseUrl()): PrismaClient {
+  return new PrismaClient({ datasources: { db: { url } } });
+}
+
+/**
+ * A scratch database of this spec file's own, named so a leaked one is
+ * traceable back to the process that created it.
+ */
+function scratchDatabaseName(): string {
+  return `verixa_sessions_it_${process.pid}_${randomUUID().replaceAll("-", "").slice(0, 8)}`;
+}
+
+function urlForDatabase(name: string): string {
+  const url = new URL(testDatabaseUrl());
+  url.pathname = `/${name}`;
+  return url.toString();
+}
+
+/**
+ * Applies the real migration history to a freshly created database.
+ *
+ * `migrate deploy`, not `db push`: these tests are supposed to exercise the
+ * schema a migration actually produces, so a broken migration has to fail
+ * here rather than pass against a schema derived from `schema.prisma`.
+ */
+function applyMigrations(databaseUrl: string): void {
+  const databasePackageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../database");
+  execFileSync("pnpm", ["exec", "prisma", "migrate", "deploy"], {
+    cwd: databasePackageRoot,
+    env: { ...process.env, DATABASE_URL: databaseUrl },
+    stdio: "ignore",
+    shell: process.platform === "win32",
+  });
 }
 
 interface SeedRow {
@@ -83,12 +119,39 @@ const available = await databaseAvailability();
 
 describe.skipIf(!available)("PrismaSessionRepository (Issue 083)", () => {
   let prisma: PrismaClient;
+  let databaseName: string;
   const createdSessionIds: string[] = [];
   const createdUserIds: string[] = [];
 
-  beforeAll(() => {
-    prisma = createTestPrismaClient();
-  });
+  /**
+   * Runs against a database of this file's own, created here and dropped in
+   * `afterAll`, rather than the shared test database.
+   *
+   * `pnpm -r run test` runs packages concurrently, and several suites in this
+   * workspace deliberately start from an empty store: `packages/identity`'s
+   * Prisma contract suite and half of `tests/integration` call
+   * `user.deleteMany({})` in `afterEach`. `sessions.user_id` is
+   * `ON DELETE CASCADE`, so those wipes delete this file's fixture rows while
+   * it is still asserting on them — CI failed here with "expected [] to have
+   * a length of 1" on a test whose fixture had been verified moments before,
+   * and no amount of ordering inside this file can close that window.
+   *
+   * A per-file database removes the interference instead of narrowing it: no
+   * other suite can reach these rows, because no other suite is connected to
+   * this database.
+   */
+  beforeAll(async () => {
+    databaseName = scratchDatabaseName();
+    const admin = createTestPrismaClient();
+    try {
+      await admin.$executeRawUnsafe(`CREATE DATABASE "${databaseName}"`);
+    } finally {
+      await admin.$disconnect();
+    }
+
+    applyMigrations(urlForDatabase(databaseName));
+    prisma = createTestPrismaClient(urlForDatabase(databaseName));
+  }, 120_000);
 
   afterEach(async () => {
     if (createdSessionIds.length > 0) {
@@ -103,7 +166,17 @@ describe.skipIf(!available)("PrismaSessionRepository (Issue 083)", () => {
 
   afterAll(async () => {
     await prisma.$disconnect();
-  });
+
+    // `WITH (FORCE)` (Postgres 13+) disconnects anything still attached, so a
+    // dropped connection earlier in the run cannot leave the database behind
+    // for the next run to accumulate.
+    const admin = createTestPrismaClient();
+    try {
+      await admin.$executeRawUnsafe(`DROP DATABASE IF EXISTS "${databaseName}" WITH (FORCE)`);
+    } finally {
+      await admin.$disconnect();
+    }
+  }, 120_000);
 
   /** `sessions.user_id` carries a foreign key; a real Postgres enforces it even though the in-memory fake can't. */
   async function setupUser(): Promise<SessionUserId> {
@@ -124,18 +197,10 @@ describe.skipIf(!available)("PrismaSessionRepository (Issue 083)", () => {
   }
 
   /**
-   * Creates a user and its session rows in one transaction.
-   *
-   * `pnpm -r run test` runs every package concurrently against the same
-   * shared test database, and `packages/identity`'s own contract suite
-   * truncates the whole `users` table in its `afterEach` (its contracts
-   * assume they start from an empty store). Creating the user and its
-   * sessions as two separate statements left a window where that
-   * concurrent truncation could remove the user between them, failing the
-   * session inserts on `sessions_user_id_fkey`. Postgres takes a row lock
-   * on a referenced row for the lifetime of a transaction that inserts
-   * against it, which blocks a concurrent `DELETE` of that row until this
-   * transaction commits — closing the window instead of narrowing it.
+   * Creates a user and its session rows in one transaction, so the rows either
+   * both exist or neither does. Within this file's own database that is about
+   * a failed insert leaving a user behind, not about concurrency — see the
+   * comment on `beforeAll` for why the shared database is no longer involved.
    */
   async function setupUserWithSessions(
     buildRows: (userId: SessionUserId) => readonly SeedRow[],

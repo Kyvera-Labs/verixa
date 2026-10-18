@@ -27,5 +27,9 @@ export interface OrganizationMembershipRepository {
     organizationId: OrganizationId,
   ): Promise<OrganizationMembership | undefined>;
   findAllByOrganization(organizationId: OrganizationId): Promise<OrganizationMembership[]>;
+  findAllByUser(userId: UserId): Promise<OrganizationMembership[]>;
+  findAllByOrganizationIds(
+    organizationIds: readonly OrganizationId[],
+  ): Promise<OrganizationMembership[]>;
   save(membership: OrganizationMembership): Promise<void>;
 }

@@ -30,6 +30,16 @@ export class PrismaUserRepository implements UserRepository {
     return row === null ? undefined : UserMapper.toDomain(row);
   }
 
+  async findManyByIds(ids: readonly UserId[]): Promise<User[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+    const rows = await this.prisma.user.findMany({
+      where: { id: { in: [...ids] }, deletedAt: null },
+    });
+    return rows.map((row) => UserMapper.toDomain(row));
+  }
+
   async findByIdIncludingDeleted(id: UserId): Promise<User | undefined> {
     const row = await this.prisma.user.findUnique({ where: { id } });
     return row === null ? undefined : UserMapper.toDomain(row);

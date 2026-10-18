@@ -9,10 +9,20 @@ export class InMemoryOrganizationRepository implements OrganizationRepository {
     return Promise.resolve(this.organizationsById.get(id));
   }
 
+  findManyByIds(ids: readonly OrganizationId[]): Promise<Organization[]> {
+    const idSet = new Set(ids);
+    const orgs = [...this.organizationsById.values()].filter((org) => idSet.has(org.id));
+    return Promise.resolve(orgs);
+  }
+
   findBySlug(slug: string): Promise<Organization | undefined> {
     return Promise.resolve(
       [...this.organizationsById.values()].find((organization) => organization.slug === slug),
     );
+  }
+
+  findAll(): Promise<Organization[]> {
+    return Promise.resolve([...this.organizationsById.values()]);
   }
 
   save(organization: Organization): Promise<void> {

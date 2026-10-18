@@ -1,0 +1,13 @@
+{
+  "name": "verixa-dependency-scan-fixture",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Intentionally vulnerable production dependencies, used only to prove the issue 207 gate fires. Never installed.",
+  "dependencies": {
+    "minimist": "1.2.0",
+    "lodash": "4.17.15"
+  },
+  "devDependencies": {
+    "left-pad": "1.3.0"
+  }
+}

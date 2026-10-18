@@ -49,6 +49,7 @@ import type { Email } from "../../domain/value-objects/email.js";
  */
 export interface UserRepository {
   findById(id: UserId): Promise<User | undefined>;
+  findManyByIds(ids: readonly UserId[]): Promise<User[]>;
   findByEmail(email: Email): Promise<User | undefined>;
   findByIdIncludingDeleted(id: UserId): Promise<User | undefined>;
   save(user: User): Promise<void>;

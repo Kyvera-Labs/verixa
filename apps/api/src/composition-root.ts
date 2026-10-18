@@ -3,11 +3,14 @@ import { randomUUID } from "node:crypto";
 import {
   AnchorAuditLog,
   BatchedAuditWriter,
+  ExportAuditEvents,
   PrismaAnchorRecordRepository,
   PrismaAuditLogRepository,
+  QueryAuditEvents,
   RecordAuditEvent,
   VerifyAuditChain,
   type AuditDelegate,
+  type AuditEventReader,
   type AuditTransaction,
 } from "@verixa/audit";
 import { PrismaAuthorizationRepository, type AuthorizationRepository } from "@verixa/authorization";
@@ -15,6 +18,7 @@ import { loadConfig } from "@verixa/config";
 import {
   Argon2PasswordHasher,
   AuthenticateWithPassword,
+  DEFAULT_LOCKOUT_POLICY,
   ConfirmEmailVerification,
   ConfirmPasswordReset,
   NoSessionsRevoker,
@@ -27,8 +31,16 @@ import {
 import { PrismaClient } from "@verixa/database";
 import {
   CreateOrganization,
+  GetOrganization,
+  GetOrganizationUsers,
+  GetUser,
+  GetUserOrganizations,
+  GetUsersByOrganizationIds,
   InviteUserToOrganization,
+  ListOrganizations,
   PrismaInvitationRepository,
+  PrismaOrganizationMembershipRepository,
+  PrismaOrganizationRepository,
   PrismaUnitOfWork,
   PrismaUserRepository,
   ReactivateUser,
@@ -203,6 +215,12 @@ export interface IdentityUseCases {
   readonly reactivateUser: ReactivateUser;
   readonly createOrganization: CreateOrganization;
   readonly inviteUserToOrganization: InviteUserToOrganization;
+  readonly getUser: GetUser;
+  readonly getOrganization: GetOrganization;
+  readonly getOrganizationUsers: GetOrganizationUsers;
+  readonly getUserOrganizations: GetUserOrganizations;
+  readonly getUsersByOrganizationIds: GetUsersByOrganizationIds;
+  readonly listOrganizations: ListOrganizations;
 }
 
 /** Use cases spanning identity and credentials. */
@@ -235,6 +253,8 @@ export interface AuditUseCases {
    * when nothing has ever been committed anywhere.
    */
   readonly anchor: AnchorAuditLog | undefined;
+  readonly queryEvents?: QueryAuditEvents | undefined;
+  readonly exportEvents?: ExportAuditEvents | undefined;
 }
 
 /** Multi-factor authentication use cases. */
@@ -274,6 +294,9 @@ export interface ContainerOverrides {
    * problem back where it started.
    */
   readonly signer?: TransactionSigner | undefined;
+  readonly auditEventReader?: AuditEventReader | undefined;
+  readonly queryAuditEvents?: QueryAuditEvents | undefined;
+  readonly exportAuditEvents?: ExportAuditEvents | undefined;
 }
 
 /**
@@ -291,6 +314,8 @@ export function buildContainer(
     prismaClient ?? new PrismaClient({ datasources: { db: { url: pooledDatabaseUrl() } } });
 
   const users = new PrismaUserRepository(prisma);
+  const organizations = new PrismaOrganizationRepository(prisma);
+  const memberships = new PrismaOrganizationMembershipRepository(prisma);
   const authorization = new PrismaAuthorizationRepository(prisma);
   const invitations = new PrismaInvitationRepository(prisma);
   const unitOfWork = new PrismaUnitOfWork(prisma);
@@ -430,6 +455,12 @@ export function buildContainer(
       // organization and a membership, and those must commit together.
       createOrganization: new CreateOrganization(unitOfWork),
       inviteUserToOrganization: new InviteUserToOrganization(invitations),
+      getUser: new GetUser(users),
+      getOrganization: new GetOrganization(organizations),
+      getOrganizationUsers: new GetOrganizationUsers(memberships, users),
+      getUserOrganizations: new GetUserOrganizations(memberships, organizations),
+      getUsersByOrganizationIds: new GetUsersByOrganizationIds(memberships, users),
+      listOrganizations: new ListOrganizations(organizations),
     },
     credentials: {
       registerUserWithPassword: new RegisterUserWithPassword(
@@ -475,6 +506,16 @@ export function buildContainer(
         hashAnchor === undefined
           ? undefined
           : new AnchorAuditLog(auditLog, anchorRecords, hashAnchor),
+      queryEvents:
+        overrides.queryAuditEvents ??
+        (overrides.auditEventReader
+          ? new QueryAuditEvents(overrides.auditEventReader, recordAuditEvent)
+          : undefined),
+      exportEvents:
+        overrides.exportAuditEvents ??
+        (overrides.auditEventReader
+          ? new ExportAuditEvents(overrides.auditEventReader, recordAuditEvent)
+          : undefined),
     },
     authorization,
     mfa: {
