@@ -109,3 +109,13 @@ as YAML but violates the OpenAPI schema must not merge.
 The contract does not try to describe internal persistence details. That
 boundary keeps clients stable when adapters change and makes compatibility
 review a question about requests and responses, not the database schema.
+
+## API Versioning and Deprecation Policy
+
+Verixa adopts URI-path versioning (`/v1/...`) as its primary strategy (see `docs/adr/0012-api-versioning.md`).
+
+1. **Prefix Enforcement**: All functional REST API endpoints reside under a version prefix (e.g. `/v1/auth`, `/v1/audit`). Unversioned requests are rejected immediately with a 400 `VALIDATION_ERROR` by `apps/api/src/plugins/versioning.ts`. Non-API operational routes (`/health`, `/docs`) are explicitly excluded.
+2. **Deprecation & Sunset Headers**:
+   - Routes flagged for deprecation in route options (`config: { deprecated: true, sunset: ... }`) automatically emit `Deprecation: true` and `Sunset: <http-date>` headers per RFC 8594.
+   - Deprecated endpoints carry a minimum notice period of 6 months before being sunset or decommissioned.
+
