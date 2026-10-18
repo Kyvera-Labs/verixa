@@ -1,5 +1,10 @@
 import { Email, type User, type UserStatus } from "@verixa/identity";
-import { AccountLockedError, AuthenticationError, Result } from "@verixa/shared-kernel";
+import {
+  AccountLockedError,
+  type BruteForcePolicy,
+  AuthenticationError,
+  Result,
+} from "@verixa/shared-kernel";
 
 import type { Credential } from "../../domain/entities/credential.js";
 import {
@@ -134,11 +139,38 @@ export class AuthenticateWithPassword {
     private readonly unitOfWork: CredentialsUnitOfWork,
     private readonly passwordHasher: PasswordHasher,
     private readonly lockoutPolicy: LockoutPolicy = DEFAULT_LOCKOUT_POLICY,
+    /**
+     * Optional, and that is the point: a deployment without a shared store
+     * still has the per-credential lockout, and every existing caller
+     * constructs this with three arguments. When it is supplied it covers the
+     * failures the row-level counter cannot see.
+     */
+    private readonly bruteForce?: BruteForcePolicy,
   ) {}
 
   async execute(
     command: AuthenticateWithPasswordCommand,
   ): Promise<Result<AuthenticateWithPasswordResult, AuthenticateWithPasswordError>> {
+    // Before the email is parsed or any row is read. The attempts this gate
+    // exists to throttle are the ones that never reach a credential, so a
+    // check after the lookup would spend exactly the read the throttle is
+    // meant to save.
+    //
+    // A refusal is reported as an ordinary failed login, and still burns the
+    // decoy hash. The response is therefore indistinguishable from any other
+    // failure — which is what keeps this gate from becoming the enumeration
+    // oracle the rest of this use case works to remove. It costs the argon2
+    // verification on throttled requests; refusing faster would leak "you are
+    // now being rate limited", which answers "does this address exist" one
+    // step removed.
+    if (this.bruteForce !== undefined) {
+      const gate = await this.bruteForce.check("login", command.email);
+      if (!gate.allowed) {
+        await this.burnTime(command.password);
+        return Result.err(new AuthenticationError());
+      }
+    }
+
     // A malformed address is not a validation error here, unlike everywhere
     // else in the codebase. `Email.create` rejecting "not-an-email" is a
     // perfectly good 400 during registration; on a login endpoint it tells an
@@ -161,6 +193,9 @@ export class AuthenticateWithPassword {
       // wearing the clothes of a method name.
       const user = await repositories.users.findByEmail(emailResult.value);
       if (user === undefined) {
+        // Counted here and only here: there is no row to count against, so
+        // without this the per-identifier budget never moves.
+        await this.bruteForce?.recordFailure("login", command.email);
         await this.burnTime(command.password);
         return { kind: "failed" };
       }
@@ -170,6 +205,11 @@ export class AuthenticateWithPassword {
         // An SSO-only or passkey-only account. Legitimately has no password,
         // and must not reveal that by failing faster or differently than a
         // wrong password would.
+        //
+        // Also counted: like a missing user, nothing advances a `Credential`,
+        // and a probe list of addresses that exist-but-have-no-password is the
+        // same enumeration.
+        await this.bruteForce?.recordFailure("login", command.email);
         await this.burnTime(command.password);
         return { kind: "failed" };
       }
@@ -252,6 +292,12 @@ export class AuthenticateWithPassword {
     if (outcome.kind === "failed") {
       return Result.err(new AuthenticationError());
     }
+    // The owner proved who they are, so the run is over. Cleared outside the
+    // transaction because a failed write here must not fail a login that
+    // already succeeded — the worst case is one stale counter until the next
+    // successful attempt.
+    await this.bruteForce?.recordSuccess("login", command.email);
+
     const verified = { user: outcome.user, credential: outcome.credential };
 
     // Deliberately outside the transaction above.

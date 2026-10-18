@@ -1,5 +1,5 @@
 import type { User } from "@verixa/identity";
-import { Result, ValidationError } from "@verixa/shared-kernel";
+import { type BruteForcePolicy, Result, ValidationError } from "@verixa/shared-kernel";
 
 import { Credential } from "../../domain/entities/credential.js";
 import { PasswordResetToken } from "../../domain/entities/password-reset-token.js";
@@ -56,6 +56,12 @@ export class ConfirmPasswordReset {
     private readonly passwordHasher: PasswordHasher,
     private readonly sessionRevoker: SessionRevoker,
     private readonly passwordPolicy?: PasswordPolicy,
+    /**
+     * Optional, for the same reason as on `AuthenticateWithPassword`: the
+     * existing callers stay valid, and a deployment without a shared store
+     * still gets the single-use and expiry rules from the domain.
+     */
+    private readonly bruteForce?: BruteForcePolicy,
   ) {}
 
   async execute(
@@ -72,6 +78,25 @@ export class ConfirmPasswordReset {
 
     const now = new Date();
     const tokenHash = PasswordResetToken.hashToken(command.token);
+
+    // Keyed by the token's digest rather than the token: the digest is what the
+    // lookup uses, it is safe to hold in memory or log, and repeated guesses
+    // against one link share a budget.
+    //
+    // Guesses spread across freshly issued links do not share it. That case
+    // belongs to the throttle on issuance and to the request-rate limiter
+    // (Phase 15), not to this gate, and saying otherwise would overstate what
+    // is wired here.
+    if (this.bruteForce !== undefined) {
+      const gate = await this.bruteForce.check("password-reset", tokenHash);
+      if (!gate.allowed) {
+        // The same refusal as a bad token, for the same reason: "too many
+        // attempts" would confirm that a real link exists.
+        return Result.err(
+          new ValidationError("This reset link is not valid.", { token: ["invalid"] }),
+        );
+      }
+    }
 
     // Hashed outside the transaction: it is the slowest thing here and needs
     // no database. Same reasoning as `RegisterUserWithPassword`.
@@ -123,10 +148,17 @@ export class ConfirmPasswordReset {
     });
 
     if (outcome.kind === "invalid") {
+      // Every invalid outcome — unknown, expired, already used, or a token
+      // whose user is gone — costs the same against this budget, which is the
+      // point: they are indistinguishable to the caller and they are all
+      // guesses.
+      await this.bruteForce?.recordFailure("password-reset", tokenHash);
       return Result.err(
         new ValidationError("This reset link is not valid.", { token: ["invalid"] }),
       );
     }
+
+    await this.bruteForce?.recordSuccess("password-reset", tokenHash);
 
     // Outside the transaction because it is an external system — a session
     // store, not this database. Inside, a slow or unavailable session service

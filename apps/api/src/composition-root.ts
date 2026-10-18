@@ -10,6 +10,7 @@ import { loadConfig } from "@verixa/config";
 import {
   Argon2PasswordHasher,
   AuthenticateWithPassword,
+  DEFAULT_LOCKOUT_POLICY,
   ConfirmEmailVerification,
   ConfirmPasswordReset,
   NoSessionsRevoker,
@@ -31,6 +32,7 @@ import {
   SuspendUser,
   UpdateUserProfile,
 } from "@verixa/identity";
+import { BruteForcePolicy, InMemoryBruteForceAttemptStore } from "@verixa/shared-kernel";
 import { StellarHashAnchor } from "@verixa/stellar-anchor";
 
 /**
@@ -176,6 +178,18 @@ export function buildContainer(prismaClient?: PrismaClient): Container {
       ? undefined
       : new StellarHashAnchor({ secretKey: anchorSecretKey, network: stellarNetwork });
 
+  // One shared attempt budget for the credential endpoints (Issue 209).
+  //
+  // The store is process-local and volatile: a restart clears every counter and
+  // each API replica keeps its own. That is stated rather than glossed over
+  // because it is exactly why the per-credential lockout in the aggregate stays
+  // load-bearing. This gate covers the failures that have no row to count — an
+  // unknown address, an account with no password credential, a guessed reset
+  // token — and nothing more.
+  //
+  // Phase 15 replaces the store behind the same port; no use case changes.
+  const bruteForceAttempts = new BruteForcePolicy(new InMemoryBruteForceAttemptStore());
+
   // PrismaOrganizationRepository and PrismaOrganizationMembershipRepository
   // aren't constructed here: the only use case that touches them
   // (CreateOrganization) reaches them through the unit of work, since its two
@@ -201,7 +215,12 @@ export function buildContainer(prismaClient?: PrismaClient): Container {
       // avoiding a second allocation, the timing decoy that hides whether an
       // account exists is cached per hasher, so a second instance would build
       // its own on the first failed login.
-      authenticateWithPassword: new AuthenticateWithPassword(credentialsUnitOfWork, passwordHasher),
+      authenticateWithPassword: new AuthenticateWithPassword(
+        credentialsUnitOfWork,
+        passwordHasher,
+        DEFAULT_LOCKOUT_POLICY,
+        bruteForceAttempts,
+      ),
       requestEmailVerification: new RequestEmailVerification(
         credentialsUnitOfWork,
         credentialNotifier,
@@ -212,6 +231,11 @@ export function buildContainer(prismaClient?: PrismaClient): Container {
         credentialsUnitOfWork,
         passwordHasher,
         sessionRevoker,
+        // Password policy left at the domain default rather than mirrored here;
+        // the argument exists so a configured policy can be passed without
+        // reordering the collaborators.
+        undefined,
+        bruteForceAttempts,
       ),
     },
     audit: {
