@@ -1,0 +1,36 @@
+components:
+  parameters:
+    CursorParam:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque base64url keyset cursor from the previous page's nextCursor.
+      schema:
+        type: string
+    LimitParam:
+      name: limit
+      in: query
+      required: false
+      description: Maximum number of items to return (1 to 100, default 50).
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 50
+  schemas:
+    PaginationEnvelope:
+      type: object
+      required: [items, nextCursor, hasMore]
+      properties:
+        items:
+          type: array
+          description: List of items for the requested page.
+          items:
+            type: object
+        nextCursor:
+          type: string
+          nullable: true
+          description: Opaque keyset cursor to retrieve the next page, or null if no further pages exist.
+        hasMore:
+          type: boolean
+          description: Indicates if more items are available past this page.

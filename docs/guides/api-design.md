@@ -119,3 +119,23 @@ Verixa adopts URI-path versioning (`/v1/...`) as its primary strategy (see `docs
    - Routes flagged for deprecation in route options (`config: { deprecated: true, sunset: ... }`) automatically emit `Deprecation: true` and `Sunset: <http-date>` headers per RFC 8594.
    - Deprecated endpoints carry a minimum notice period of 6 months before being sunset or decommissioned.
 
+## Cursor-based Pagination Convention
+
+Verixa standardizes on keyset cursor-based pagination for list and collection endpoints:
+
+1. **Query Parameters**:
+   - `cursor` (string, optional): Base64url-encoded opaque keyset pointer (`{ id, createdAt }`).
+   - `limit` (integer, optional): Maximum items to return, clamped between 1 and 100 with a default of 50.
+2. **Response Envelope**:
+   All paginated responses return a consistent envelope:
+   ```json
+   {
+     "items": [...],
+     "nextCursor": "eyJpZCI6IjEyMyIsImNyZWF0ZWRBdCI6IjIwMjYtMDEtMDEifQ",
+     "hasMore": true
+   }
+   ```
+   When `hasMore` is false (last page), `nextCursor` is `null`.
+3. **OpenAPI Reusability**: Reusable cursor parameter and envelope definitions are located in `apps/api/openapi/components/pagination.yaml`.
+
+
