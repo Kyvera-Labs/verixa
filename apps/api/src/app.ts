@@ -2,7 +2,10 @@ import { createLogger, type Logger } from "@verixa/shared-kernel";
 import Fastify from "fastify";
 
 import type { Container } from "./composition-root.js";
+import { registerSecurityHeaders } from "./plugins/security-headers.js";
 import { registerAuthRoutes } from "./routes/auth.js";
+import { registerCspReportRoute } from "./routes/csp-report.js";
+import { registerSecurityTxtRoute } from "./routes/well-known/security-txt.js";
 
 export interface BuildAppOptions {
   readonly logger?: Logger;
@@ -53,6 +56,12 @@ export function buildApp(options: BuildAppOptions = {}) {
     },
   });
 
+  // First, so its hooks wrap every route below — including the ones added
+  // later. Headers applied after a route is registered would still apply, but
+  // the ordering makes "no response leaves this process without them" true by
+  // construction rather than by remembering.
+  registerSecurityHeaders(app);
+
   app.get("/health", () => {
     // Deliberately does not touch the database. This answers "is this process
     // alive and serving", which is what a liveness probe needs; a probe that
@@ -61,6 +70,12 @@ export function buildApp(options: BuildAppOptions = {}) {
     // *does* check dependencies is a separate concern (Phase 18).
     return { status: "ok" };
   });
+
+  // Registered outside the container check for the same reason `/health` is:
+  // the disclosure channel describes the software, not a tenant's data, and a
+  // researcher's scanner should find it on a process that has no database.
+  registerSecurityTxtRoute(app);
+  registerCspReportRoute(app);
 
   if (options.container !== undefined) {
     registerAuthRoutes(app, options.container);
