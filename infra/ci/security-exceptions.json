@@ -1,3 +1,11 @@
 {
-  "exceptions": []
+  "exceptions": [
+    {
+      "advisory": "GHSA-mrhx-c7xc-m3w5",
+      "package": "zod",
+      "justification": "Memory exhaustion in zod v4's $ZodArray. The advisory range (<4.6.6) is wider than the affected code: this repository imports only the root \"zod\" entry (3.25.76, v3 API) and nothing from \"zod/v4\". Not reachable from untrusted input: the only z.array in the codebase is the signing-key set in packages/config, parsed from operator-supplied environment at start-up; the audit metadata schemas contain no array types; request bodies are validated by Fastify against JSON Schema generated from the zod definitions, not by zod at runtime, under Fastify's default 1 MiB body limit. Revisit when migrating to zod 4, which also requires replacing zod-to-json-schema.",
+      "reviewedOn": "2026-10-25",
+      "expiresOn": "2026-11-30"
+    }
+  ]
 }
