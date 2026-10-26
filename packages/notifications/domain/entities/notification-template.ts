@@ -20,7 +20,15 @@ const CHANNELS: readonly NotificationChannel[] = ["email", "sms", "webhook"];
  * silently become the same template, hiding a typo the registry should
  * surface at startup.
  */
-const KEY_PATTERN = /^[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
+const KEY_SEGMENT = /^[a-z0-9]+$/;
+
+// Split-and-test rather than one pattern with a nested quantifier
+// (`^[a-z0-9]+(?:[.-][a-z0-9]+)*$`), which the security lint rule rejects.
+// Same rule: an empty segment (a leading, trailing or doubled separator)
+// fails, so `a..b`, `.a` and `a-` are all invalid.
+function isValidKey(key: string): boolean {
+  return key.split(/[.-]/).every((segment) => KEY_SEGMENT.test(segment));
+}
 
 /**
  * What a developer writes to define a template. The union makes the
@@ -93,7 +101,7 @@ export class NotificationTemplate {
 
     if (typeof key !== "string" || key.length === 0) {
       fieldErrors["key"] = ["required"];
-    } else if (!KEY_PATTERN.test(key)) {
+    } else if (!isValidKey(key)) {
       fieldErrors["key"] = ["invalid_format"];
     }
 
