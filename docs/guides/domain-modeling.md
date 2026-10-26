@@ -622,3 +622,76 @@ When managing human review queues for identity verification requests, preventing
 We rejected the alternative of permanent locking (assigning a case to a reviewer until they explicitly release or complete it) because human workflows are prone to abrupt session terminations — a reviewer's browser crashes, their VPN drops, or they close their laptop mid-shift. Under a permanent lock model, a case claimed by a disconnected reviewer becomes permanently stuck, requiring manual intervention by an administrator to unblock.
 
 An optimistic lease with an explicit `claimExpiresAt` timestamp solves this by automatically releasing stale claims back to the queue when the lease expires. If a reviewer is actively working on a case, their session can periodically extend the claim; if they abandon the case or lose connectivity, the claim naturally lapses, making the verification request available for other reviewers without administrative overhead. This balances strict contention control (preventing double-work while active) with resilience against worker failure.
+
+## Notification templates and the template registry (Issue 262)
+
+A notification has two independent halves: the _trigger_ (a domain event
+such as a password-reset request decides that someone should be told
+something) and the _content_ (what the message actually says). Use cases
+only know a template `key`, such as `credentials.password-reset.email`.
+[`NotificationTemplate`](../../packages/notifications/domain/entities/notification-template.ts)
+holds everything else: the channel, the subject and body templates, and
+the payload fields the template needs. That way, rewording an email is a
+change to a template definition and never a change to `RequestPasswordReset`.
+
+[`TemplateRegistry`](../../packages/notifications/domain/services/template-registry.ts)
+maps keys to templates. It is built once, from the full list of
+definitions, and either the whole set is valid or `create` returns a
+`ValidationError` listing every problem. The errors are keyed by template
+and formatted like `subjectTemplate:required` or `duplicate_key`.
+
+### Why a registry in code, not a template table
+
+The content of these templates ships with the code. A developer writes the
+password-reset email in the same pull request as the flow that sends it,
+and it is reviewed and versioned alongside that flow. A database-backed
+template store would cost a migration, a repository, a cache and an
+admin surface. In return it would offer runtime editing, and nothing here
+needs that. It would also move the "is this template complete?" check from
+startup to the moment the first email fails to send. A store becomes the
+right call once end users or operators _author_ templates. Examples are
+per-organization branding and white-label copy. The `key`-only coupling
+means that migration would replace the registry without touching any use
+case.
+
+### Why the registry cannot change after startup
+
+There is no `register()` method. A registry that grows at runtime can be
+half-populated when the first notification goes out. "Is the
+password-reset template registered yet?" then becomes a question about
+module load order. Building it in one call means a missing or broken
+template stops the process at boot, not in production at 3 a.m.
+
+### Duplicates and malformed keys are errors, not overrides
+
+Two definitions with the same key are rejected even when they are
+identical. The alternative, "last one wins", lets a copy-pasted template
+silently replace the real one. Keys must also be lowercase segments
+separated by dots or dashes. A key like `"Password-Reset "` is rejected
+rather than normalized, because normalizing would merge two keys a
+developer believed were different. The registry then could not report
+that they are duplicates.
+
+The registry is keyed by `key` alone, not by `(key, channel)`. Email and SMS
+versions of the same message differ in content anyway: SMS has no subject
+and a 160-character budget. So they are separate templates with separate
+keys (`…password-reset.email`, `…password-reset.sms`). A composite key
+would make every lookup name a channel the template already knows.
+
+### What "missing required fields" does and does not check
+
+The registry rejects definitions that are incomplete for their channel:
+
+- a missing key or body;
+- an email template without a subject;
+- an SMS or webhook template _with_ a subject, which would otherwise be
+  dropped without warning at send time;
+- a blank or duplicate entry in `requiredPayloadFields`.
+
+It does **not** parse `{{placeholders}}` out of the body to check that each
+one is listed in `requiredPayloadFields`. That check needs a placeholder
+syntax, and the templating engine (Issue 265) chooses that syntax. If
+this issue picked one, it would be a guess that Issue 265 then has to
+honour or undo. Once the renderer exists, the placeholder check belongs at
+the point where the registry is assembled. Checking a payload against
+`requiredPayloadFields` at send time is Issue 264's job.
