@@ -356,11 +356,24 @@ jobs:
           # High and critical only. A build that fails on every low-severity
           # advisory in a transitive dev dependency gets bypassed habitually,
           # and a bypassed gate protects nothing.
-          if ! pnpm audit --audit-level high; then
+          #
+          # The gate is infra/ci/dependency-scan.mjs, the same one the nightly
+          # scan uses, not a bare `pnpm audit --audit-level high`: that cannot
+          # honour a reviewed, dated exception, so one advisory with no
+          # non-breaking fix blocked every pull request that touched the
+          # lockfile. It audits every dependency here (dev included), where the
+          # nightly scan audits production only. The exceptions file is read
+          # from the pull request, so a change to it is a change to this gate:
+          # CODEOWNERS requires a maintainer to review anything under infra/ci/.
+          pnpm audit --json > dependency-audit.json || true
+          if ! node infra/ci/dependency-scan.mjs \
+            --audit dependency-audit.json \
+            --exceptions infra/ci/security-exceptions.json; then
             echo "::error::A high or critical severity advisory affects this dependency change."
             echo "Options, roughly in order of preference: upgrade the dependency,"
-            echo "remove it, or add a pinned override in pnpm-workspace.yaml with a"
-            echo "comment explaining the decision — there are existing examples there."
+            echo "remove it, add a pinned override in pnpm-workspace.yaml with a"
+            echo "comment explaining the decision, or — only if the vulnerable path"
+            echo "is unreachable — a dated entry in infra/ci/security-exceptions.json."
             exit 1
           fi
 
