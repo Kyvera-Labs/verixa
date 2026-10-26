@@ -70,7 +70,14 @@ overrides:
   # vite ^5 || ^6, and pnpm was resolving the ^5 branch, which this advisory
   # also covers. Constrained to the 6.x line, not a bare ">=": an unbounded
   # override resolved this to 8.x, same reasoning as nanoid above.
-  vite: "^6.4.3"
+  # Raised to ^6.4.4 for GHSA-587h-7wmj-h5pm (launch-editor existence check
+  # bypass on Windows, fixed in 6.4.4); dev server only.
+  vite: "^6.4.4"
+  # undici 8.11.2: DoS via unhandled error on excessive content-encodings
+  # (GHSA-xjj6-f33q-929c), fixed in 8.12.2. Transitive via
+  # @testcontainers/postgresql -> testcontainers, so test tooling only and an
+  # override is the only lever. Constrained to the 8.x line it is already on.
+  undici: "^8.12.2"
   # tinypool <2.1.2: prototype-pollution gadget in worker/run() options
   # leading to RCE (two advisories, both closed at 2.1.2). Transitive via
   # vitest's own worker-pool dependency.
