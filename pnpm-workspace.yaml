@@ -36,7 +36,15 @@ allowBuilds:
 # effective here since nothing in this repo depends on fast-uri's API
 # directly across a major version boundary.
 overrides:
-  fast-uri: ">=4.1.2"
+  # Raised from >=4.1.2 to the first release that also fixes the percent-encoded
+  # scheme, path-equivalence, WHATWG host and first-segment-colon advisories
+  # (GHSA-w74x-v6f9-j3xg and three siblings).
+  fast-uri: ">=4.2.3"
+  # follow-redirects 1.16.0: array-form headers bypass cross-origin credential
+  # stripping (GHSA-q3jh-wrc6-jgq8) and a sensitiveHeaders regex escaping flaw
+  # (GHSA-8r9p-f939-6h3c); both fixed in 1.16.1. Transitive via
+  # @stellar/stellar-sdk -> axios, so an override is the only lever.
+  follow-redirects: ">=1.16.1"
   # nanoid <3.3.18: a custom generator with size 0 loops forever (GHSA,
   # high). Transitive via the vitest/postcss chain, so an override is the
   # only lever.
