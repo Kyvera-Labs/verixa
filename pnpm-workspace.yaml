@@ -36,7 +36,15 @@ allowBuilds:
 # effective here since nothing in this repo depends on fast-uri's API
 # directly across a major version boundary.
 overrides:
-  fast-uri: ">=4.1.2"
+  # Raised from >=4.1.2 to the first release that also fixes the percent-encoded
+  # scheme, path-equivalence, WHATWG host and first-segment-colon advisories
+  # (GHSA-w74x-v6f9-j3xg and three siblings).
+  fast-uri: ">=4.2.3"
+  # follow-redirects 1.16.0: array-form headers bypass cross-origin credential
+  # stripping (GHSA-q3jh-wrc6-jgq8) and a sensitiveHeaders regex escaping flaw
+  # (GHSA-8r9p-f939-6h3c); both fixed in 1.16.1. Transitive via
+  # @stellar/stellar-sdk -> axios, so an override is the only lever.
+  follow-redirects: ">=1.16.1"
   # nanoid <3.3.18: a custom generator with size 0 loops forever (GHSA,
   # high). Transitive via the vitest/postcss chain, so an override is the
   # only lever.
@@ -62,7 +70,14 @@ overrides:
   # vite ^5 || ^6, and pnpm was resolving the ^5 branch, which this advisory
   # also covers. Constrained to the 6.x line, not a bare ">=": an unbounded
   # override resolved this to 8.x, same reasoning as nanoid above.
-  vite: "^6.4.3"
+  # Raised to ^6.4.4 for GHSA-587h-7wmj-h5pm (launch-editor existence check
+  # bypass on Windows, fixed in 6.4.4); dev server only.
+  vite: "^6.4.4"
+  # undici 8.11.2: DoS via unhandled error on excessive content-encodings
+  # (GHSA-xjj6-f33q-929c), fixed in 8.12.2. Transitive via
+  # @testcontainers/postgresql -> testcontainers, so test tooling only and an
+  # override is the only lever. Constrained to the 8.x line it is already on.
+  undici: "^8.12.2"
   # tinypool <2.1.2: prototype-pollution gadget in worker/run() options
   # leading to RCE (two advisories, both closed at 2.1.2). Transitive via
   # vitest's own worker-pool dependency.
