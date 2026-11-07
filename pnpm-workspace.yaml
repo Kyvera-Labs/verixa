@@ -42,9 +42,11 @@ overrides:
   fast-uri: ">=4.2.3"
   # follow-redirects 1.16.0: array-form headers bypass cross-origin credential
   # stripping (GHSA-q3jh-wrc6-jgq8) and a sensitiveHeaders regex escaping flaw
-  # (GHSA-8r9p-f939-6h3c); both fixed in 1.16.1. Transitive via
+  # (GHSA-8r9p-f939-6h3c); both fixed in 1.16.1. 1.16.1 itself then discards
+  # cross-realm sensitiveHeaders arrays and lets custom credentials follow
+  # redirects (GHSA-mrwp-f3q8-3g9p), fixed in 1.16.2. Transitive via
   # @stellar/stellar-sdk -> axios, so an override is the only lever.
-  follow-redirects: ">=1.16.1"
+  follow-redirects: ">=1.16.2"
   # nanoid <3.3.18: a custom generator with size 0 loops forever (GHSA,
   # high). Transitive via the vitest/postcss chain, so an override is the
   # only lever.
