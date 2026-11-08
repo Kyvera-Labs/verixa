@@ -1,5 +1,12 @@
 import { Email, type User } from "@verixa/identity";
-import { NoopRateLimiter, Result, asId } from "@verixa/shared-kernel";
+import {
+  NoopRateLimiter,
+  Result,
+  asId,
+  type RateLimiter,
+  type RateLimitKey,
+  type RateLimitResult,
+} from "@verixa/shared-kernel";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { Argon2PasswordHasher } from "../../infrastructure/argon2-password-hasher.js";
@@ -375,6 +382,127 @@ describe("ChangePassword (Issue 071)", () => {
       expect(Result.isErr(result)).toBe(true);
       if (!Result.isErr(result)) return;
       expect(result.error.fieldErrors["currentPassword"]).toContain("incorrect");
+    });
+  });
+
+  describe("rate limiting (Issue #321)", () => {
+    class MockRecordingRateLimiter implements RateLimiter {
+      checkCalls: RateLimitKey[] = [];
+      failureCalls: RateLimitKey[] = [];
+      resetCalls: RateLimitKey[] = [];
+      allowed = true;
+      maxFailures = 3;
+
+      // eslint-disable-next-line @typescript-eslint/require-await
+      async check(key: RateLimitKey): Promise<RateLimitResult> {
+        this.checkCalls.push(key);
+        const isAllowed = this.allowed && this.failureCalls.length < this.maxFailures;
+        return {
+          allowed: isAllowed,
+          remaining: Math.max(0, this.maxFailures - this.failureCalls.length),
+          resetAt: Date.now() + 60_000,
+          limit: this.maxFailures,
+        };
+      }
+
+      // eslint-disable-next-line @typescript-eslint/require-await
+      async recordFailure(key: RateLimitKey): Promise<void> {
+        this.failureCalls.push(key);
+      }
+
+      // eslint-disable-next-line @typescript-eslint/require-await
+      async reset(key: RateLimitKey): Promise<void> {
+        this.resetCalls.push(key);
+      }
+    }
+
+    it("checks rate limiter before verifying current password", async () => {
+      const mockLimiter = new MockRecordingRateLimiter();
+      const cp = new ChangePassword(unitOfWork, hasher, mockLimiter);
+
+      await cp.execute({
+        userId: user.id,
+        currentPassword: PASSWORD,
+        newPassword: NEW_PASSWORD,
+      });
+
+      expect(mockLimiter.checkCalls.length).toBe(1);
+      expect(mockLimiter.checkCalls[0]?.action).toBe("password-reset");
+      expect(mockLimiter.checkCalls[0]?.identifier).toBe(user.id);
+    });
+
+    it("throws when rate limit check fails", async () => {
+      const mockLimiter = new MockRecordingRateLimiter();
+      mockLimiter.allowed = false;
+      const cp = new ChangePassword(unitOfWork, hasher, mockLimiter);
+
+      await expect(
+        cp.execute({
+          userId: user.id,
+          currentPassword: PASSWORD,
+          newPassword: NEW_PASSWORD,
+        }),
+      ).rejects.toThrow(/Rate limit exceeded/);
+
+      expect(mockLimiter.checkCalls.length).toBe(1);
+    });
+
+    it("records failure on wrong current password", async () => {
+      const mockLimiter = new MockRecordingRateLimiter();
+      const cp = new ChangePassword(unitOfWork, hasher, mockLimiter);
+
+      const result = await cp.execute({
+        userId: user.id,
+        currentPassword: "wrong password",
+        newPassword: NEW_PASSWORD,
+      });
+
+      expect(Result.isErr(result)).toBe(true);
+      expect(mockLimiter.failureCalls.length).toBe(1);
+      expect(mockLimiter.failureCalls[0]?.identifier).toBe(user.id);
+      expect(mockLimiter.resetCalls.length).toBe(0);
+    });
+
+    it("resets rate limit on successful password change", async () => {
+      const mockLimiter = new MockRecordingRateLimiter();
+      const cp = new ChangePassword(unitOfWork, hasher, mockLimiter);
+
+      const result = await cp.execute({
+        userId: user.id,
+        currentPassword: PASSWORD,
+        newPassword: NEW_PASSWORD,
+      });
+
+      expect(Result.isOk(result)).toBe(true);
+      expect(mockLimiter.resetCalls.length).toBe(1);
+      expect(mockLimiter.resetCalls[0]?.identifier).toBe(user.id);
+    });
+
+    it("repeated wrong current password calls trigger rate limiter lockout", async () => {
+      const mockLimiter = new MockRecordingRateLimiter();
+      mockLimiter.maxFailures = 3;
+      const cp = new ChangePassword(unitOfWork, hasher, mockLimiter);
+
+      // 3 failed attempts
+      for (let i = 0; i < 3; i++) {
+        const res = await cp.execute({
+          userId: user.id,
+          currentPassword: "wrong-guess",
+          newPassword: NEW_PASSWORD,
+        });
+        expect(Result.isErr(res)).toBe(true);
+      }
+
+      expect(mockLimiter.failureCalls.length).toBe(3);
+
+      // 4th attempt should now be locked out by rate limiter
+      await expect(
+        cp.execute({
+          userId: user.id,
+          currentPassword: "wrong-guess",
+          newPassword: NEW_PASSWORD,
+        }),
+      ).rejects.toThrow(/Rate limit exceeded/);
     });
   });
 });
