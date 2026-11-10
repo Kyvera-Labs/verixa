@@ -11,8 +11,6 @@ build/
 *.tsbuildinfo
 
 # Environment & secrets
-.env
-.env.*
 !.env.example
 
 # Logs
@@ -30,7 +28,6 @@ coverage/
 packages/database/generated/
 
 # Editor / OS
-.vscode/*
 !.vscode/extensions.json
 .idea/
 .DS_Store
@@ -51,3 +48,4 @@ backups/
 # would create a second, staler copy of the dependency graph that says nothing
 # about the build it sits next to.
 sbom/
+config.bat

@@ -1,5 +1,11 @@
 import type { User } from "@verixa/identity";
-import { Result, ValidationError, type Id, type RateLimiter } from "@verixa/shared-kernel";
+import {
+  Result,
+  ValidationError,
+  type Id,
+  type RateLimiter,
+  type RateLimitKey,
+} from "@verixa/shared-kernel";
 
 import { type PasswordHistoryPolicy } from "../../domain/value-objects/password-history-policy.js";
 import { DEFAULT_PASSWORD_HISTORY_POLICY } from "../../domain/value-objects/password-history-policy.js";
@@ -46,6 +52,20 @@ export class ChangePassword {
   async execute(
     command: ChangePasswordCommand,
   ): Promise<Result<ChangePasswordResult, ValidationError>> {
+    // 1. Check rate limit BEFORE any other logic
+    const rateLimitKey: RateLimitKey = {
+      action: "password-reset",
+      identifier: command.userId,
+    };
+
+    const limitResult = await this.rateLimiter.check(rateLimitKey);
+    if (!limitResult.allowed) {
+      throw new Error(
+        `Rate limit exceeded for ${rateLimitKey.action} on ${rateLimitKey.identifier}. ` +
+          `Resets at ${new Date(limitResult.resetAt).toISOString()}`,
+      );
+    }
+
     // Validate the new password policy first, before any hashing or
     // database work. A rejected password should not advance the change.
     const passwordResult = RawPassword.create(command.newPassword, this.passwordPolicy);
@@ -72,6 +92,7 @@ export class ChangePassword {
         credential.passwordHash,
       );
       if (!currentMatches) {
+        await this.rateLimiter.recordFailure(rateLimitKey);
         return { kind: "wrong_current_password" as const };
       }
 
@@ -127,6 +148,9 @@ export class ChangePassword {
       const rotated = credential.rotatePassword(newHash, this.passwordHistoryPolicy);
       await repositories.credentials.save(rotated);
     });
+
+    // Reset rate limit counter on successful password change
+    await this.rateLimiter.reset(rateLimitKey);
 
     return Result.ok({ user: outcome.user });
   }
