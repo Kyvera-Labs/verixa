@@ -203,7 +203,7 @@ export function renderIssueBody(issue, phase, issueNumbers = {}) {
   out.push(`## Summary\n\n${issue.description}\n`);
 
   out.push(
-    `## Context\n\nThis is **Phase ${phase.number} — ${phase.title}**, issue \`${issue.id}\` of the [Verixa roadmap](../blob/master/planning/ROADMAP.md).\n`,
+    `## Context\n\nThis is **Phase ${phase.number} — ${phase.title}**, issue \`${issue.id}\` of the [Verixa roadmap](../blob/main/planning/ROADMAP.md).\n`,
   );
   if (phase.context) out.push(`${phase.context}\n`);
   out.push(
@@ -222,7 +222,7 @@ export function renderIssueBody(issue, phase, issueNumbers = {}) {
 
   out.push(
     `## Where to start\n\n${LAYER_NOTES[layer]}\n\nRead these first — they solve the same shape of problem and establish the conventions your change should follow:\n\n${exemplars
-      .map(([path, why]) => `- [\`${path}\`](../blob/master/${path}) — ${why}`)
+      .map(([path, why]) => `- [\`${path}\`](../blob/main/${path}) — ${why}`)
       .join("\n")}\n`,
   );
 
@@ -267,7 +267,7 @@ export function renderIssueBody(issue, phase, issueNumbers = {}) {
   );
 
   out.push(
-    `## References\n\n- [CONTRIBUTING.md](../blob/master/CONTRIBUTING.md) — workflow, commit format, review expectations\n- [Architecture overview](../blob/master/planning/ARCHITECTURE.md)\n- [Full roadmap](../blob/master/planning/ROADMAP.md)\n- [Phase ${phase.number} specification](../blob/master/${phase.file})\n- [\`docs/guides/domain-modeling.md\`](../blob/master/docs/guides/domain-modeling.md) — the layering rules this codebase follows\n`,
+    `## References\n\n- [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md) — workflow, commit format, review expectations\n- [Architecture overview](../blob/main/planning/ARCHITECTURE.md)\n- [Full roadmap](../blob/main/planning/ROADMAP.md)\n- [Phase ${phase.number} specification](../blob/main/${phase.file})\n- [\`docs/guides/domain-modeling.md\`](../blob/main/docs/guides/domain-modeling.md) — the layering rules this codebase follows\n`,
   );
 
   out.push(
