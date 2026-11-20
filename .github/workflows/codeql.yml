@@ -1,0 +1,68 @@
+name: CodeQL
+
+# Static analysis for security flaws: injection, unsafe deserialization,
+# prototype pollution, path traversal, missing validation at a trust boundary,
+# and (for the `actions` language) unsafe patterns in these workflow files,
+# such as untrusted pull request text reaching a `run:` step.
+#
+# It complements the security lint rules rather than replacing them. Lint
+# looks at one file at a time; CodeQL follows data from where it enters (a
+# request body, a header, an environment variable) to where it is used,
+# across files and packages, which is how most real injection bugs look.
+#
+# Findings appear under Security -> Code scanning, and on the pull request
+# that introduces them. This workflow is not a required check yet: let it
+# run for a few weeks, triage what it reports, then make it required once
+# the baseline is clean.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Weekly, so new queries shipped by GitHub are applied to code that has
+    # not changed since the last pull request.
+    - cron: "17 3 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Uploading results to code scanning is the only write this job does.
+      security-events: write
+      # Needed by CodeQL to read the workflow run it belongs to.
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript, actions]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          languages: ${{ matrix.language }}
+          # TypeScript and workflow files are analyzed from source; nothing
+          # is installed or built, so no dependency code runs in this job.
+          build-mode: none
+          queries: security-extended
+          config: |
+            paths-ignore:
+              # Deliberately vulnerable snippets that exist to be caught by
+              # the security lint fixture tests (see eslint.config.mjs).
+              - infra/ci/lint-security-fixtures
+              # A fixture manifest for the dependency scanner's own tests.
+              - infra/ci/fixtures
+              - "**/dist"
+              - "**/coverage"
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          category: /language:${{ matrix.language }}
