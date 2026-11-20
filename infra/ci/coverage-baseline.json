@@ -1,61 +1,103 @@
 {
   "version": 1,
-  "updatedAt": "2026-11-19T17:00:00.000Z",
+  "updatedAt": "2026-11-20T09:14:08.285Z",
   "tolerance": 0.1,
   "aggregate": {
-    "lines": 85.0,
-    "statements": 85.0,
-    "functions": 80.0,
-    "branches": 75.0
+    "lines": 83.6,
+    "statements": 83.6,
+    "functions": 93,
+    "branches": 89.5
   },
   "packages": {
-    "@verixa/shared-kernel": {
-      "lines": 90.0,
-      "statements": 90.0,
-      "functions": 85.0,
-      "branches": 80.0
-    },
-    "@verixa/identity": {
-      "lines": 90.0,
-      "statements": 90.0,
-      "functions": 85.0,
-      "branches": 85.0
-    },
-    "@verixa/sessions": {
-      "lines": 90.0,
-      "statements": 90.0,
-      "functions": 85.0,
-      "branches": 85.0
-    },
-    "@verixa/credentials": {
-      "lines": 85.0,
-      "statements": 85.0,
-      "functions": 80.0,
-      "branches": 80.0
+    "@verixa/api": {
+      "lines": 74.5,
+      "statements": 74.5,
+      "functions": 75.4,
+      "branches": 73.4
     },
     "@verixa/audit": {
-      "lines": 85.0,
-      "statements": 85.0,
-      "functions": 80.0,
-      "branches": 80.0
+      "lines": 93.9,
+      "statements": 93.9,
+      "functions": 93.3,
+      "branches": 93.6
     },
-    "@verixa/verification": {
-      "lines": 85.0,
-      "statements": 85.0,
-      "functions": 80.0,
-      "branches": 80.0
+    "@verixa/authorization": {
+      "lines": 82.1,
+      "statements": 82.1,
+      "functions": 96.6,
+      "branches": 90.5
     },
-    "@verixa/rate-limiting": {
-      "lines": 90.0,
-      "statements": 90.0,
-      "functions": 85.0,
-      "branches": 80.0
+    "@verixa/config": {
+      "lines": 98,
+      "statements": 98,
+      "functions": 100,
+      "branches": 93.4
+    },
+    "@verixa/credentials": {
+      "lines": 90.8,
+      "statements": 90.8,
+      "functions": 94.1,
+      "branches": 91.8
+    },
+    "@verixa/database": {
+      "lines": 5.3,
+      "statements": 5.3,
+      "functions": 0,
+      "branches": 0
+    },
+    "@verixa/identity": {
+      "lines": 93.2,
+      "statements": 93.2,
+      "functions": 96.7,
+      "branches": 90.9
+    },
+    "@verixa/mfa": {
+      "lines": 93.8,
+      "statements": 93.8,
+      "functions": 92.9,
+      "branches": 91.3
     },
     "@verixa/notifications": {
-      "lines": 90.0,
-      "statements": 90.0,
-      "functions": 85.0,
-      "branches": 80.0
+      "lines": 96.7,
+      "statements": 96.7,
+      "functions": 100,
+      "branches": 91.4
+    },
+    "@verixa/rate-limiting": {
+      "lines": 91.2,
+      "statements": 91.2,
+      "functions": 96.4,
+      "branches": 79
+    },
+    "@verixa/sessions": {
+      "lines": 94.3,
+      "statements": 94.3,
+      "functions": 97.7,
+      "branches": 95.5
+    },
+    "@verixa/shared-kernel": {
+      "lines": 84.9,
+      "statements": 84.9,
+      "functions": 96,
+      "branches": 99
+    },
+    "@verixa/stellar-anchor": {
+      "lines": 68.2,
+      "statements": 68.2,
+      "functions": 87.3,
+      "branches": 89.8
+    },
+    "@verixa/verification": {
+      "lines": 96.2,
+      "statements": 96.2,
+      "functions": 94.9,
+      "branches": 93.4
+    },
+    "tests/integration": {
+      "lines": 37.1,
+      "statements": 37.1,
+      "functions": 83.8,
+      "branches": 68.8
     }
   }
 }
