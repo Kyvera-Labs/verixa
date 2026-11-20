@@ -37,6 +37,7 @@
     "@verixa/database": "workspace:*",
     "@verixa/identity": "workspace:*",
     "@verixa/mfa": "workspace:*",
+    "@verixa/notifications": "workspace:*",
     "@verixa/sessions": "workspace:*",
     "@verixa/shared-kernel": "workspace:*",
     "@verixa/stellar-anchor": "workspace:*",

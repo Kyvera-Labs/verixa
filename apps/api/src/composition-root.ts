@@ -29,6 +29,7 @@ import {
   RequestPasswordReset,
 } from "@verixa/credentials";
 import { PrismaClient } from "@verixa/database";
+import type { NotificationComposition, NotificationWorker } from "@verixa/notifications";
 import {
   CreateOrganization,
   GetOrganization,
@@ -84,6 +85,7 @@ import {
 } from "@verixa/stellar-anchor";
 
 import { registerAuditSubscribers } from "./composition/register-audit-subscribers.js";
+import { registerNotificationSubscribers } from "./composition/register-notification-subscribers.js";
 
 /**
  * The composition root: the one place in the system allowed to know which
@@ -290,6 +292,9 @@ export interface Container {
   readonly credentials: CredentialUseCases;
   readonly audit: AuditUseCases;
   readonly authorization: AuthorizationRepository;
+  readonly notifications: {
+    readonly worker: NotificationWorker | undefined;
+  };
   readonly sessions?: SessionUseCases;
   /**
    * Drains any queued audit writes, then releases the database connection.
@@ -318,6 +323,8 @@ export interface ContainerOverrides {
   readonly auditEventReader?: AuditEventReader | undefined;
   readonly queryAuditEvents?: QueryAuditEvents | undefined;
   readonly exportAuditEvents?: ExportAuditEvents | undefined;
+  /** Notification subscribers and worker supplied by the notification phase. */
+  readonly notificationComposition?: NotificationComposition | undefined;
 }
 
 /**
@@ -424,6 +431,11 @@ export function buildContainer(
   // event it publishes. See `composition/register-audit-subscribers.ts`.
   const eventPublisher = new InMemoryEventPublisher();
   registerAuditSubscribers(eventPublisher, recordAuditEvent);
+  const notificationComposition = overrides.notificationComposition;
+  if (notificationComposition !== undefined) {
+    registerNotificationSubscribers(eventPublisher, notificationComposition.subscribers);
+    notificationComposition.worker.start();
+  }
 
   // Anchoring is wired only when a signing key is configured. See AuditUseCases
   // on why this is `undefined` rather than a no-op.
@@ -548,6 +560,9 @@ export function buildContainer(
           : undefined),
     },
     authorization,
+    notifications: {
+      worker: notificationComposition?.worker,
+    },
     sessions: {
       issueSession: new IssueSession(
         new PrismaSessionRepository(prisma),
@@ -585,6 +600,7 @@ export function buildContainer(
       // may hold entries that are not in the database yet. Skipping this is
       // the one way the queue's bounded delay becomes permanent data loss.
       await batchedWriter?.stop();
+      await notificationComposition?.worker.stop();
       await prisma.$disconnect();
     },
   };

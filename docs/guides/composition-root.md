@@ -552,3 +552,19 @@ adapter, and PostgreSQL. Keep at least one such integration route as the
 pattern for future contexts. A liveness endpoint remains outside these
 context plugins because it answers whether the process serves requests and
 must work when no database-backed container is available.
+
+## Notifications start before traffic
+
+Notification subscribers and the delivery worker are optional composition
+overrides because their concrete queue, sender, and trigger-event adapters are
+deployment choices. When a deployment supplies `notificationComposition`,
+`buildContainer()` registers every subscriber before returning the container
+and starts the worker before the first request can use it. This ordering keeps
+the event publisher from silently dropping the first trigger event.
+
+The worker is exposed through `container.notifications.worker` for health
+checks and is stopped during `dispose()`. The API exposes its status at
+`/health/notifications`. Shutdown is awaited so a worker can
+finish its in-flight queue operation instead of losing a delivery on process
+termination. A deployment that does not configure notifications gets no
+worker, rather than a misleading no-op health signal.
