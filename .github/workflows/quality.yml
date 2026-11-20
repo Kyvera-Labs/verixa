@@ -1,0 +1,194 @@
+name: Code quality
+
+# Measures the quality of what a pull request changes, not of the whole
+# repository: coverage of the changed packages, coverage of the changed lines,
+# complexity of the changed code, and the pull request title. Each measurement
+# becomes a result file, and infra/ci/quality-gate.mjs decides against
+# infra/ci/quality-gates.json, where every gate has a mode:
+#
+#   off    not run
+#   warn   reported in the job summary and as annotations on the diff; never fails
+#   block  fails this check
+#
+# New gates start in `warn` and are promoted to `block` once their warnings
+# have proved trustworthy, by editing one line of quality-gates.json. The
+# workflow itself does not change. See docs/guides/code-quality.md.
+#
+# Read-only token and no secrets: this runs contributor code (their tests), so
+# it gets nothing worth stealing, the same as ci.yml.
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Code quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Same services and environment as the ci job, so a package's coverage
+    # here matches its coverage gate there instead of dropping because its
+    # database-backed tests were skipped.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: verixa
+          POSTGRES_PASSWORD: verixa
+          POSTGRES_DB: verixa_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U verixa -d verixa_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      TEST_DATABASE_URL: postgres://verixa:verixa@localhost:5432/verixa_test
+      DATABASE_URL: postgres://verixa:verixa@localhost:5432/verixa_test
+      REQUIRE_DATABASE_TESTS: "1"
+      TEST_REDIS_URL: redis://localhost:6379
+      REQUIRE_REDIS_TESTS: "1"
+      BASE_REF: origin/${{ github.base_ref }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+
+      # The same two gates ci.yml runs first, before anything from the pull
+      # request is installed or executed.
+      - name: Check for malware indicators
+        run: node infra/ci/check-malware-indicators.mjs
+
+      - name: Check lockfile integrity
+        run: node infra/ci/check-lockfile-integrity.mjs
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Build
+        run: pnpm build
+
+      # See the identical step in ci.yml: injected workspace packages are
+      # copied at install time, before any dist exists.
+      - name: Re-link workspace packages
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply migrations
+        run: pnpm db:migrate:deploy
+
+      - name: Find changed packages and files
+        id: changed
+        run: |
+          set -eu
+          # The runner context is not available in job-level env, so the
+          # results directory is set here for every later step.
+          RESULTS="$RUNNER_TEMP/quality-results"
+          echo "RESULTS=$RESULTS" >> "$GITHUB_ENV"
+          mkdir -p "$RESULTS"
+          git diff --name-only "$BASE_REF"...HEAD > "$RUNNER_TEMP/changed-files.txt"
+          git diff -U0 "$BASE_REF"...HEAD -- '*.ts' > "$RUNNER_TEMP/changed.diff"
+
+          # A changed package is one whose directory holds a changed file and
+          # whose package.json defines test:coverage. Discovered, not listed,
+          # so a new package is measured as soon as it has thresholds.
+          : > "$RUNNER_TEMP/packages.txt"
+          for dir in $(grep -oE '^(packages|apps)/[^/]+' "$RUNNER_TEMP/changed-files.txt" | sort -u); do
+            if [ -f "$dir/package.json" ] && node -e 'process.exit(require("./'"$dir"'/package.json").scripts?.["test:coverage"] ? 0 : 1)'; then
+              echo "$dir" >> "$RUNNER_TEMP/packages.txt"
+            fi
+          done
+
+          # Changed source files that still exist, excluding tests: the
+          # complexity limits are for production code.
+          grep -E '^(packages|apps)/.*\.ts$' "$RUNNER_TEMP/changed-files.txt" \
+            | grep -vE '\.(spec|test)\.ts$|/testing/' \
+            | while read -r f; do [ -f "$f" ] && echo "$f"; done > "$RUNNER_TEMP/source-files.txt" || true
+
+          echo "Packages measured:"; cat "$RUNNER_TEMP/packages.txt" || true
+          echo "Source files checked for complexity:"; cat "$RUNNER_TEMP/source-files.txt" || true
+
+      - name: "Measure: coverage of changed packages"
+        run: |
+          set -u
+          : > "$RUNNER_TEMP/coverage-status.txt"
+          while read -r dir; do
+            [ -n "$dir" ] || continue
+            name=$(node -p 'require("./'"$dir"'/package.json").name')
+            echo "::group::$name"
+            # lcov is added for the patch-coverage gate; each package's own
+            # thresholds still apply and decide the exit code.
+            pnpm --filter "./$dir" run test:coverage --coverage.reporter=lcov --coverage.reporter=text-summary
+            code=$?
+            echo "::endgroup::"
+            echo "$name $code" >> "$RUNNER_TEMP/coverage-status.txt"
+          done < "$RUNNER_TEMP/packages.txt"
+          node infra/ci/quality-gate.mjs package-coverage \
+            --status "$RUNNER_TEMP/coverage-status.txt" --out "$RESULTS/packageCoverage.json"
+
+      - name: "Measure: coverage of changed lines"
+        run: |
+          set -eu
+          args=()
+          while read -r f; do args+=(--lcov "$f"); done < <(find packages apps -path '*/node_modules' -prune -o -path '*/coverage/lcov.info' -print)
+          min=$(node -p 'require("./infra/ci/quality-gates.json").gates.patchCoverage?.minPercent ?? 80')
+          node infra/ci/quality-gate.mjs patch-coverage \
+            --diff "$RUNNER_TEMP/changed.diff" "${args[@]}" --min "$min" --out "$RESULTS/patchCoverage.json"
+
+      - name: "Measure: complexity of changed code"
+        run: |
+          set -eu
+          if [ ! -s "$RUNNER_TEMP/source-files.txt" ]; then
+            echo '[]' > "$RUNNER_TEMP/eslint.json"
+          else
+            rules=()
+            while read -r r; do rules+=(--rule "$r"); done < <(node infra/ci/quality-gate.mjs eslint-rule-args --config infra/ci/quality-gates.json)
+            # ESLint exits non-zero when the regular lint rules find errors;
+            # those are ci.yml's job, so only the report matters here.
+            xargs -a "$RUNNER_TEMP/source-files.txt" pnpm exec eslint --format json \
+              --output-file "$RUNNER_TEMP/eslint.json" "${rules[@]}" || true
+          fi
+          node infra/ci/quality-gate.mjs complexity --eslint "$RUNNER_TEMP/eslint.json" --out "$RESULTS/complexity.json"
+
+      - name: "Measure: pull request title"
+        env:
+          # Passed through the environment, never interpolated into the
+          # script: a title is attacker-controlled text.
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -u
+          printf '%s\n' "$TITLE" | pnpm exec commitlint > "$RUNNER_TEMP/commitlint.txt" 2>&1
+          code=$?
+          node infra/ci/quality-gate.mjs pr-title --title "$TITLE" --exit-code "$code" \
+            --output "$RUNNER_TEMP/commitlint.txt" --out "$RESULTS/prTitle.json"
+
+      # Runs even when a measurement step crashed: a missing result is itself
+      # information, and a blocking gate without one fails closed.
+      - name: Report
+        if: always()
+        run: node infra/ci/quality-gate.mjs report --config infra/ci/quality-gates.json --results "$RESULTS"
