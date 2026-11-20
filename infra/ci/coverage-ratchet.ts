@@ -328,6 +328,43 @@ export function formatRatchetMarkdown(result: RatchetComparisonResult): string {
 }
 
 /**
+ * Adapts the summary `coverage-merge.ts` writes to the shape the ratchet
+ * compares.
+ *
+ * The merge writes the workspace totals under `aggregate` and keys packages
+ * by directory (`packages/audit`). The baseline, and therefore the ratchet,
+ * key them by package name (`@verixa/audit`) and read totals from `total`.
+ * Without this, every target read as 0% and the ratchet failed on every run.
+ * A directory key is renamed to the `name` in its `package.json`; a key that
+ * is already a name, or whose manifest cannot be read, is kept as it is.
+ */
+export function normalizeCoverageSummary(
+  raw: unknown,
+  rootDir: string,
+): { total?: unknown; packages?: Record<string, unknown> } {
+  const summary = (raw ?? {}) as {
+    total?: unknown;
+    aggregate?: unknown;
+    packages?: Record<string, unknown>;
+  };
+
+  const packages: Record<string, unknown> = {};
+  for (const [key, metrics] of Object.entries(summary.packages ?? {})) {
+    let name = key;
+    if (!key.startsWith("@")) {
+      const manifest = resolve(rootDir, key, "package.json");
+      if (existsSync(manifest)) {
+        const parsed = JSON.parse(readFileSync(manifest, "utf-8")) as { name?: unknown };
+        if (typeof parsed.name === "string" && parsed.name !== "") name = parsed.name;
+      }
+    }
+    packages[name] = metrics;
+  }
+
+  return { total: summary.total ?? summary.aggregate, packages };
+}
+
+/**
  * Main execution routine for the coverage ratchet CLI check.
  */
 export function runCoverageRatchet(options: Partial<RatchetCliOptions> = {}): number {
@@ -351,10 +388,10 @@ export function runCoverageRatchet(options: Partial<RatchetCliOptions> = {}): nu
   const baseline: CoverageBaseline = JSON.parse(
     readFileSync(baselinePath, "utf-8"),
   ) as CoverageBaseline;
-  const currentSummary = JSON.parse(readFileSync(summaryPath, "utf-8")) as {
-    total?: unknown;
-    packages?: Record<string, unknown>;
-  };
+  const currentSummary = normalizeCoverageSummary(
+    JSON.parse(readFileSync(summaryPath, "utf-8")),
+    rootDir,
+  );
 
   const envOverride = process.env["COVERAGE_RATCHET_OVERRIDE"];
   const allowDrop =
