@@ -25,8 +25,6 @@ export default mergeConfig(
           // per-file exception vitest's coverage config can't express.
           functions: 90,
           branches: 90,
-          functions: 85,
-          branches: 85,
         },
       },
     },
