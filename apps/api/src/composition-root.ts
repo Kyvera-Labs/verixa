@@ -73,8 +73,8 @@ import {
   BruteForcePolicy,
   InMemoryBruteForceAttemptStore,
   InMemoryEventPublisher,
-  NoopRateLimiter,
   type DomainEventPublisher,
+  type RateLimiter,
 } from "@verixa/shared-kernel";
 import {
   LocalTransactionSigner,
@@ -83,6 +83,7 @@ import {
   type TransactionSigner,
 } from "@verixa/stellar-anchor";
 
+import { createCredentialRateLimiter } from "./composition/rate-limiting.js";
 import { registerAuditSubscribers } from "./composition/register-audit-subscribers.js";
 
 /**
@@ -318,6 +319,7 @@ export interface ContainerOverrides {
   readonly auditEventReader?: AuditEventReader | undefined;
   readonly queryAuditEvents?: QueryAuditEvents | undefined;
   readonly exportAuditEvents?: ExportAuditEvents | undefined;
+  readonly rateLimiter?: RateLimiter | undefined;
 }
 
 /**
@@ -361,13 +363,12 @@ export function buildContainer(
   // a step someone has to remember to add later — the most commonly missed
   // part of a reset flow.
   //
-  // `NoopRateLimiter` always allows requests — rate limiting is Phase 15.
-  // It is wired as the default adapter so use cases work before the real
-  // limiter exists. No changes to use cases required when the real one
-  // arrives — only a new adapter and a new wire in composition root.
+  // Rate limiting for Phase 04 credential endpoints (Issue 294).
+  // Defaults to the production-grade credential rate limiter with CAPTCHA tracking,
+  // or takes an injected override from tests.
   const credentialNotifier = new NullCredentialNotifier();
   const sessionRevoker = new NoSessionsRevoker();
-  const rateLimiter = new NoopRateLimiter();
+  const rateLimiter = overrides.rateLimiter ?? createCredentialRateLimiter();
   // Counts failures the per-credential lockout cannot see (unknown addresses,
   // password spraying). In-memory and per process until Phase 15's durable store.
   const bruteForceAttempts = new BruteForcePolicy(new InMemoryBruteForceAttemptStore());

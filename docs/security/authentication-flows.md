@@ -566,3 +566,28 @@ The recovery cannot be self-triggered: the use case always requires a non-empty 
   claim and status-transition rules live on the aggregate rather than in the
   use case. A verification decision is recorded attribution plus reason for
   the same auditability this document argues for on the authentication side.
+
+---
+
+## Phase 15 Rate-Limiting Retrofit (Issue 294)
+
+In Phase 15, the credential endpoints introduced during Phase 04 (`/auth/login`, `/auth/register`, `/auth/forgot-password`, `/auth/reset-password`) are fully retrofitted with production-grade rate limiting and CAPTCHA escalation.
+
+### The Seam Design Payoff
+
+During Phase 04 (Issue 074), all four use cases were designed to accept an injectable `RateLimiter` port in their constructors, initially wired to `NoopRateLimiter`. Because the seam was established upfront:
+
+- **Zero Use-Case Churn**: Not a single line of business logic inside `AuthenticateWithPassword`, `RegisterUserWithPassword`, `RequestPasswordReset`, or `ConfirmPasswordReset` was altered during the Phase 15 retrofit.
+- **Pure Composition-Root Wiring**: The production rate limiter (`ProductionCredentialRateLimiter`, combining composite IP/account bucket tracking and `CaptchaTriggerPolicy`) is bound cleanly in `apps/api/src/composition-root.ts`.
+
+### Throttling & HTTP Response Contract
+
+When a client exceeds the allocated attempt quota:
+
+1. The use case consults `rateLimiter.check()` and throws a `RateLimitExceededError` before executing expensive password hashing or database transactions.
+2. The HTTP translation layer catches the exception and returns **`HTTP 429 Too Many Requests`**.
+3. Standard rate-limit headers are emitted on the response:
+   - `X-RateLimit-Limit`: Allocated quota for the window.
+   - `X-RateLimit-Remaining: 0`: Indicating exhaustion.
+   - `X-RateLimit-Reset`: Wall-clock Unix timestamp in seconds when the quota resets.
+   - `Retry-After`: Non-negative decimal integer representing seconds until back-off expires.

@@ -117,6 +117,9 @@ importers:
       '@verixa/mfa':
         specifier: workspace:*
         version: link:../../packages/mfa
+      '@verixa/rate-limiting':
+        specifier: workspace:*
+        version: link:../../packages/rate-limiting
       '@verixa/sessions':
         specifier: workspace:*
         version: link:../../packages/sessions
@@ -389,7 +392,7 @@ importers:
         version: 22.20.4
       '@verixa/testing-kit':
         specifier: workspace:*
-        version: link:../testing-kit
+        version: file:packages/testing-kit(prisma@6.19.3(magicast@0.3.5)(typescript@5.9.3))(supports-color@7.2.0)(typescript@5.9.3)
       '@vitest/coverage-v8':
         specifier: ^3.2.6
         version: 3.2.7(supports-color@7.2.0)(vitest@3.2.7(@types/node@22.20.4)(jiti@2.7.0)(lightningcss@1.33.0)(supports-color@7.2.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -411,7 +414,7 @@ importers:
         version: 22.20.4
       '@verixa/testing-kit':
         specifier: workspace:*
-        version: link:../testing-kit
+        version: file:packages/testing-kit(prisma@6.19.3(magicast@0.3.5)(typescript@5.9.3))(supports-color@7.2.0)(typescript@5.9.3)
       '@vitest/coverage-v8':
         specifier: ^3.2.6
         version: 3.2.7(supports-color@7.2.0)(vitest@3.2.7(@types/node@22.20.4)(jiti@2.7.0)(lightningcss@1.33.0)(supports-color@7.2.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -582,12 +585,12 @@ importers:
       '@verixa/audit':
         specifier: workspace:*
         version: link:../packages/audit
-      '@verixa/config':
-        specifier: workspace:*
-        version: link:../packages/config
       '@verixa/authorization':
         specifier: workspace:*
         version: link:../packages/authorization
+      '@verixa/config':
+        specifier: workspace:*
+        version: link:../packages/config
       '@verixa/credentials':
         specifier: workspace:*
         version: link:../packages/credentials
@@ -1808,11 +1811,38 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@verixa/audit@file:packages/audit':
+    resolution: {directory: packages/audit, type: directory}
+
+  '@verixa/authorization@file:packages/authorization':
+    resolution: {directory: packages/authorization, type: directory}
+
+  '@verixa/credentials@file:packages/credentials':
+    resolution: {directory: packages/credentials, type: directory}
+
+  '@verixa/database@file:packages/database':
+    resolution: {directory: packages/database, type: directory}
+
+  '@verixa/identity@file:packages/identity':
+    resolution: {directory: packages/identity, type: directory}
+
+  '@verixa/mfa@file:packages/mfa':
+    resolution: {directory: packages/mfa, type: directory}
+
+  '@verixa/sessions@file:packages/sessions':
+    resolution: {directory: packages/sessions, type: directory}
+
   '@verixa/shared-kernel@file:packages/shared-kernel':
     resolution: {directory: packages/shared-kernel, type: directory}
 
   '@verixa/stellar-anchor@file:packages/stellar-anchor':
     resolution: {directory: packages/stellar-anchor, type: directory}
+
+  '@verixa/testing-kit@file:packages/testing-kit':
+    resolution: {directory: packages/testing-kit, type: directory}
+
+  '@verixa/verification@file:packages/verification':
+    resolution: {directory: packages/verification, type: directory}
 
   '@vitest/coverage-v8@3.2.7':
     resolution: {integrity: sha512-NEGWJS2XNu2PfRLQwOO3CTKj1tTETxNBdk454vDxVBhxJYhPaA/eS0nAI0c+1El1P7a60z8+i+ZrQoGESweGKg==}
@@ -4808,6 +4838,64 @@ snapshots:
   '@unrs/resolver-binding-win32-x64-msvc@1.12.2':
     optional: true
 
+  '@verixa/audit@file:packages/audit(prisma@6.19.3(magicast@0.3.5)(typescript@5.9.3))(typescript@5.9.3)':
+    dependencies:
+      '@verixa/database': file:packages/database(prisma@6.19.3(magicast@0.3.5)(typescript@5.9.3))(typescript@5.9.3)
+      '@verixa/shared-kernel': file:packages/shared-kernel
+      zod: 3.25.76
+    transitivePeerDependencies:
+      - prisma
+      - typescript
+
+  '@verixa/authorization@file:packages/authorization':
+    dependencies:
+      '@verixa/shared-kernel': file:packages/shared-kernel
+
+  '@verixa/credentials@file:packages/credentials(prisma@6.19.3(magicast@0.3.5)(typescript@5.9.3))(typescript@5.9.3)':
+    dependencies:
+      '@node-rs/argon2': 2.2.1
+      '@verixa/database': file:packages/database(prisma@6.19.3(magicast@0.3.5)(typescript@5.9.3))(typescript@5.9.3)
+      '@verixa/identity': file:packages/identity(prisma@6.19.3(magicast@0.3.5)(typescript@5.9.3))(typescript@5.9.3)
+      '@verixa/mfa': file:packages/mfa(prisma@6.19.3(magicast@0.3.5)(typescript@5.9.3))(typescript@5.9.3)
+      '@verixa/shared-kernel': file:packages/shared-kernel
+    transitivePeerDependencies:
+      - prisma
+      - typescript
+
+  '@verixa/database@file:packages/database(prisma@6.19.3(magicast@0.3.5)(typescript@5.9.3))(typescript@5.9.3)':
+    dependencies:
+      '@prisma/client': 6.19.3(prisma@6.19.3(magicast@0.3.5)(typescript@5.9.3))(typescript@5.9.3)
+    transitivePeerDependencies:
+      - prisma
+      - typescript
+
+  '@verixa/identity@file:packages/identity(prisma@6.19.3(magicast@0.3.5)(typescript@5.9.3))(typescript@5.9.3)':
+    dependencies:
+      '@verixa/database': file:packages/database(prisma@6.19.3(magicast@0.3.5)(typescript@5.9.3))(typescript@5.9.3)
+      '@verixa/shared-kernel': file:packages/shared-kernel
+    transitivePeerDependencies:
+      - prisma
+      - typescript
+
+  '@verixa/mfa@file:packages/mfa(prisma@6.19.3(magicast@0.3.5)(typescript@5.9.3))(typescript@5.9.3)':
+    dependencies:
+      '@node-rs/argon2': 2.2.1
+      '@verixa/database': file:packages/database(prisma@6.19.3(magicast@0.3.5)(typescript@5.9.3))(typescript@5.9.3)
+      '@verixa/shared-kernel': file:packages/shared-kernel
+    transitivePeerDependencies:
+      - prisma
+      - typescript
+
+  '@verixa/sessions@file:packages/sessions(prisma@6.19.3(magicast@0.3.5)(typescript@5.9.3))(supports-color@7.2.0)(typescript@5.9.3)':
+    dependencies:
+      '@verixa/database': file:packages/database(prisma@6.19.3(magicast@0.3.5)(typescript@5.9.3))(typescript@5.9.3)
+      '@verixa/shared-kernel': file:packages/shared-kernel
+      ioredis: 5.11.1(supports-color@7.2.0)
+    transitivePeerDependencies:
+      - prisma
+      - supports-color
+      - typescript
+
   '@verixa/shared-kernel@file:packages/shared-kernel':
     dependencies:
       pino: 9.14.0
@@ -4819,6 +4907,32 @@ snapshots:
     transitivePeerDependencies:
       - debug
       - supports-color
+
+  '@verixa/testing-kit@file:packages/testing-kit(prisma@6.19.3(magicast@0.3.5)(typescript@5.9.3))(supports-color@7.2.0)(typescript@5.9.3)':
+    dependencies:
+      '@verixa/audit': file:packages/audit(prisma@6.19.3(magicast@0.3.5)(typescript@5.9.3))(typescript@5.9.3)
+      '@verixa/authorization': file:packages/authorization
+      '@verixa/credentials': file:packages/credentials(prisma@6.19.3(magicast@0.3.5)(typescript@5.9.3))(typescript@5.9.3)
+      '@verixa/database': file:packages/database(prisma@6.19.3(magicast@0.3.5)(typescript@5.9.3))(typescript@5.9.3)
+      '@verixa/identity': file:packages/identity(prisma@6.19.3(magicast@0.3.5)(typescript@5.9.3))(typescript@5.9.3)
+      '@verixa/mfa': file:packages/mfa(prisma@6.19.3(magicast@0.3.5)(typescript@5.9.3))(typescript@5.9.3)
+      '@verixa/sessions': file:packages/sessions(prisma@6.19.3(magicast@0.3.5)(typescript@5.9.3))(supports-color@7.2.0)(typescript@5.9.3)
+      '@verixa/shared-kernel': file:packages/shared-kernel
+      '@verixa/stellar-anchor': file:packages/stellar-anchor(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)
+      '@verixa/verification': file:packages/verification(prisma@6.19.3(magicast@0.3.5)(typescript@5.9.3))(typescript@5.9.3)
+    transitivePeerDependencies:
+      - debug
+      - prisma
+      - supports-color
+      - typescript
+
+  '@verixa/verification@file:packages/verification(prisma@6.19.3(magicast@0.3.5)(typescript@5.9.3))(typescript@5.9.3)':
+    dependencies:
+      '@verixa/database': file:packages/database(prisma@6.19.3(magicast@0.3.5)(typescript@5.9.3))(typescript@5.9.3)
+      '@verixa/shared-kernel': file:packages/shared-kernel
+    transitivePeerDependencies:
+      - prisma
+      - typescript
 
   '@vitest/coverage-v8@3.2.7(supports-color@7.2.0)(vitest@3.2.7(@types/node@22.20.4)(jiti@2.7.0)(lightningcss@1.33.0)(supports-color@7.2.0)(tsx@4.23.15)(yaml@2.9.1))':
     dependencies:
