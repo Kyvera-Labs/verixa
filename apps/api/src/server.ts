@@ -1,3 +1,5 @@
+import "./instrumentation.js";
+
 import { ConfigError, loadConfig } from "@verixa/config";
 import { createLogger } from "@verixa/shared-kernel";
 
