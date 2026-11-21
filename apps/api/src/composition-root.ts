@@ -29,7 +29,6 @@ import {
   RequestPasswordReset,
 } from "@verixa/credentials";
 import { PrismaClient } from "@verixa/database";
-import type { NotificationComposition, NotificationWorker } from "@verixa/notifications";
 import {
   CreateOrganization,
   GetOrganization,
@@ -59,6 +58,7 @@ import {
   WebAuthnAssertionVerifier,
   WebAuthnAttestationVerifier,
 } from "@verixa/mfa";
+import type { NotificationComposition, NotificationWorker } from "@verixa/notifications";
 import {
   InMemoryRevocationList,
   InMemorySessionAuditLogger,
