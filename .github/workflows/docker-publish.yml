@@ -1,8 +1,31 @@
+name: Docker Publish
 name: Publish API container
 
 on:
   push:
     branches: [main]
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - "apps/api/**"
+      - "packages/**"
+      - "infra/docker/**"
+      - ".github/workflows/docker-publish.yml"
+      - "pnpm-lock.yaml"
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/amd64,linux/arm64
     tags: ["v[0-9]*.[0-9]*.[0-9]*"]
 
 concurrency:
@@ -41,12 +64,86 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Extract metadata for Docker (apps/api)
+        id: meta-api
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/verixa-api
+          tags: |
+            type=sha,format=short,prefix=sha-
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build and push multi-arch image (apps/api)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          target: production
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-api.outputs.tags }}
+          labels: ${{ steps.meta-api.outputs.labels }}
+
+      - name: Verify buildx bake configuration
+        uses: docker/bake-action@v5
+        with:
+          files: infra/docker/buildx-bake.hcl
+          targets: api
+          set: |
+            *.push=false
+
+  smoke-test-matrix:
+    runs-on: ubuntu-latest
+    needs: build-and-publish
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/${{ matrix.arch }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image for architecture
+        run: |
+          docker buildx build \
+            --platform linux/${{ matrix.arch }} \
+            --target production \
+            -f apps/api/Dockerfile \
+            -t verixa-smoke:${{ matrix.arch }} \
+            --load .
+
+      - name: Run container and assert health
+        run: |
+          docker run -d --name smoke-${{ matrix.arch }} -p 3000:3000 \
+            -e SESSION_ACCESS_TOKEN_SECRET="ci-smoke-test-secret-at-least-32-characters" \
+            -e DATABASE_URL="postgresql://verixa:verixa@127.0.0.1:5432/verixa" \
+            verixa-smoke:${{ matrix.arch }}
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/health; then
+              echo "Smoke test healthy on linux/${{ matrix.arch }}"
+              docker rm -f smoke-${{ matrix.arch }}
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Failed to become healthy on linux/${{ matrix.arch }}"
+          docker logs smoke-${{ matrix.arch }}
+          docker rm -f smoke-${{ matrix.arch }}
+          exit 1
       # A commit tag identifies content and must never be silently replaced by
       # a rebuild. The per-SHA concurrency group serializes retries; this check
       # makes a retry fail visibly instead of changing what that reference runs.

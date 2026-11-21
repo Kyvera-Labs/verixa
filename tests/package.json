@@ -18,6 +18,7 @@
     "@types/supertest": "^6.0.2",
     "@verixa/api": "workspace:*",
     "@verixa/audit": "workspace:*",
+    "@verixa/config": "workspace:*",
     "@verixa/authorization": "workspace:*",
     "@verixa/credentials": "workspace:*",
     "@verixa/database": "workspace:*",

@@ -9,6 +9,15 @@ export default mergeConfig(
   defineConfig({
     test: {
       name: "@verixa/notifications",
+      coverage: {
+        exclude: ["index.ts", "src/server.ts"],
+        thresholds: {
+          statements: 85,
+          lines: 85,
+          functions: 80,
+          branches: 75,
+        },
+      },
     },
   }),
 );

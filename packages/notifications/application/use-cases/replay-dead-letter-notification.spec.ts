@@ -19,7 +19,7 @@ describe("ReplayDeadLetterNotification", () => {
     const queued: NotificationMessage[] = [];
     await store.save({ notification, failures: [], exhaustedAt: new Date() });
     const replay = new ReplayDeadLetterNotification(store, {
-      enqueue: async (message) => queued.push(message),
+      enqueue: async (message) => { queued.push(message); },
     });
 
     const result = await replay.execute(notification.id);
