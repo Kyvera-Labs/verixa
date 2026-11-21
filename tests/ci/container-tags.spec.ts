@@ -24,6 +24,10 @@ describe("containerTags", () => {
     expect(run("push", "refs/tags/v2.4.1", sha)).toEqual(["sha-1234567", "v2.4.1", "latest"]);
   });
 
+  it("computes non-publishing tags for pull requests", () => {
+    expect(run("pull_request", "refs/pull/585/merge", sha)).toEqual(["sha-1234567", "pr-585"]);
+  });
+
   it("rejects non-release tags and malformed commit identifiers", () => {
     expect(() => run("push", "refs/tags/v2-beta", sha)).toThrow(
       "Unsupported container publish event",

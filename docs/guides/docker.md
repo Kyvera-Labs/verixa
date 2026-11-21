@@ -49,6 +49,47 @@ Trivy gate in `.github/workflows/container-scan.yml` blocks on, and the
 measured size and contents of the final image. This file stays about how to
 build and run it.
 
+## Build cache
+
+Dependency installation is the expensive part of this build, and it depends on
+manifests, not on application source. The `deps` stage therefore copies only
+`package.json` files, the lockfile, the workspace file and the Prisma schema
+with `COPY --parents`. `--parents` preserves their paths without an enumerated
+list of packages (which silently went stale when a new workspace was added),
+while avoiding the old `COPY packages packages`, whose source files
+invalidated the install layer on every edit.
+
+The pnpm store and Prisma engine downloads live in BuildKit cache mounts
+(`--mount=type=cache`) rather than in layers. A layer is tied to the
+instruction that produced it and is discarded as soon as a later layer
+changes; a cache mount is keyed by its ID and survives those changes. The
+store uses `sharing=locked` because multi-platform builds would otherwise
+write to it concurrently. Both `pnpm install` and `pnpm deploy` point at the
+same store directory so a cached install is not followed by a fresh download
+during deployment bundling.
+
+We rejected simply exporting the installed `node_modules` as an image layer:
+it would be rebuilt from scratch whenever any later instruction changed, and
+it would put build-only files into an image whose runtime stage deletes them
+anyway.
+
+The publish workflow imports and exports a registry-backed BuildKit cache
+(`type=gha`, `mode=max`) scoped to the API image. Runner-local caches vanish
+between pushes; the registry cache does not. `mode=max` exports intermediate
+stages, which is what lets a commit that only touched `apps/api/src/` reuse
+the install stage instead of merely reusing the final image.
+
+`infra/ci/docker-cache-check.mjs` guards both halves:
+
+- `dependencyFingerprint` hashes only the paths the `deps` stage copies. A
+  source edit leaves it unchanged; a manifest edit changes it. If someone
+  adds a whole-source `COPY` back into `deps`, the plan changes too.
+- the `cache-verification` job in `.github/workflows/docker-publish.yml`
+  measures a cold build, a source-only rebuild and a manifest-change rebuild,
+  parses BuildKit's plain progress log to assert that `pnpm install` was
+  `CACHED` for source-only and rebuilt after the manifest change, and fails if
+  either rebuild takes more than 75% of the cold build.
+
 ## Why the container doesn't run as root
 
 The runtime stage creates and switches to an unprivileged `verixa` user

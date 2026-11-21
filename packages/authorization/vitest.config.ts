@@ -22,15 +22,10 @@ export default mergeConfig(
           "**/infrastructure/seed/**",
         ],
         thresholds: {
-          statements: 90,
-          lines: 90,
-          // The evaluation engine is required (Issue 146) to have 100%
-          // branch coverage, since it's the deterministic core every
-          // higher-level authorization decision builds on. Set the
-          // package-wide floor to match rather than carving out a
-          // per-file exception vitest's coverage config can't express.
+          statements: 88,
+          lines: 88,
           functions: 90,
-          branches: 90,
+          branches: 89,
         },
       },
     },

@@ -710,3 +710,147 @@ jobs:
       - name: Stop rollback drill container
         if: always()
         run: docker rm -f verixa-api-drill || true
+
+  # Issue 385 / #497. The `docker` job builds the image; this job proves the
+  # *overlay* actually produces a production topology when combined with the
+  # dev file. Resolving the config first catches merge mistakes (a surviving
+  # source bind-mount or dev port) before spending minutes on an image build.
+  compose-production-smoke:
+    runs-on: ubuntu-latest
+    env:
+      POSTGRES_PASSWORD: ci-postgres-password
+      REDIS_PASSWORD: ci-redis-password
+      REDIS_URL: redis://:ci-redis-password@redis:6379
+      DATABASE_URL: postgres://verixa_app:verixa_app@postgres:5432/verixa
+      DATABASE_MIGRATION_URL: postgres://verixa:ci-postgres-password@postgres:5432/verixa
+      SESSION_ACCESS_TOKEN_SECRET: ci-smoke-secret-at-least-32-characters
+      VERIXA_API_IMAGE: verixa-api:ci
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies for the config gate
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Resolve and verify the merged production config
+        run: |
+          set -eu
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml config --format json > compose.resolved.json
+          node infra/ci/compose-config.mjs --check compose.resolved.json
+
+      - name: Start production services
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+            up -d --build --wait postgres redis migration api
+
+      - name: API serves health on the internal network
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T api \
+            node -e "fetch('http://127.0.0.1:3000/health').then(r => { if (!r.ok) process.exit(1); console.log(r.status); }).catch(() => process.exit(1))"
+
+      - name: Stop the stack
+        if: always()
+        run: docker compose -f docker-compose.yml -f docker-compose.prod.yml down --volumes || true
+
+  # Issue 386 / #498. This is a restore drill, not a file-existence check:
+  # seed data, back it up, recreate the containers without their volumes to
+  # prove the data was really in the named volumes, then destroy the volumes
+  # and restore from the dumps. A backup that was never restored is a guess.
+  compose-backup-restore:
+    runs-on: ubuntu-latest
+    env:
+      POSTGRES_PASSWORD: ci-postgres-password
+      REDIS_PASSWORD: ci-redis-password
+      DATABASE_URL: postgres://verixa_app:verixa_app@postgres:5432/verixa
+      DATABASE_MIGRATION_URL: postgres://verixa:ci-postgres-password@postgres:5432/verixa
+      REDIS_URL: redis://:ci-redis-password@redis:6379
+      SESSION_ACCESS_TOKEN_SECRET: ci-smoke-secret-at-least-32-characters
+      VERIXA_API_IMAGE: verixa-api:ci
+      PGUSER: verixa
+      PGPASSWORD: ci-postgres-password
+      REDISCLI_AUTH: ci-redis-password
+      VERIXA_RESTORE_CONFIRM: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Start stateful services
+        run: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --wait postgres redis
+
+      - name: Seed probe data
+        run: |
+          set -eu
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T postgres \
+            psql -U verixa -d verixa -v ON_ERROR_STOP=1 -c \
+            "CREATE TABLE IF NOT EXISTS backup_probe (id text PRIMARY KEY, value text); INSERT INTO backup_probe (id, value) VALUES ('probe-1', 'before') ON CONFLICT (id) DO UPDATE SET value = 'before';"
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T redis \
+            redis-cli -a "$REDIS_PASSWORD" SET backup_probe before
+
+      - name: Back up the running containers
+        run: |
+          node infra/docker/scripts/backup.mjs \
+            --compose-file docker-compose.yml --compose-file docker-compose.prod.yml \
+            --output-dir backups --label ci
+          test -s backups/postgres-ci.dump
+          test -s backups/redis-ci.rdb
+
+      - name: Recreate containers without deleting volumes
+        run: |
+          set -eu
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml down
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --wait postgres redis
+          value="$(docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T postgres psql -U verixa -d verixa -tAX -c "SELECT value FROM backup_probe WHERE id = 'probe-1'")"
+          test "$value" = "before"
+          value="$(docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T redis redis-cli -a "$REDIS_PASSWORD" GET backup_probe | tr -d '\r')"
+          test "$value" = "before"
+
+      - name: Destroy the named volumes
+        run: docker compose -f docker-compose.yml -f docker-compose.prod.yml down --volumes
+
+      - name: Start with empty volumes and restore
+        run: |
+          set -eu
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --wait postgres redis
+          node infra/docker/scripts/restore.mjs \
+            --compose-file docker-compose.yml --compose-file docker-compose.prod.yml \
+            --dump backups/postgres-ci.dump --rdb backups/redis-ci.rdb
+
+      - name: Assert restored data
+        run: |
+          set -eu
+          value="$(docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T postgres psql -U verixa -d verixa -tAX -c "SELECT value FROM backup_probe WHERE id = 'probe-1'")"
+          test "$value" = "before"
+          value="$(docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T redis redis-cli -a "$REDIS_PASSWORD" GET backup_probe | tr -d '\r')"
+          test "$value" = "before"
+
+      - name: Stop the stack
+        if: always()
+        run: docker compose -f docker-compose.yml -f docker-compose.prod.yml down --volumes || true
+
+  # Issue 387 / #499. Uses the same nginx.conf as production with a stub API,
+  # so a redirect or handshake regression in the shipped config fails here.
+  compose-tls-smoke:
+    runs-on: ubuntu-latest
+    env:
+      PORT_HTTP: "18080"
+      PORT_HTTPS: "18443"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assert HTTP redirect, TLS handshake and upstream forwarding
+        run: node infra/ci/compose-tls-smoke.mjs
