@@ -219,6 +219,15 @@ No changes to use cases required — the seam is already wired.
 Follow existing patterns in this repo for ports, adapters,
 use cases, dependency injection, and testing.
 
+### Account-Scoped Limiting (`AccountRateLimitStrategy`)
+
+Distributed credential-stuffing botnets rotate across thousands of distinct residential or proxy IP addresses, issuing only one or two requests per IP to intentionally bypass IP-based rate limiting.
+
+`AccountRateLimitStrategy` (`packages/rate-limiting/application/strategies/account-strategy.ts`) closes this vulnerability by deriving bucket keys from the target account identifier (e.g. `account:user@example.com` or `account:userId`), normalized to prevent casing and whitespace evasion:
+
+- All requests targeting the same account across any number of different IPs are throttled together.
+- Unrelated accounts remain unaffected.
+
 ## Transparent rehashing
 
 A successful login is the only moment the plaintext password exists in memory,
