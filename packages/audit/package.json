@@ -1,7 +1,6 @@
 {
   "name": "@verixa/audit",
   "version": "0.1.0",
-  "private": true,
   "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
@@ -38,5 +37,14 @@
     "tsx": "^4.23.1",
     "typescript": "^5.7.2",
     "vitest": "^3.2.6"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Kyvera-Labs/verixa.git",
+    "directory": "packages/audit"
   }
 }

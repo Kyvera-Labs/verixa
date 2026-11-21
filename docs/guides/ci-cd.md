@@ -49,11 +49,17 @@ confusing cascade of unrelated ones.
 dependencies instead of re-downloading the whole dependency tree on every
 run.
 
+## Branch Protection & Required Status Checks
+
+CI only protects `main` when GitHub is configured to block merges on failing checks. The gap between "CI runs" and "CI enforces" is closed by the repository's branch protection policy:
+
+- **Policy & Reproducible Setup**: [`.github/branch-protection.md`](../../.github/branch-protection.md)
+- **Machine-Readable GitHub Ruleset**: [`.github/branch-protection.json`](../../.github/branch-protection.json)
+- **Drift Validator**: `infra/ci/check-branch-protection.mjs` verifies that every required status check context in `.github/branch-protection.json` matches an actual job in `.github/workflows/*.yml` so a job rename can never silently orphan a merge gate.
+
 ## Continuous Delivery
 
-Release automation (semantic-release, driven by the Conventional Commits
-enforced in Issue 010), Docker image publishing, and deployment pipelines
-are covered in Phase 19 and Phase 20 — this document will grow accordingly.
+Release automation (semantic-release, automated `CHANGELOG.md`, GitHub Releases with SBOM and Docker digest artifacts, and independent per-package npm publishing via Changesets) is documented in detail in [`docs/guides/release-process.md`](./release-process.md).
 
 ## Pipeline Observability & Failure Notifications
 
