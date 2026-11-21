@@ -117,6 +117,9 @@ importers:
       '@verixa/mfa':
         specifier: workspace:*
         version: link:../../packages/mfa
+      '@verixa/notifications':
+        specifier: workspace:*
+        version: link:../../packages/notifications
       '@verixa/sessions':
         specifier: workspace:*
         version: link:../../packages/sessions

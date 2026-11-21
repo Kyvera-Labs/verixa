@@ -170,6 +170,11 @@ export function buildApp(options: BuildAppOptions = {}) {
     return { status: "ok" };
   });
 
+  const notificationWorker = options.container?.notifications?.worker;
+  if (notificationWorker !== undefined) {
+    app.get("/health/notifications", () => notificationWorker.health());
+  }
+
   // Kept separate from liveness so deployments can verify which immutable
   // image is serving traffic without making health probes depend on metadata.
   app.get("/version", () => ({ version: process.env["VERIXA_BUILD_VERSION"] ?? "unknown" }));
