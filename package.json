@@ -37,6 +37,7 @@
     "check:env-matrix": "tsx infra/ci/check-env-matrix.ts",
     "check:migration-safety": "tsx infra/ci/check-migration-safety.ts",
     "sbom:generate": "tsx infra/ci/generate-sbom.ts",
+    "release:dry-run": "npx --yes -p semantic-release@24 -p @semantic-release/commit-analyzer@13 -p @semantic-release/release-notes-generator@14 -p @semantic-release/github@11 -p conventional-changelog-conventionalcommits@8 semantic-release --dry-run --no-ci",
     "typecheck:ci": "tsc -p infra/ci/tsconfig.json --noEmit"
   },
   "lint-staged": {
