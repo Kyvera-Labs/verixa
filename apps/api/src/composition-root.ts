@@ -83,6 +83,10 @@ import {
   type TransactionSigner,
 } from "@verixa/stellar-anchor";
 
+import {
+  createObservabilityComponents,
+  type ObservabilityContainer,
+} from "./composition/observability.js";
 import { registerAuditSubscribers } from "./composition/register-audit-subscribers.js";
 
 /**
@@ -296,6 +300,7 @@ export interface Container {
    * Call on shutdown.
    */
   readonly mfa: MfaUseCases;
+  readonly observability?: ObservabilityContainer;
   /** Releases the database connection. Call on shutdown. */
   readonly dispose: () => Promise<void>;
 }
@@ -580,6 +585,10 @@ export function buildContainer(
       registerWebAuthnCredential,
       verifyWebAuthnAssertion,
     },
+    observability: createObservabilityComponents({
+      environment: process.env["NODE_ENV"],
+      prisma,
+    }),
     dispose: async () => {
       // Drained *before* disconnecting, and only because the batched writer
       // may hold entries that are not in the database yet. Skipping this is

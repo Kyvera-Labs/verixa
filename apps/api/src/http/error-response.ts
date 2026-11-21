@@ -1,3 +1,4 @@
+import { getActiveTraceId, getTraceId } from "@verixa/observability";
 import { DomainError, ValidationError } from "@verixa/shared-kernel";
 import type { FastifyError, FastifyReply, FastifyRequest } from "fastify";
 import { ZodError } from "zod";
@@ -20,6 +21,8 @@ export interface ErrorResponseBody {
     /** Structured, caller-safe context such as validation field failures. */
     readonly details?: Readonly<Record<string, unknown>>;
     readonly requestId: string;
+    /** OpenTelemetry trace ID linked to this request's lifecycle. */
+    readonly traceId?: string;
   };
 }
 
@@ -39,6 +42,7 @@ export const errorResponseSchema = {
         message: { type: "string" },
         details: { type: "object", additionalProperties: true },
         requestId: { type: "string" },
+        traceId: { type: "string" },
       },
     },
   },
@@ -61,11 +65,19 @@ export function sendApiError(
   message: string,
   details?: Readonly<Record<string, unknown>>,
 ): void {
+  const req = reply.request as FastifyRequest & { traceId?: string };
+  const traceId = req.traceId ?? getTraceId() ?? getActiveTraceId();
+
+  if (traceId) {
+    reply.header("x-trace-id", traceId);
+  }
+
   const body: ErrorResponseBody = {
     error: {
       code,
       message,
       requestId: reply.request.id,
+      ...(traceId ? { traceId } : {}),
       ...(details === undefined ? {} : { details }),
     },
   };
