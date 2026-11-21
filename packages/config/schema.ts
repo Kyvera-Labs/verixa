@@ -407,6 +407,26 @@ export const envSchema = rawEnvSchema.superRefine((config, ctx) => {
 });
 
 /**
+ * Rate limit policy configuration schema (Issue 284 / #315).
+ * Validates per-route rate limit configuration with fail-fast Zod parsing.
+ */
+export const rateLimitPolicySchema = z.object({
+  limit: z.coerce.number().int().positive("Limit must be positive"),
+  windowMs: z.coerce.number().int().min(1000, "Window duration must be at least 1000ms"),
+  capacity: z.coerce.number().positive().optional(),
+  refillRatePerSecond: z.coerce.number().positive().optional(),
+});
+
+/**
+ * Rate limit allowlist configuration schema (Issue 289 / #304).
+ * Validates trusted IP addresses, CIDR blocks, and service-account tokens.
+ */
+export const rateLimitAllowlistSchema = z.object({
+  ipAddressesOrCidrs: z.array(z.string().trim()).default([]),
+  serviceTokens: z.array(z.string().trim()).default([]),
+});
+
+/**
  * Returns all environment variable keys defined in the configuration schema.
  */
 export function getSchemaKeys(): readonly string[] {

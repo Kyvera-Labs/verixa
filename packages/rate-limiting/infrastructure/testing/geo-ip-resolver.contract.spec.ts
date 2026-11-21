@@ -1,5 +1,5 @@
 import { Result } from "@verixa/shared-kernel";
-import { defineContractTests } from "@verixa/testing-kit";
+import { defineContractTests } from "@verixa/testing-kit/contract-test";
 import { describe, expect, it } from "vitest";
 
 import {

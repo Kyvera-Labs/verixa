@@ -7,6 +7,20 @@ export default mergeConfig(
   defineConfig({
     test: {
       name: "@verixa/shared-kernel",
+      coverage: {
+        exclude: [
+          ...(baseConfig.test?.coverage?.exclude ?? []),
+          "**/application/ports/**",
+          "index.ts",
+          "**/interface/**",
+        ],
+        thresholds: {
+          statements: 90,
+          lines: 90,
+          functions: 85,
+          branches: 80,
+        },
+      },
     },
   }),
 );

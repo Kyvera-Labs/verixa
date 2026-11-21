@@ -11,6 +11,8 @@ export {
   envSchema,
   getSchemaKeys,
   isValidCorsOrigin,
+  rateLimitPolicySchema,
+  rateLimitAllowlistSchema,
 } from "./schema.js";
 export { loadSigningKeys, SIGNING_KEY_ALGORITHMS, SIGNING_KEYS_ENV_VAR } from "./signing-keys.js";
 export type { SigningKeyAlgorithm, SigningKeyConfig } from "./signing-keys.js";

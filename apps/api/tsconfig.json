@@ -2,7 +2,10 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": "src",
+    "paths": {
+      "@verixa/stellar-anchor": ["../../packages/stellar-anchor/dist/index.d.ts"]
+    }
   },
   "include": ["src"]
 }
