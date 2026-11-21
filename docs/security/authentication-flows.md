@@ -219,6 +219,25 @@ No changes to use cases required — the seam is already wired.
 Follow existing patterns in this repo for ports, adapters,
 use cases, dependency injection, and testing.
 
+### IP-Based Limiting & Proxy Trust (`IpRateLimitStrategy`)
+
+High-volume automated attacks from a single source are throttled using `IpRateLimitStrategy` (`packages/rate-limiting/application/strategies/ip-strategy.ts`).
+
+#### Why Blindly Trusting `X-Forwarded-For` Fails
+
+The HTTP `X-Forwarded-For` (XFF) request header is set by proxies to indicate the IP address of the client that initiated the connection. However, an untrusted client can send any arbitrary value in `X-Forwarded-For` (e.g. `X-Forwarded-For: 1.1.1.1`).
+
+If an application blindly parses the first IP from `X-Forwarded-For` without validating proxy trust:
+
+1. An attacker at `198.51.100.42` can rotate forged IP headers with every request (`1.1.1.1`, `1.1.1.2`, ...).
+2. The rate limiter derives a new bucket key for each forged IP.
+3. IP-based rate limiting is completely bypassed.
+
+To prevent header spoofing, `IpRateLimitStrategy` requires an explicit `trustedProxyCount`:
+
+- When `trustedProxyCount <= 0` (direct connection to node), all `X-Forwarded-For` headers are completely ignored, and the socket's `remoteAddress` is used.
+- When `trustedProxyCount > 0` (e.g. `trustedProxyCount = 1` behind a reverse proxy or cloud load balancer), the proxy appends the real client IP to the right of any client-supplied headers. The strategy extracts the IP at index `ips.length - trustedProxyCount`, correctly skipping trusted hops while ignoring any forged IPs prepended earlier in the header.
+
 ## Transparent rehashing
 
 A successful login is the only moment the plaintext password exists in memory,

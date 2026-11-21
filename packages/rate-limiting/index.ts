@@ -36,3 +36,13 @@ export {
   HttpGeoIpResolver,
   type HttpGeoIpResolverConfig,
 } from "./infrastructure/adapters/http-geo-ip-resolver.js";
+
+export {
+  IpRateLimitStrategy,
+  InMemoryRateLimiter,
+  extractClientIp,
+  type HttpRequestContext,
+  type IpRateLimitStrategyOptions,
+  type IpRateLimitContext,
+  type IpRateLimitResult,
+} from "./application/strategies/ip-strategy.js";
