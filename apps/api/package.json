@@ -15,6 +15,14 @@
       "types": "./dist/composition-root.d.ts",
       "default": "./dist/composition-root.js"
     },
+    "./instrumentation": {
+      "types": "./dist/instrumentation.d.ts",
+      "default": "./dist/instrumentation.js"
+    },
+    "./plugins/http-metrics": {
+      "types": "./dist/plugins/http-metrics.d.ts",
+      "default": "./dist/plugins/http-metrics.js"
+    },
     "./shutdown": {
       "types": "./dist/shutdown.d.ts",
       "default": "./dist/shutdown.js"
@@ -41,6 +49,7 @@
     "@verixa/database": "workspace:*",
     "@verixa/identity": "workspace:*",
     "@verixa/mfa": "workspace:*",
+    "@verixa/observability": "workspace:*",
     "@verixa/sessions": "workspace:*",
     "@verixa/shared-kernel": "workspace:*",
     "@verixa/stellar-anchor": "workspace:*",

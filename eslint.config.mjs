@@ -97,6 +97,7 @@ export default tseslint.config(
       "packages/audit/**",
       "packages/authorization/**",
       "packages/verification/**",
+      "packages/observability/**",
       // The integration suite deliberately exercises internals -- forging a
       // forked chain entry to prove the repository refuses it, for one. That
       // is the opposite of a production package quietly depending on them,
@@ -117,9 +118,10 @@ export default tseslint.config(
                 "@verixa/mfa/*",
                 "@verixa/sessions/*",
                 "@verixa/verification/*",
+                "@verixa/observability/*",
               ],
               message:
-                "Import from the package root (`@verixa/identity`, `@verixa/credentials`, `@verixa/mfa`, `@verixa/sessions`, `@verixa/audit`, `@verixa/authorization`, `@verixa/verification`), not a deep path — a context's domain/application internals are not part of its public API. See docs/guides/domain-modeling.md.",
+                "Import from the package root (`@verixa/identity`, `@verixa/credentials`, `@verixa/mfa`, `@verixa/sessions`, `@verixa/audit`, `@verixa/authorization`, `@verixa/verification`, `@verixa/observability`), not a deep path — a context's domain/application internals are not part of its public API. See docs/guides/domain-modeling.md.",
             },
           ],
         },
