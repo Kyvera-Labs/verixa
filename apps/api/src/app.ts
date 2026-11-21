@@ -170,7 +170,7 @@ export function buildApp(options: BuildAppOptions = {}) {
     return { status: "ok" };
   });
 
-  const notificationWorker = options.container?.notifications.worker;
+  const notificationWorker = options.container?.notifications?.worker;
   if (notificationWorker !== undefined) {
     app.get("/health/notifications", () => notificationWorker.health());
   }

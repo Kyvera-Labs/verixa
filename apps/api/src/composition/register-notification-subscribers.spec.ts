@@ -1,6 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
-
 import type { DomainEventPublisher } from "@verixa/shared-kernel";
+import { describe, expect, it, vi } from "vitest";
 
 import { registerNotificationSubscribers } from "./register-notification-subscribers.js";
 
@@ -14,8 +13,8 @@ describe("registerNotificationSubscribers", () => {
 
     expect(first.register).toHaveBeenCalledWith(publisher);
     expect(second.register).toHaveBeenCalledWith(publisher);
-    expect(first.register.mock.invocationCallOrder[0]).toBeLessThan(
-      second.register.mock.invocationCallOrder[0],
-    );
+    const firstCallOrder = first.register.mock.invocationCallOrder[0] ?? Number.MAX_SAFE_INTEGER;
+    const secondCallOrder = second.register.mock.invocationCallOrder[0] ?? Number.MAX_SAFE_INTEGER;
+    expect(firstCallOrder).toBeLessThan(secondCallOrder);
   });
 });
