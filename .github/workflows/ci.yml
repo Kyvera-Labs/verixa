@@ -7,7 +7,19 @@ on:
 
 jobs:
   ci:
+    # Build matrix (Issue 361 / #473):
+    # - Node LTS: pinned to active LTS (22, matching `engines.node: ">=22.13"`
+    #   in package.json). Adding a future LTS (e.g. 24) is a single array entry.
+    # - OS: deliberately collapsed to `ubuntu-latest` for runner cost and
+    #   because Linux containers are the sole production target; macOS/Windows
+    #   runners add 5-10x minute cost without catching production regressions.
+    # - Caching: delegated to `.github/actions/setup-workspace`, which keys the
+    #   pnpm store on `pnpm-lock.yaml` hash (~5-15s warm vs ~60-90s cold).
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22]
     services:
       # Backs tests/integration/database.spec.ts (Issue 041) — a real
       # Postgres, not a mock, so "can the app actually reach a database"
@@ -81,55 +93,13 @@ jobs:
       - name: Check for malware indicators
         run: node infra/ci/check-malware-indicators.mjs
 
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
         with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+          node-version: ${{ matrix.node-version }}
 
       - name: Validate OpenAPI contract
         run: npx --yes @redocly/cli@2.53.3 lint --extends minimal apps/api/openapi/openapi.yaml
-
-      # The Prisma client is generated, not committed (it's platform-specific
-      # — see .gitignore), so it has to be generated before anything that
-      # imports @verixa/database is built, typechecked, or tested. Same
-      # ordering principle as the build step below, one level earlier.
-      - name: Generate Prisma client
-        run: pnpm db:generate
-
-      # Every workspace package must be built before anything that imports
-      # it can be reliably linted, typechecked, or tested — see
-      # docs/guides/typescript-conventions.md and docs/guides/ci-cd.md for
-      # why this isn't just belt-and-suspenders: package.json "exports"
-      # subpaths (unlike "main") have no fallback when the target file is
-      # missing, so type-aware linting fails outright, not gracefully, on
-      # an unbuilt dependency.
-      - name: Build
-        run: pnpm build
-
-      # Re-sync injected workspace packages after building them.
-      #
-      # `injectWorkspacePackages: true` (required for `pnpm deploy`, which
-      # builds the Docker image) makes pnpm *copy* some workspace packages into
-      # their dependents' node_modules rather than symlinking. Which ones get
-      # copied is decided by peer-dependency resolution -- @verixa/audit and
-      # @verixa/stellar-anchor are copied because the Stellar SDK pulls
-      # `debug`/`supports-color` peers, while @verixa/identity is symlinked.
-      #
-      # Those copies are made during install, when no package has a `dist` yet.
-      # pnpm refreshes them before running a dependent's own script, so a
-      # package that builds gets fresh copies -- but `tests` has no build
-      # script, so its copies stayed empty and every integration spec failed
-      # with "Failed to resolve entry for package @verixa/audit".
-      #
-      # Invisible locally, because a developer's node_modules has been through
-      # an install *after* a build at some point. Only a clean checkout hits it.
-      - name: Re-link workspace packages
-        run: pnpm install --frozen-lockfile
 
       # Proves the migration pipeline actually works end to end against a
       # real Postgres: Prisma connects using DATABASE_URL, creates its

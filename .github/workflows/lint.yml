@@ -1,0 +1,76 @@
+name: Lint & Typecheck
+
+# Dedicated fast-failing lint and strict typecheck gate (Issue 362 / #474).
+#
+# Why this runs as an independent workflow in parallel with `ci.yml` rather than
+# only as steps inside the test job:
+# 1. Shorter feedback loop: contributors learn about style, formatting, or type
+#    regressions in ~1 minute without waiting for Postgres/Redis service
+#    containers, migrations, or integration tests to boot.
+# 2. Isolated failure signal: a red "Lint & Typecheck" check immediately tells
+#    a reviewer whether a PR has static-analysis errors versus runtime test
+#    failures, without having to open a 500-line CI log.
+# 3. No service containers required: lighter runner footprint and zero flakiness
+#    from database/container startup.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: lint-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-typecheck:
+    name: Lint, Format & Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
+        with:
+          node-version: "22"
+
+      # Register GitHub Actions problem matchers so ESLint and TypeScript
+      # diagnostics appear as inline annotations on pull request diffs.
+      - name: Register problem matchers
+        run: |
+          cat <<'EOF' > /tmp/tsc-matcher.json
+          {
+            "problemMatcher": [
+              {
+                "owner": "tsc",
+                "pattern": [
+                  {
+                    "regexp": "^([^\\s].*)[\\(:](\\d+)[,:](\\d+)(?:\\):\\s+|\\s+-\\s+)(error|warning|info)\\s+(TS\\d+)\\s*:\\s*(.*)$",
+                    "file": 1,
+                    "line": 2,
+                    "column": 3,
+                    "severity": 4,
+                    "code": 5,
+                    "message": 6
+                  }
+                ]
+              }
+            ]
+          }
+          EOF
+          echo "::add-matcher::/tmp/tsc-matcher.json"
+
+      - name: ESLint
+        run: pnpm lint
+
+      - name: Check formatting
+        run: pnpm format:check
+
+      - name: Strict TypeScript typecheck (all workspaces)
+        run: pnpm typecheck
+
+      - name: Strict TypeScript typecheck (CI tooling)
+        run: pnpm typecheck:ci

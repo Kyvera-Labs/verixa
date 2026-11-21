@@ -1,0 +1,92 @@
+name: Docker Build & Publish
+
+# Production container build and publish pipeline (Issue 365 / #477).
+#
+# Builds the hardened multi-stage `apps/api/Dockerfile` (`production` target):
+# - On pull requests: builds the image for verification only (`push: false`),
+#   catching broken Dockerfiles, missing workspace manifests, or ESM bundle
+#   load failures before merge without publishing untrusted artifacts.
+# - On pushes to `main` and semantic version tags (`v*`): tags the image with
+#   both `sha-<short>` (immutable commit identity) and the semantic version on
+#   release tags, and pushes to GitHub Container Registry (ghcr.io).
+#
+# Why `apps/api/Dockerfile` is used instead of duplicating a Dockerfile under
+# `infra/docker/Dockerfile`: the multi-stage Dockerfile already lives alongside
+# `apps/api`, is verified by CI's container-hardening and rollback-drill checks,
+# and keeping a single canonical Dockerfile prevents drift between CI and
+# published images.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
+  pull_request:
+    paths:
+      - "apps/api/**"
+      - "packages/**"
+      - "scripts/prune-runtime-bundle.mjs"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "package.json"
+      - "tsconfig.base.json"
+      - ".github/workflows/docker-build.yml"
+
+concurrency:
+  group: docker-build-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-publish:
+    name: Build & Publish apps/api image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Only authenticate to GHCR on push/tag events; PRs from forks do not
+      # have write access to packages and must remain build-only.
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Generate deterministic OCI tags and labels:
+      # - `sha-<short>` on every build for immutable commit traceability
+      # - `{{version}}` (e.g. `1.2.3`) on semantic version tags (`v1.2.3`)
+      # - `latest` only on `main` pushes
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/verixa-api
+          tags: |
+            type=sha,format=short,prefix=sha-
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      # Multi-stage build targeting `production`:
+      # Separates build-time toolchains (TypeScript, pnpm, Prisma CLI, dev
+      # dependencies) from the minimal runtime stage, shrinking the final image
+      # and reducing the production attack surface.
+      - name: Build (and push on main/tags)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          target: production
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERIXA_BUILD_VERSION=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
