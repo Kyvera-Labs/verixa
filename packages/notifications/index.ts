@@ -7,6 +7,13 @@ export {
   type NotificationTemplateDefinition,
 } from "./domain/entities/notification-template.js";
 export { TemplateRegistry } from "./domain/services/template-registry.js";
+export {
+  InMemoryNotificationDispatcher,
+  NotificationService,
+  type NotificationDispatcher,
+  type NotificationReceipt,
+  type SendNotificationInput,
+} from "./src/index.js";
 
 export {
   NotificationError,

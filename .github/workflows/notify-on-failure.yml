@@ -1,0 +1,174 @@
+name: CI Observability & Failure Notifications
+
+# Phase 19 (Issue 379) — CI/CD Pipeline Observability & Failure Notifications.
+#
+# Proactively surfaces CI, release, and deploy failures on the `main` branch
+# via adapter-based notifications (Slack, Discord, generic webhook) rather
+# than leaving regressions unnoticed until maintainers check manually.
+# Also executes on a schedule to generate a 30-day pipeline health dashboard
+# summarizing pass rates and mean durations.
+
+on:
+  workflow_run:
+    workflows: ["CI", "Release", "Deploy", "Container Scan"]
+    types: [completed]
+    branches: [main]
+  schedule:
+    # Daily refresh of the pipeline health dashboard at 06:00 UTC
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  notify-failure:
+    name: Notify on Pipeline Failure
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure'
+    steps:
+      - name: Extract Failure Context
+        id: context
+        run: |
+          set -eu
+          WORKFLOW_NAME="${{ github.event.workflow_run.name }}"
+          RUN_ID="${{ github.event.workflow_run.id }}"
+          RUN_NUMBER="${{ github.event.workflow_run.run_number }}"
+          HTML_URL="${{ github.event.workflow_run.html_url }}"
+          HEAD_SHA="${{ github.event.workflow_run.head_sha }}"
+          HEAD_BRANCH="${{ github.event.workflow_run.head_branch }}"
+          ACTOR="${{ github.event.workflow_run.actor.login }}"
+          COMMIT_MSG="${{ github.event.workflow_run.head_commit.message }}"
+
+          echo "workflow=$WORKFLOW_NAME" >> "$GITHUB_OUTPUT"
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "run_number=$RUN_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "html_url=$HTML_URL" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+          echo "head_branch=$HEAD_BRANCH" >> "$GITHUB_OUTPUT"
+          echo "actor=$ACTOR" >> "$GITHUB_OUTPUT"
+
+          # Record in job summary
+          cat <<EOF >> "$GITHUB_STEP_SUMMARY"
+          ## Pipeline Failure Alert
+
+          A failure was detected on \`main\`:
+          - **Workflow:** $WORKFLOW_NAME (Run #$RUN_NUMBER)
+          - **Branch:** $HEAD_BRANCH
+          - **Commit:** \`$HEAD_SHA\`
+          - **Triggered By:** @$ACTOR
+          - **Logs:** [View Run Logs]($HTML_URL)
+          EOF
+
+      - name: Send Slack Notification
+        if: env.SLACK_WEBHOOK_URL != ''
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          curl -s -X POST -H 'Content-type: application/json' \
+            --data "{
+              \"text\": \"CI/CD Failure Alert: ${{ steps.context.outputs.workflow }} failed on ${{ steps.context.outputs.head_branch }}\",
+              \"blocks\": [
+                {
+                  \"type\": \"header\",
+                  \"text\": { \"type\": \"plain_text\", \"text\": \"Pipeline Failure Alert: ${{ steps.context.outputs.workflow }}\" }
+                },
+                {
+                  \"type\": \"section\",
+                  \"fields\": [
+                    { \"type\": \"mrkdwn\", \"text\": \"*Branch:*\n${{ steps.context.outputs.head_branch }}\" },
+                    { \"type\": \"mrkdwn\", \"text\": \"*Commit:*\n\`${{ steps.context.outputs.head_sha }}\`\" },
+                    { \"type\": \"mrkdwn\", \"text\": \"*Author:*\n${{ steps.context.outputs.actor }}\" },
+                    { \"type\": \"mrkdwn\", \"text\": \"*Run ID:*\n#${{ steps.context.outputs.run_number }}\" }
+                  ]
+                },
+                {
+                  \"type\": \"actions\",
+                  \"elements\": [
+                    {
+                      \"type\": \"button\",
+                      \"text\": { \"type\": \"plain_text\", \"text\": \"View Run Logs\" },
+                      \"url\": \"${{ steps.context.outputs.html_url }}\",
+                      \"style\": \"danger\"
+                    }
+                  ]
+                }
+              ]
+            }" "$SLACK_WEBHOOK_URL"
+
+      - name: Send Discord Notification
+        if: env.DISCORD_WEBHOOK_URL != ''
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          curl -s -X POST -H 'Content-type: application/json' \
+            --data "{
+              \"embeds\": [{
+                \"title\": \"Pipeline Failure: ${{ steps.context.outputs.workflow }}\",
+                \"color\": 15158332,
+                \"description\": \"A build or test failure occurred on \`main\`.\",
+                \"fields\": [
+                  { \"name\": \"Branch\", \"value\": \"${{ steps.context.outputs.head_branch }}\", \"inline\": true },
+                  { \"name\": \"Commit\", \"value\": \"\`${{ steps.context.outputs.head_sha }}\`\", \"inline\": true },
+                  { \"name\": \"Author\", \"value\": \"${{ steps.context.outputs.actor }}\", \"inline\": true },
+                  { \"name\": \"Run\", \"value\": \"#${{ steps.context.outputs.run_number }}\", \"inline\": true },
+                  { \"name\": \"Logs\", \"value\": \"[Direct Link](${{ steps.context.outputs.html_url }})\", \"inline\": false }
+                ]
+              }]
+            }" "$DISCORD_WEBHOOK_URL"
+
+      - name: Send Generic Alert Webhook
+        if: env.ALERT_WEBHOOK_URL != ''
+        env:
+          ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
+        run: |
+          curl -s -X POST -H 'Content-type: application/json' \
+            --data "{
+              \"event\": \"pipeline_failure\",
+              \"workflow\": \"${{ steps.context.outputs.workflow }}\",
+              \"branch\": \"${{ steps.context.outputs.head_branch }}\",
+              \"commit\": \"${{ steps.context.outputs.head_sha }}\",
+              \"actor\": \"${{ steps.context.outputs.actor }}\",
+              \"run_id\": \"${{ steps.context.outputs.run_id }}\",
+              \"html_url\": \"${{ steps.context.outputs.html_url }}\",
+              \"timestamp\": \"$(date -u +'%Y-%m-%dT%H:%M:%SZ')\"
+            }" "$ALERT_WEBHOOK_URL"
+
+  generate-dashboard:
+    name: Generate CI Health Dashboard
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure')
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Fetch recent workflow runs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Query GitHub API for the last 100 workflow runs across the repository
+          gh api "repos/${{ github.repository }}/actions/runs?per_page=100&branch=main" --jq '.workflow_runs' > runs.json 2>/dev/null || echo "[]" > runs.json
+
+      - name: Generate Pipeline Health Report
+        env:
+          RUNS_FILE: runs.json
+          OUTPUT_FILE: ci-dashboard.md
+        run: |
+          pnpm exec tsx scripts/ci-dashboard/generate.ts
+          cat ci-dashboard.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Dashboard Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-pipeline-dashboard
+          path: ci-dashboard.md

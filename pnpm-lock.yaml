@@ -585,6 +585,9 @@ importers:
       '@verixa/audit':
         specifier: workspace:*
         version: link:../packages/audit
+      '@verixa/config':
+        specifier: workspace:*
+        version: link:../packages/config
       '@verixa/authorization':
         specifier: workspace:*
         version: link:../packages/authorization
