@@ -154,10 +154,10 @@ managed by `createShutdownHandler` in `apps/api/src/server.ts`:
    `BatchedAuditWriter` to prevent data loss and disconnects Prisma (`prisma.$disconnect()`).
 5. **Clean Exit**: Once all teardown steps complete, the timer is cleared and the process
    exits with code 0.
-This guide details the supported production deployment paths for Verixa:
+   This guide details the supported production deployment paths for Verixa:
 
-1. **Single-Host Deployment (Docker Compose):** Self-hosted or virtual machine deployment via `docker-compose.prod.yml`.
-2. **Platform-as-a-Service (PaaS / Fly.io):** Managed container deployment via `infra/docker/platform.toml`.
+6. **Single-Host Deployment (Docker Compose):** Self-hosted or virtual machine deployment via `docker-compose.prod.yml`.
+7. **Platform-as-a-Service (PaaS / Fly.io):** Managed container deployment via `infra/docker/platform.toml`.
 
 It also details production requirements for secrets management, pre-deploy migrations, the forward-only migration policy, and the zero-downtime expand/contract schema evolution checklist.
 
@@ -165,7 +165,9 @@ It also details production requirements for secrets management, pre-deploy migra
 
 ## 1. Single-Host Deployment (Docker Compose)
 
-The single-host deployment path orchestrates the full production stack on a single Linux host using Docker and Docker Compose.
+The single-host deployment path orchestrates the full production stack on a single Linux host using Docker and Docker Compose. `docker-compose.prod.yml` is an **overlay**, applied with `-f docker-compose.yml -f docker-compose.prod.yml`: the base file stays readable for development, and the overlay resets only what production genuinely differs on — published ports, the hot-reload command, the source bind-mount and the working directory. Compose merges maps but keeps sequence entries unless they are reset, so those `!reset` lines are load-bearing; removing one silently brings back a dev port or the host source tree.
+
+Every service declares CPU and memory limits. On a single host, a runaway process is not isolated by a scheduler — without limits it can starve Postgres, Redis and the proxy on the same kernel, turning a bug in one container into a total outage.
 
 ### Topology
 
@@ -185,7 +187,7 @@ flowchart TD
 - **`redis`:** Redis 7 Alpine cache and rate-limiting store with AOF persistence enabled (`verixa-prod-redis-data`).
 - **`migration`:** One-off ephemeral service running `./infra/docker/scripts/migrate.sh` (`pnpm --filter @verixa/database run db:migrate:deploy`). It uses Prisma to safely apply pending database schema migrations before API containers launch.
 - **`api`:** Hardened, unprivileged (UID 10001) Node.js 22 runtime built via `apps/api/Dockerfile`. Only starts after `migration` completes successfully (`condition: service_completed_successfully`) and healthchecks pass.
-- **`proxy`:** Nginx reverse proxy terminating TLS, adding security headers, and forwarding requests to `api:3000`.
+- **`proxy`:** Nginx reverse proxy terminating TLS, adding security headers, and forwarding requests to `api:3000`. It is the only service publishing host ports (80 and 443); `api`, `postgres` and `redis` are reachable only over the internal bridge network.
 
 ### Environment Configuration
 
@@ -236,17 +238,107 @@ docker compose -f docker-compose.prod.yml logs migration
 docker compose -f docker-compose.prod.yml logs -f api
 ```
 
-### Backup and Restore
+### TLS at the edge
 
-Database snapshots should be created regularly before major upgrades:
+TLS is terminated by Nginx, not by the Fastify process. The application keeps
+speaking plain HTTP on the internal network and receives `X-Forwarded-Proto:
+https`, which it uses through `TRUST_PROXY=true` for cookies, redirects and
+rate limits. This keeps certificates, cipher suites and renewal out of the
+application image and out of every replica; transport security is one
+operator concern at one boundary. We rejected enabling TLS inside Fastify
+because it would duplicate configuration per replica, require private keys in
+the application's runtime environment, and make local development differ from
+production in the one place where mistakes are least forgiving.
+
+Port 80 serves one exception to the redirect: `/.well-known/acme-challenge/`.
+Let's Encrypt's HTTP-01 validation arrives over plain HTTP by definition. If
+that path redirected too, a certificate could never be issued or renewed.
+Every other HTTP request receives a `301` to the same path on HTTPS.
+
+For a real certificate, point DNS at the host, then set `CERTBOT_DOMAIN` and
+`CERTBOT_EMAIL` in the operator environment and run the profiled helper:
 
 ```bash
-# Backup database to backups/
-./scripts/db-backup.sh
-
-# Restore database from snapshot
-./scripts/db-restore.sh backups/verixa_backup_YYYYMMDD_HHMMSS.sql.gz
+docker compose --env-file .env.production -f docker-compose.yml \
+  -f docker-compose.prod.yml --profile certbot run --rm certbot
 ```
+
+Certbot writes under `infra/nginx/certs/live/$CERTBOT_DOMAIN/`. Nginx reads the
+two stable filenames it is configured with, so copy the issued files and
+reload the proxy:
+
+```bash
+cp infra/nginx/certs/live/$CERTBOT_DOMAIN/fullchain.pem infra/nginx/certs/fullchain.pem
+cp infra/nginx/certs/live/$CERTBOT_DOMAIN/privkey.pem infra/nginx/certs/privkey.pem
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec proxy nginx -s reload
+```
+
+Renewal reruns the same `certbot` command with `CERTBOT_DOMAIN` unset, which
+invokes `certbot renew --webroot`; copy and reload again afterwards. Generated
+PEM files are git-ignored — a private key in a commit is compromised even if
+the repository is private.
+
+CI does not use Let's Encrypt. `infra/ci/compose-tls-smoke.mjs` generates a
+one-day self-signed certificate, starts `infra/docker/docker-compose.tls-smoke.yml`
+(the production `nginx.conf` with a stub API), and asserts that plain HTTP
+returns a redirect to HTTPS, that an HTTPS request completes a verified TLS
+handshake, and that the response came from `api:3000`. That verifies the same
+configuration that ships without depending on external ACME availability.
+
+### Backup and restore
+
+Postgres and Redis data live in **named volumes**
+(`verixa-prod-postgres-data` and `verixa-prod-redis-data`). Named volumes are
+the right default for stateful containers: Docker owns their lifecycle, they
+survive `docker compose down && up` (without `-v`), and they are not tied to a
+host directory whose permissions or filesystem layout must be managed by
+hand. We rejected bind mounts for production because host paths make backups
+depend on a particular machine's directory structure, and anonymous volumes
+are discarded by the very command operators use to recreate containers. The
+mental model is simple: the container is disposable, the volume is not.
+
+`infra/docker/scripts/backup.mjs` runs the dump tools **inside** the running
+containers, so the client versions match the servers and no database port is
+published to the host. `pg_dump --format=custom` produces a compressed,
+selectively restorable dump; `redis-cli --rdb -` asks Redis for a consistent
+RDB snapshot even though AOF is the live persistence mode. Credentials are
+forwarded from the operator's environment with `docker compose exec -e KEY`
+rather than placed in the process arguments.
+
+```bash
+# From the repository root, with the production values in the environment:
+export PGUSER=verixa PGPASSWORD='...' REDISCLI_AUTH='...'
+node infra/docker/scripts/backup.mjs \
+  --compose-file docker-compose.yml --compose-file docker-compose.prod.yml \
+  --env-file .env.production --output-dir backups --label pre-upgrade
+```
+
+Restore is destructive and therefore needs an explicit acknowledgement:
+
+```bash
+VERIXA_RESTORE_CONFIRM=1 node infra/docker/scripts/restore.mjs \
+  --compose-file docker-compose.yml --compose-file docker-compose.prod.yml \
+  --env-file .env.production \
+  --dump backups/postgres-pre-upgrade.dump \
+  --rdb backups/redis-pre-upgrade.rdb
+```
+
+The restore stops Redis, deletes its AOF directory, copies the RDB into
+`/data`, and starts it again. Deleting the AOF is not cosmetic: Redis prefers
+an existing AOF over an RDB at startup, so leaving it in place would make the
+restore appear to succeed while serving the old dataset. Postgres is restored
+with `pg_restore --clean --if-exists --single-transaction`, which replaces the
+previous objects atomically instead of merging a half-restored dump into them.
+
+`scripts/db-backup.sh` and `scripts/db-restore.sh` remain development-only
+tools against a local `DATABASE_URL`; do not use them for the production
+compose stack.
+
+The `compose-backup-restore` CI job performs a real drill: it seeds a Postgres
+row and a Redis key, takes a backup, recreates the containers **without**
+`-v` to prove the named volumes hold the data, then runs `down --volumes`,
+starts from empty volumes, restores, and asserts both values came back. A
+backup that has never been restored is not a backup.
 
 ---
 

@@ -7,9 +7,9 @@
   "include": [
     "index.ts",
     "domain/**/*",
-    "src/**/*",
-    "tests/**/*",
     "application/**/*",
-    "infrastructure/**/*"
+    "infrastructure/**/*",
+    "src/**/*",
+    "tests/**/*"
   ]
 }

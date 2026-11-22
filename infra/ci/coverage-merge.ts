@@ -101,6 +101,27 @@ export function parseLcovString(lcovContent: string): Record<string, CoverageEnt
   return files;
 }
 
+function packageName(fullPath: string, fallback: string): string {
+  const packageJsonPath = path.join(fullPath, "package.json");
+  if (!existsSync(packageJsonPath)) {
+    return fallback;
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
+    if (typeof parsed === "object" && parsed !== null && "name" in parsed) {
+      const name = (parsed as { name?: unknown }).name;
+      if (typeof name === "string" && name.length > 0) {
+        return name;
+      }
+    }
+  } catch {
+    return fallback;
+  }
+
+  return fallback;
+}
+
 /**
  * Discovers coverage directories across packages/* and apps/*.
  */
@@ -127,7 +148,7 @@ export function findPackageCoverageDirs(repoRoot: string): Array<{ name: string;
       if (statSync(fullPath).isDirectory()) {
         const covDir = path.join(fullPath, "coverage");
         if (existsSync(covDir)) {
-          dirs.push({ name: `${group}/${entry}`, dir: covDir });
+          dirs.push({ name: packageName(fullPath, `${group}/${entry}`), dir: covDir });
         }
       }
     }
@@ -351,7 +372,11 @@ export function runCoverageMerge(
 
   // Write summary JSON
   const summaryJsonPath = options.jsonSummaryPath ?? path.join(outputDir, "coverage-summary.json");
-  writeFileSync(summaryJsonPath, JSON.stringify(report, null, 2), "utf-8");
+  writeFileSync(
+    summaryJsonPath,
+    JSON.stringify({ ...report, total: report.aggregate }, null, 2),
+    "utf-8",
+  );
 
   // Write HTML dashboard
   const htmlPath = path.join(outputDir, "index.html");
