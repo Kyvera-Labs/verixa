@@ -1,10 +1,13 @@
-import { createId, type Id, Result, ValidationError } from "@verixa/shared-kernel";
+import { createId, type DomainEvent, type Id, Result, ValidationError } from "@verixa/shared-kernel";
+import { OrganizationArchived } from "../events/organization-archived.js";
+import { OrganizationCreated } from "../events/organization-created.js";
+import { OrganizationSuspended } from "../events/organization-suspended.js";
 
 import type { UserId } from "./user.js";
 
 export type OrganizationId = Id<"OrganizationId">;
 
-export type OrganizationStatus = "active" | "suspended" | "deleted";
+export type OrganizationStatus = "active" | "suspended" | "archived" | "deleted";
 
 const MAX_NAME_LENGTH = 128;
 
@@ -33,6 +36,7 @@ interface OrganizationProps {
   readonly status: OrganizationStatus;
   readonly createdAt: Date;
   readonly updatedAt: Date;
+  readonly domainEvents?: readonly DomainEvent[];
 }
 
 /**
@@ -50,6 +54,7 @@ export class Organization {
   readonly status: OrganizationStatus;
   readonly createdAt: Date;
   readonly updatedAt: Date;
+  private readonly domainEvents: readonly DomainEvent[];
 
   private constructor(props: OrganizationProps) {
     this.id = props.id;
@@ -59,6 +64,7 @@ export class Organization {
     this.status = props.status;
     this.createdAt = props.createdAt;
     this.updatedAt = props.updatedAt;
+    this.domainEvents = props.domainEvents ?? [];
   }
 
   static create(params: {
@@ -90,21 +96,49 @@ export class Organization {
     }
 
     const now = new Date();
+    const id = createId<"OrganizationId">();
     return Result.ok(
       new Organization({
-        id: createId<"OrganizationId">(),
+        id,
         name: normalizedName,
         slug: normalizedSlug,
         ownerId: params.ownerId,
         status: "active",
         createdAt: now,
         updatedAt: now,
+        domainEvents: [new OrganizationCreated(id)],
       }),
     );
   }
 
   /** Rebuilds an `Organization` from already-trusted data (e.g. a database row). */
   static reconstitute(props: OrganizationProps): Organization {
-    return new Organization(props);
+    return new Organization({ ...props, domainEvents: [] });
   }
+
+  private transitionTo(next: OrganizationStatus, event: DomainEvent): Result<Organization, ValidationError> {
+    const allowed: Readonly<Record<OrganizationStatus, readonly OrganizationStatus[]>> = {
+      active: ["suspended", "archived"], suspended: ["active", "archived"], archived: [], deleted: [],
+    };
+    if (!allowed[this.status].includes(next)) {
+      return Result.err(new ValidationError(`Cannot transition organization from "${this.status}" to "${next}".`, {
+        status: [`invalid_transition_from_${this.status}`],
+      }));
+    }
+    return Result.ok(new Organization({ ...this, status: next, updatedAt: new Date(), domainEvents: [event] }));
+  }
+
+  suspend(): Result<Organization, ValidationError> {
+    return this.transitionTo("suspended", new OrganizationSuspended(this.id));
+  }
+
+  activate(): Result<Organization, ValidationError> {
+    return this.transitionTo("active", new OrganizationCreated(this.id));
+  }
+
+  archive(): Result<Organization, ValidationError> {
+    return this.transitionTo("archived", new OrganizationArchived(this.id));
+  }
+
+  pullDomainEvents(): readonly DomainEvent[] { return this.domainEvents; }
 }

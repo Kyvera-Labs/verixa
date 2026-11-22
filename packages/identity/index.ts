@@ -24,6 +24,9 @@ export { PersonName } from "./domain/value-objects/person-name.js";
 
 // Domain: events
 export { OrganizationInvitationCreated } from "./domain/events/organization-invitation-created.js";
+export { OrganizationCreated } from "./domain/events/organization-created.js";
+export { OrganizationSuspended } from "./domain/events/organization-suspended.js";
+export { OrganizationArchived } from "./domain/events/organization-archived.js";
 export { UserProfileUpdated } from "./domain/events/user-profile-updated.js";
 export { UserRegistered } from "./domain/events/user-registered.js";
 export { UserStatusChanged } from "./domain/events/user-status-changed.js";

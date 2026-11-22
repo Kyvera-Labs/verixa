@@ -59,4 +59,28 @@ describe("Organization", () => {
 
     expect(Result.isOk(result) && result.value.ownerId).toBe(ownerId);
   });
+
+  it("emits one event for each valid lifecycle transition", () => {
+    const created = Organization.create({ name: "Acme Inc", slug: "acme-inc", ownerId });
+    expect(Result.isOk(created)).toBe(true);
+    if (!Result.isOk(created)) return;
+    expect(created.value.pullDomainEvents()).toHaveLength(1);
+    const suspended = created.value.suspend();
+    expect(Result.isOk(suspended)).toBe(true);
+    if (!Result.isOk(suspended)) return;
+    expect(suspended.value.status).toBe("suspended");
+    expect(suspended.value.pullDomainEvents()).toHaveLength(1);
+    const archived = suspended.value.archive();
+    expect(Result.isOk(archived)).toBe(true);
+    if (Result.isOk(archived)) expect(archived.value.pullDomainEvents()).toHaveLength(1);
+  });
+
+  it("rejects transitions from an archived organization", () => {
+    const created = Organization.create({ name: "Acme Inc", slug: "acme-inc", ownerId });
+    if (!Result.isOk(created)) return;
+    const archived = created.value.archive();
+    if (!Result.isOk(archived)) return;
+    expect(Result.isErr(archived.value.archive())).toBe(true);
+    expect(Result.isErr(archived.value.activate())).toBe(true);
+  });
 });
