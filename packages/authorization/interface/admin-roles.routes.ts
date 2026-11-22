@@ -62,10 +62,11 @@ function replyError(
   return reply.code(status).send({
     error:
       status === 403
-        ? "Forbidden"
+        ? "FORBIDDEN"
         : error instanceof Error
           ? error.message
           : "Internal server error",
+    message: error instanceof Error ? error.message : "Authorization operation failed",
   });
 }
 
