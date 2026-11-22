@@ -124,6 +124,7 @@ model User {
 enum OrganizationStatus {
   active
   suspended
+  archived
   deleted
 
   @@map("organization_status")
