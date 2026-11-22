@@ -56,6 +56,9 @@ type LoginBody = z.infer<typeof loginBodyZodSchema>;
 const verifyEmailBodyZodSchema = z.object({ token: z.string() }).strict();
 type VerifyEmailBody = z.infer<typeof verifyEmailBodyZodSchema>;
 
+const requestVerificationEmailBodyZodSchema = z.object({ email: z.string() }).strict();
+type RequestVerificationEmailBody = z.infer<typeof requestVerificationEmailBodyZodSchema>;
+
 const refreshBodyZodSchema = z.object({ refreshToken: z.string().optional() }).strict();
 type RefreshBody = z.infer<typeof refreshBodyZodSchema>;
 
@@ -99,6 +102,11 @@ export function registerAuthRoutes<TLogger extends FastifyBaseLogger>(
   const registerBodySchema = registerZodSchema(app, "RegisterBody", registerBodyZodSchema);
   const loginBodySchema = registerZodSchema(app, "LoginBody", loginBodyZodSchema);
   const verifyEmailBodySchema = registerZodSchema(app, "VerifyEmailBody", verifyEmailBodyZodSchema);
+  const requestVerificationEmailBodySchema = registerZodSchema(
+    app,
+    "RequestVerificationEmailBody",
+    requestVerificationEmailBodyZodSchema,
+  );
   const refreshBodySchema = registerZodSchema(app, "RefreshBody", refreshBodyZodSchema);
   const logoutBodySchema = registerZodSchema(app, "LogoutBody", logoutBodyZodSchema);
   const forgotPasswordBodySchema = registerZodSchema(
@@ -264,6 +272,29 @@ export function registerAuthRoutes<TLogger extends FastifyBaseLogger>(
             displayName: user.displayName.value,
             status: user.status,
           },
+        });
+      } catch (error) {
+        sendError(reply, error);
+      }
+    },
+  );
+
+  app.post<{ Body: RequestVerificationEmailBody }>(
+    "/request-verification-email",
+    { schema: { body: requestVerificationEmailBodySchema } },
+    async (request, reply) => {
+      try {
+        await container.credentials.requestEmailVerification.execute({
+          email: request.body.email,
+        });
+
+        await container.audit.recordEvent.execute({
+          action: "user.email_verification_requested",
+          metadata: { email: request.body.email },
+        });
+
+        await reply.status(200).send({
+          message: "If that email is registered and unverified, instructions have been sent.",
         });
       } catch (error) {
         sendError(reply, error);
