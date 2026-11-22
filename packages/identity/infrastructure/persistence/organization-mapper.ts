@@ -15,6 +15,8 @@ export const OrganizationMapper = {
       name: row.name,
       slug: row.slug,
       ownerId: asId<"UserId">(row.ownerId),
+      parentOrganizationId:
+        row.parentOrganizationId === null ? null : asId<"OrganizationId">(row.parentOrganizationId),
       status: row.status,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
@@ -27,6 +29,7 @@ export const OrganizationMapper = {
       name: organization.name,
       slug: organization.slug,
       ownerId: organization.ownerId,
+      parentOrganizationId: organization.parentOrganizationId,
       status: organization.status,
       createdAt: organization.createdAt,
       updatedAt: organization.updatedAt,
