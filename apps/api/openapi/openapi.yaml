@@ -152,6 +152,103 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /admin/organizations/{orgId}/policies:
+    post:
+      tags: [Governance]
+      summary: Create an organization policy draft
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePolicyBody"
+      responses:
+        "201":
+          description: Created policy draft
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Policy"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    get:
+      tags: [Governance]
+      summary: List organization policies
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+        - { name: cursor, in: query, schema: { type: string } }
+        - {
+            name: limit,
+            in: query,
+            schema: { type: integer, minimum: 1, maximum: 100, default: 50 },
+          }
+      responses:
+        "200":
+          description: Paginated policies
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PolicyPage" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/organizations/{orgId}/policies/{policyId}:
+    patch:
+      tags: [Governance]
+      summary: Update a draft policy
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+        - $ref: "#/components/parameters/PolicyId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdatePolicyBody" }
+      responses:
+        "200":
+          description: Updated policy draft
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Policy" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/organizations/{orgId}/policies/{policyId}/publish:
+    post:
+      tags: [Governance]
+      summary: Publish a policy, safely repeatable
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+        - $ref: "#/components/parameters/PolicyId"
+      responses:
+        "200":
+          description: Published policy; retrying an already-published policy is a no-op
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Policy" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/organizations/{orgId}/policies/{policyId}/versions:
+    get:
+      tags: [Governance]
+      summary: List immutable policy versions
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+        - $ref: "#/components/parameters/PolicyId"
+        - { name: cursor, in: query, schema: { type: string } }
+        - {
+            name: limit,
+            in: query,
+            schema: { type: integer, minimum: 1, maximum: 100, default: 50 },
+          }
+      responses:
+        "200":
+          description: Paginated policy version history
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PolicyVersionPage" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
 components:
   securitySchemes:
     bearerAuth:
@@ -204,6 +301,51 @@ components:
         status:
           type: string
           const: ok
+    CreatePolicyBody:
+      type: object
+      additionalProperties: false
+      required: [name, ruleset]
+      properties:
+        name: { type: string, minLength: 1 }
+        ruleset: { type: object, additionalProperties: true }
+    UpdatePolicyBody:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1 }
+        ruleset: { type: object, additionalProperties: true }
+    Policy:
+      type: object
+      required: [id, organizationId, name, ruleset, status, version]
+      properties:
+        id: { type: string }
+        organizationId: { type: string }
+        name: { type: string }
+        ruleset: { type: object, additionalProperties: true }
+        status: { type: string, enum: [draft, published, archived] }
+        version: { type: integer, minimum: 0 }
+    PolicyPage:
+      type: object
+      required: [items, hasMore, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Policy" } }
+        hasMore: { type: boolean }
+        nextCursor: { type: [string, "null"] }
+    PolicyVersion:
+      type: object
+      required: [version, ruleset, publishedAt]
+      properties:
+        version: { type: integer, minimum: 1 }
+        ruleset: { type: object, additionalProperties: true }
+        publishedAt: { type: string, format: date-time }
+    PolicyVersionPage:
+      type: object
+      required: [items, hasMore, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/PolicyVersion" } }
+        hasMore: { type: boolean }
+        nextCursor: { type: [string, "null"] }
   parameters:
     RequestId:
       name: requestId
@@ -213,6 +355,16 @@ components:
       schema:
         type: string
         minLength: 1
+    OrganizationId:
+      name: orgId
+      in: path
+      required: true
+      schema: { type: string, minLength: 1 }
+    PolicyId:
+      name: policyId
+      in: path
+      required: true
+      schema: { type: string, minLength: 1 }
   responses:
     BadRequest:
       description: The request shape or value is invalid.

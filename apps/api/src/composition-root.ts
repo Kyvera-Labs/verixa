@@ -84,6 +84,7 @@ import {
 } from "@verixa/stellar-anchor";
 
 import { registerAuditSubscribers } from "./composition/register-audit-subscribers.js";
+import type { PolicyRouteDependencies } from "./routes/policy.js";
 
 /**
  * The composition root: the one place in the system allowed to know which
@@ -290,6 +291,8 @@ export interface Container {
   readonly credentials: CredentialUseCases;
   readonly audit: AuditUseCases;
   readonly authorization: AuthorizationRepository;
+  /** Supplied when the governance persistence/use-case layer is enabled. */
+  readonly governance?: PolicyRouteDependencies;
   readonly sessions?: SessionUseCases;
   /**
    * Drains any queued audit writes, then releases the database connection.
