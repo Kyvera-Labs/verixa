@@ -12,6 +12,7 @@ import type {
 import type { Container } from "../composition-root.js";
 import { registerAuditRoutes } from "../routes/audit.js";
 import { registerAuthRoutes } from "../routes/auth.js";
+import { registerOrganizationRoutes } from "../routes/organizations.js";
 import { registerVerificationRoutes } from "../routes/verification.js";
 
 /**
@@ -44,6 +45,7 @@ export function registerContextRoutes<TLogger extends FastifyBaseLogger>(
       prefix: "/admin",
       plugin: (scope) => {
         registerAdminAuthorizationRoutes(scope, container.authorization);
+        registerOrganizationRoutes(scope, container);
       },
     },
     {

@@ -107,4 +107,25 @@ export class Organization {
   static reconstitute(props: OrganizationProps): Organization {
     return new Organization(props);
   }
+
+  update(params: { name?: string; slug?: string }): Result<Organization, ValidationError> {
+    const candidate = Organization.create({
+      name: params.name ?? this.name,
+      slug: params.slug ?? this.slug,
+      ownerId: this.ownerId,
+    });
+    if (Result.isErr(candidate)) {
+      return candidate;
+    }
+
+    return Result.ok(
+      new Organization({
+        ...candidate.value,
+        id: this.id,
+        status: this.status,
+        createdAt: this.createdAt,
+        updatedAt: new Date(),
+      }),
+    );
+  }
 }
