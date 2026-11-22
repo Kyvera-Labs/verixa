@@ -218,6 +218,21 @@ export function registerVerificationRoutes<TLogger extends FastifyBaseLogger>(
       status: newStatus,
     });
   });
+
+  // Governance administration routes
+  fastify.get("/governance/policies", async (_req, reply) => {
+    return reply.send({
+      policies: [],
+      total: 0,
+    });
+  });
+
+  fastify.post("/governance/actions", async (req, reply) => {
+    return reply.status(201).send({
+      actionId: "gov_act_mock_123",
+      status: "queued",
+    });
+  });
 }
 
 async function getStreamSize(stream: NodeJS.ReadableStream): Promise<number> {
