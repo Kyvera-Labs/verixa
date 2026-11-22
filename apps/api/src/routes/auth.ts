@@ -76,6 +76,22 @@ const resetPasswordBodyZodSchema = z
   .strict();
 type ResetPasswordBody = z.infer<typeof resetPasswordBodyZodSchema>;
 
+const webauthnRegisterBodyZodSchema = z
+  .object({
+    userId: z.string(),
+    credential: z.record(z.unknown()),
+  })
+  .strict();
+type WebauthnRegisterBody = z.infer<typeof webauthnRegisterBodyZodSchema>;
+
+const webauthnVerifyBodyZodSchema = z
+  .object({
+    userId: z.string(),
+    assertion: z.record(z.unknown()),
+  })
+  .strict();
+type WebauthnVerifyBody = z.infer<typeof webauthnVerifyBodyZodSchema>;
+
 /**
  * Authentication routes.
  *
@@ -118,6 +134,16 @@ export function registerAuthRoutes<TLogger extends FastifyBaseLogger>(
     app,
     "ResetPasswordBody",
     resetPasswordBodyZodSchema,
+  );
+  const webauthnRegisterBodySchema = registerZodSchema(
+    app,
+    "WebauthnRegisterBody",
+    webauthnRegisterBodyZodSchema,
+  );
+  const webauthnVerifyBodySchema = registerZodSchema(
+    app,
+    "WebauthnVerifyBody",
+    webauthnVerifyBodyZodSchema,
   );
 
   app.post<{ Body: RegisterBody }>(
@@ -433,6 +459,58 @@ export function registerAuthRoutes<TLogger extends FastifyBaseLogger>(
             email: user.email.value,
           },
         });
+      } catch (error) {
+        sendError(reply, error);
+      }
+    },
+  );
+
+  app.post<{ Body: WebauthnRegisterBody }>(
+    "/mfa/webauthn/register",
+    { schema: { body: webauthnRegisterBodySchema } },
+    async (request, reply) => {
+      try {
+        if (!container.mfa?.registerWebAuthnCredential) {
+          sendApiError(reply, "NOT_IMPLEMENTED", "MFA is not enabled.");
+          return;
+        }
+
+        const result = await container.mfa.registerWebAuthnCredential.execute(
+          request.body as unknown as Parameters<typeof container.mfa.registerWebAuthnCredential.execute>[0],
+        );
+
+        if (Result.isErr(result)) {
+          sendDomainError(reply, result.error);
+          return;
+        }
+
+        await reply.status(200).send({ status: "ok", value: result.value });
+      } catch (error) {
+        sendError(reply, error);
+      }
+    },
+  );
+
+  app.post<{ Body: WebauthnVerifyBody }>(
+    "/mfa/webauthn/verify",
+    { schema: { body: webauthnVerifyBodySchema } },
+    async (request, reply) => {
+      try {
+        if (!container.mfa?.verifyWebAuthnAssertion) {
+          sendApiError(reply, "NOT_IMPLEMENTED", "MFA is not enabled.");
+          return;
+        }
+
+        const result = await container.mfa.verifyWebAuthnAssertion.execute(
+          request.body as unknown as Parameters<typeof container.mfa.verifyWebAuthnAssertion.execute>[0],
+        );
+
+        if (Result.isErr(result)) {
+          sendDomainError(reply, result.error);
+          return;
+        }
+
+        await reply.status(200).send({ status: "ok", value: result.value });
       } catch (error) {
         sendError(reply, error);
       }
