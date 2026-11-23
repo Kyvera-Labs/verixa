@@ -19,7 +19,7 @@ allowBuilds:
   esbuild: true
   prisma: true
   unrs-resolver: true
-  # Transitive deps of @testcontainers/postgresql (Issue 047), all denied.
+  # Transitive deps of Testcontainers (Issues 047/405), all denied.
   # cpu-features and ssh2 matter only for Docker-over-SSH connections, and we
   # connect over the local socket; protobufjs's build step precompiles
   # definitions it also resolves fine at runtime. Recorded explicitly so
@@ -67,6 +67,11 @@ overrides:
   # Transitive via prisma's own @prisma/config dependency (build-time CLI
   # tooling, not shipped to production), so an override is the only lever.
   deepmerge-ts: ">=8.0.0"
+  # effect <=3.22.0: ReDoS in Schema.TemplateLiteral's compiled regex
+  # (GHSA-7589-6fvf-x4pw, high), fixed in 3.22.1. Transitive via prisma's
+  # @prisma/config, which pins effect exactly, so an override is the only
+  # lever. Constrained to the 3.x line, same reasoning as nanoid above.
+  effect: "^3.22.1"
   # vite <=6.4.2: server.fs.deny bypass via a Windows alternate-data-stream
   # path. Transitive via vitest's own vite dependency; vitest 3.2.6+ accepts
   # vite ^5 || ^6, and pnpm was resolving the ^5 branch, which this advisory

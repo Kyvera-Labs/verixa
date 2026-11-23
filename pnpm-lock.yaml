@@ -12,6 +12,7 @@ overrides:
   qs: '>=6.16.0'
   axios: ^1.20.0
   deepmerge-ts: '>=8.0.0'
+  effect: ^3.22.1
   vite: ^6.4.4
   undici: ^8.12.2
   tinypool: ^2.1.2
@@ -392,6 +393,31 @@ importers:
       '@types/node':
         specifier: ^22.10.0
         version: 22.20.4
+      '@verixa/testing-kit':
+        specifier: workspace:*
+        version: link:../testing-kit
+      '@vitest/coverage-v8':
+        specifier: ^3.2.6
+        version: 3.2.7(supports-color@7.2.0)(vitest@3.2.7(@types/node@22.20.4)(jiti@2.7.0)(lightningcss@1.33.0)(supports-color@7.2.0)(tsx@4.23.15)(yaml@2.9.1))
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.6
+        version: 3.2.7(@types/node@22.20.4)(jiti@2.7.0)(lightningcss@1.33.0)(supports-color@7.2.0)(tsx@4.23.15)(yaml@2.9.1)
+
+  packages/rate-limiting:
+    dependencies:
+      '@verixa/shared-kernel':
+        specifier: workspace:*
+        version: link:../shared-kernel
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.20.4
+      '@verixa/testing-kit':
+        specifier: workspace:*
+        version: link:../testing-kit
       '@vitest/coverage-v8':
         specifier: ^3.2.6
         version: 3.2.7(supports-color@7.2.0)(vitest@3.2.7(@types/node@22.20.4)(jiti@2.7.0)(lightningcss@1.33.0)(supports-color@7.2.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -477,6 +503,52 @@ importers:
         specifier: ^3.2.6
         version: 3.2.7(@types/node@22.20.4)(jiti@2.7.0)(lightningcss@1.33.0)(supports-color@7.2.0)(tsx@4.23.15)(yaml@2.9.1)
 
+  packages/testing-kit:
+    dependencies:
+      '@verixa/audit':
+        specifier: workspace:*
+        version: link:../audit
+      '@verixa/authorization':
+        specifier: workspace:*
+        version: link:../authorization
+      '@verixa/credentials':
+        specifier: workspace:*
+        version: link:../credentials
+      '@verixa/database':
+        specifier: workspace:*
+        version: link:../database
+      '@verixa/identity':
+        specifier: workspace:*
+        version: link:../identity
+      '@verixa/mfa':
+        specifier: workspace:*
+        version: link:../mfa
+      '@verixa/sessions':
+        specifier: workspace:*
+        version: link:../sessions
+      '@verixa/shared-kernel':
+        specifier: workspace:*
+        version: link:../shared-kernel
+      '@verixa/stellar-anchor':
+        specifier: workspace:*
+        version: file:packages/stellar-anchor(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)
+      '@verixa/verification':
+        specifier: workspace:*
+        version: link:../verification
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.20.4
+      '@vitest/coverage-v8':
+        specifier: ^3.2.6
+        version: 3.2.7(supports-color@7.2.0)(vitest@3.2.7(@types/node@22.20.4)(jiti@2.7.0)(lightningcss@1.33.0)(supports-color@7.2.0)(tsx@4.23.15)(yaml@2.9.1))
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.6
+        version: 3.2.7(@types/node@22.20.4)(jiti@2.7.0)(lightningcss@1.33.0)(supports-color@7.2.0)(tsx@4.23.15)(yaml@2.9.1)
+
   packages/verification:
     dependencies:
       '@verixa/database':
@@ -501,6 +573,9 @@ importers:
 
   tests:
     devDependencies:
+      '@testcontainers/postgresql':
+        specifier: ^12.1.0
+        version: 12.2.0(supports-color@7.2.0)
       '@types/node':
         specifier: ^22.10.0
         version: 22.20.4
@@ -513,6 +588,12 @@ importers:
       '@verixa/audit':
         specifier: workspace:*
         version: link:../packages/audit
+      '@verixa/config':
+        specifier: workspace:*
+        version: link:../packages/config
+      '@verixa/authorization':
+        specifier: workspace:*
+        version: link:../packages/authorization
       '@verixa/credentials':
         specifier: workspace:*
         version: link:../packages/credentials
@@ -522,15 +603,24 @@ importers:
       '@verixa/identity':
         specifier: workspace:*
         version: link:../packages/identity
+      '@verixa/sessions':
+        specifier: workspace:*
+        version: link:../packages/sessions
       '@verixa/shared-kernel':
         specifier: workspace:*
         version: link:../packages/shared-kernel
+      '@verixa/testing-kit':
+        specifier: workspace:*
+        version: link:../packages/testing-kit
       '@vitest/coverage-v8':
         specifier: ^3.2.6
         version: 3.2.7(supports-color@7.2.0)(vitest@3.2.7(@types/node@22.20.4)(jiti@2.7.0)(lightningcss@1.33.0)(supports-color@7.2.0)(tsx@4.23.15)(yaml@2.9.1))
       supertest:
         specifier: ^7.0.0
         version: 7.3.0(supports-color@7.2.0)
+      testcontainers:
+        specifier: ^12.2.0
+        version: 12.2.0(supports-color@7.2.0)
       typescript:
         specifier: ^5.7.2
         version: 5.9.3
@@ -2629,8 +2719,8 @@ packages:
   eastasianwidth@0.2.0:
     resolution: {integrity: sha512-I88TYZWc9XiYHRQ4/3c5rjjfgkjhLyW2luGIheGERbNQ6OY7yTybanSpDXZa8y7VUP9YmDcYa+eyq4ca7iLqWA==}
 
-  effect@3.21.0:
-    resolution: {integrity: sha512-PPN80qRokCd1f015IANNhrwOnLO7GrrMQfk4/lnZRE/8j7UPWrNNjPV0uBrZutI/nHzernbW+J0hdqQysHiSnQ==}
+  effect@3.22.4:
+    resolution: {integrity: sha512-RNshu7AXVxxDh6aS4lothhJ+QoZ4xSykbWNaaVdvDN72RMyVwhCGdALkyl1TbEydgAmRIdD1eTyJqBUGwSBGDA==}
 
   electron-to-chromium@1.5.491:
     resolution: {integrity: sha512-zMOQrvaTekJMwENqx1Rnyl3qieqGxIui5CRu9g6ktKzQ/T54fq0Qfr3V/SEhGrkStWI3eYMSzMN4rbyFwfQSzA==}
@@ -5297,7 +5387,7 @@ snapshots:
     dependencies:
       c12: 3.1.0(magicast@0.3.5)
       deepmerge-ts: 8.0.2
-      effect: 3.21.0
+      effect: 3.22.4
       empathic: 2.0.0
     transitivePeerDependencies:
       - magicast
@@ -6302,7 +6392,7 @@ snapshots:
 
   eastasianwidth@0.2.0: {}
 
-  effect@3.21.0:
+  effect@3.22.4:
     dependencies:
       '@standard-schema/spec': 1.1.0
       fast-check: 3.23.2

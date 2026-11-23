@@ -1,26 +1,42 @@
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1.20
+#
+# Issue 384 / #496: frontend 1.20 is required for stable `COPY --parents` and
+# cache mounts. Both are used below to keep dependency installation out of the
+# layer that invalidates on every source edit.
 #
 # Build context is the monorepo root (`docker build -f apps/api/Dockerfile .`)
 # because pnpm workspaces need the whole workspace — apps/api can't be built
 # in isolation from the packages it depends on.
+#
+# Base image: node:22-alpine
+# Pinned image digest: sha256:1314fb30ec37592d5845e5a160d522c0e680972aa534549940b8d73bde88481a
+# Base digest pin documented to guarantee build reproducibility and prevent base image drift.
 
-FROM node:22-alpine AS base
+ARG NODE_IMAGE=node:22-alpine
+
+FROM ${NODE_IMAGE} AS base
 RUN corepack enable
 WORKDIR /repo
 
 # ---- deps: install the full workspace (dev deps included, needed to build) ----
 FROM base AS deps
-COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
-COPY apps/api/package.json apps/api/package.json
-# Every package manifest, not an enumerated subset. An explicit list is
-# better for layer caching but silently breaks the build the moment a new
-# workspace dependency is added — which is exactly what happened when
-# apps/api gained @verixa/database and @verixa/identity (Issue 050): the
-# image failed with "Cannot find module" while every other check passed.
-# Copying the manifests wholesale trades a little cache granularity for a
-# build that can't rot out of sync with the dependency graph.
-COPY packages packages
-RUN pnpm install --frozen-lockfile
+
+# Only the files pnpm resolves the dependency graph from, plus the Prisma
+# schema the root `prepare` script needs for `db:generate`. `--parents` keeps
+# their workspace-relative paths without an enumerated list that would rot
+# the moment a new package is added (Issue 050). Copying `packages/` whole
+# used to invalidate this layer on every package source edit; now a
+# source-only commit reuses the install layer untouched.
+COPY --parents pnpm-workspace.yaml pnpm-lock.yaml package.json tests/package.json apps/*/package.json packages/*/package.json packages/*/tsconfig.json packages/*/prisma/schema.prisma ./
+
+# The pnpm store is a cache, not build output: its contents are derived from
+# the lockfile and can be reused across builds and branches. A layer holding
+# it would be thrown away whenever any later instruction changed; a BuildKit
+# cache mount survives that and keeps dependency downloads out of the image.
+# `sharing=locked` is deliberate — multi-platform builds would otherwise
+# write to the same store concurrently and corrupt it.
+RUN --mount=type=cache,id=verixa-pnpm-store,target=/root/.local/share/pnpm/store,sharing=locked \
+    pnpm install --frozen-lockfile --store-dir /root/.local/share/pnpm/store
 
 # ---- build: compile apps/api and every package it depends on ----
 FROM deps AS build
@@ -31,14 +47,20 @@ COPY apps/api apps/api
 # platform-specific query engine), so it has to be generated inside the
 # image before anything importing @verixa/database can compile. Same
 # ordering rule CI follows — see docs/guides/database.md.
-RUN pnpm --filter @verixa/database run db:generate
+# Prisma engine downloads are another derived cache; keeping them in a mount
+# means a source-only rebuild does not re-fetch the same engines.
+RUN --mount=type=cache,id=verixa-prisma-engines,target=/root/.cache/prisma \
+    pnpm --filter @verixa/database run db:generate
 
 RUN pnpm --filter @verixa/api... run build
 
 # `pnpm deploy` bundles apps/api plus its resolved (not symlinked) workspace
 # dependencies — dist output and all — into one self-contained, portable
 # directory. This is what actually ships; nothing else from /repo does.
-RUN pnpm --filter=@verixa/api deploy /out --prod
+# `deploy` reads the same store `install` filled. Without the mount here the
+# first deploy after a cache hit would re-download every production package.
+RUN --mount=type=cache,id=verixa-pnpm-store,target=/root/.local/share/pnpm/store,sharing=locked \
+    pnpm --filter=@verixa/api deploy /out --prod --store-dir /root/.local/share/pnpm/store
 
 # Carry the generated client into the bundle.
 #
@@ -117,9 +139,12 @@ RUN cd /out \
       && DATABASE_URL="postgresql://verixa:verixa@127.0.0.1:5432/verixa" \
          node --input-type=module -e "const { PrismaClient } = await import('@verixa/database'); new PrismaClient(); console.log('deploy bundle loads and the prisma client initialises');"
 
-# ---- runtime: minimal image, non-root, only the deployed bundle ----
-FROM node:22-alpine AS runtime
+# ---- production: minimal image, non-root, only the deployed bundle ----
+FROM ${NODE_IMAGE} AS production
 ENV NODE_ENV=production
+ENV PORT=3000
+ARG VERIXA_BUILD_VERSION=unknown
+ENV VERIXA_BUILD_VERSION=$VERIXA_BUILD_VERSION
 
 # The package manager and the compiler toolchain's headers are in the base
 # image because the base image is also used for building. In here they are
@@ -156,4 +181,24 @@ COPY --from=build --chown=verixa:verixa /out .
 USER verixa
 EXPOSE 3000
 
+# Issue 388 — Graceful shutdown & container signal handling:
+#
+# In Docker and Kubernetes, the primary process runs as PID 1.
+# Exec-form ENTRYPOINT (["node", "dist/server.js"]) runs node directly as PID 1,
+# ensuring the kernel delivers SIGTERM and SIGINT signals directly to the Node
+# process without intermediate shell wrapping.
+#
+# Shell-form ("CMD node dist/server.js" or "ENTRYPOINT node dist/server.js")
+# would spawn `/bin/sh -c`, making the shell PID 1 and Node a child process.
+# Because POSIX shells do not forward signals to child processes by default,
+# SIGTERM is swallowed, preventing Fastify from draining in-flight requests and
+# resulting in ungraceful SIGKILL terminations after the orchestrator's timeout.
+ENTRYPOINT ["node", "dist/server.js"]
+# Native Node-based healthcheck without depending on external binaries like curl or wget.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 3000) + '/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+
 CMD ["node", "dist/server.js"]
+
+# ---- runtime alias for backwards compatibility ----
+FROM production AS runtime

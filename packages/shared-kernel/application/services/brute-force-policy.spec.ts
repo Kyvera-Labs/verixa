@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { InMemoryBruteForceAttemptStore } from "../../infrastructure/in-memory-brute-force-attempt-store.js";
 import type { RateLimiter, RateLimitResult } from "../ports/rate-limiter.js";
@@ -8,7 +9,7 @@ import { BruteForcePolicy, DEFAULT_BRUTE_FORCE_THRESHOLDS } from "./brute-force-
 /**
  * A 60s window for most of these tests: long enough that nothing here has to
  * sleep, short enough that the arithmetic is legible. The one test that needs
- * time to pass uses a 1ms window and waits it out.
+ * time to pass freezes the clock and moves it by hand.
  */
 function policyWith(overrides: Partial<typeof DEFAULT_BRUTE_FORCE_THRESHOLDS> = {}) {
   const store = new InMemoryBruteForceAttemptStore();
@@ -158,19 +159,30 @@ describe("thresholds and backoff", () => {
 
 describe("windows and resetting", () => {
   it("forgets the counter once the window has elapsed", async () => {
-    const { store, policy } = policyWith({ threshold: 2, baseDurationMs: 1 });
-    const identifier = "d@example.com";
+    // The clock is frozen and moved by hand. This used a real 1ms lockout and
+    // a 5ms sleep, so a CI runner that took over a millisecond between the
+    // second failure and the first check saw the lock already expired and
+    // failed the "still locked" assertion.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const { store, policy } = policyWith({ threshold: 2, baseDurationMs: 1_000 });
+      const identifier = "d@example.com";
 
-    await policy.recordFailure("login", identifier);
-    await policy.recordFailure("login", identifier);
-    expect((await policy.check("login", identifier)).allowed).toBe(false);
+      await policy.recordFailure("login", identifier);
+      await policy.recordFailure("login", identifier);
+      expect((await policy.check("login", identifier)).allowed).toBe(false);
 
-    await new Promise((resolve) => setTimeout(resolve, 5));
+      vi.setSystemTime(Date.now() + 999);
+      expect((await policy.check("login", identifier)).allowed).toBe(false);
 
-    expect((await policy.check("login", identifier)).allowed).toBe(true);
-    // Cleared, not merely expired: the next failure is a first failure again,
-    // so the threshold counts a run rather than a lifetime total.
-    expect((await store.read(BruteForcePolicy.key("login", identifier))).failedAttempts).toBe(0);
+      vi.setSystemTime(Date.now() + 1);
+      expect((await policy.check("login", identifier)).allowed).toBe(true);
+      // Cleared, not merely expired: the next failure is a first failure again,
+      // so the threshold counts a run rather than a lifetime total.
+      expect((await store.read(BruteForcePolicy.key("login", identifier))).failedAttempts).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("clears the budget on a successful attempt", async () => {

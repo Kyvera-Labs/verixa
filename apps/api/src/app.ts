@@ -170,6 +170,10 @@ export function buildApp(options: BuildAppOptions = {}) {
     return { status: "ok" };
   });
 
+  // Kept separate from liveness so deployments can verify which immutable
+  // image is serving traffic without making health probes depend on metadata.
+  app.get("/version", () => ({ version: process.env["VERIXA_BUILD_VERSION"] ?? "unknown" }));
+
   // Registered outside the container check for the same reason `/health` is:
   // the disclosure channel describes the software, not a tenant's data, and a
   // researcher's scanner should find it on a process that has no database.

@@ -47,6 +47,7 @@ export default mergeConfig(
       },
     },
     test: {
+      exclude: ["e2e/**", "**/node_modules/**", "**/dist/**"],
       name: "@verixa/integration-tests",
 
       // The CI-tooling specs run under `vitest.ci.config.ts` instead, with

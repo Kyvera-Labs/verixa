@@ -46,3 +46,25 @@ describe("GET /health", () => {
     expect(response.body).toEqual({ status: "ok" });
   });
 });
+
+describe("GET /version", () => {
+  const app = buildApp();
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it("returns the build version supplied by the deployment", async () => {
+    const previous = process.env["VERIXA_BUILD_VERSION"];
+    process.env["VERIXA_BUILD_VERSION"] = "ci-smoke-a";
+    try {
+      await app.ready();
+      const response = await supertest(app.server).get("/version");
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({ version: "ci-smoke-a" });
+    } finally {
+      if (previous === undefined) delete process.env["VERIXA_BUILD_VERSION"];
+      else process.env["VERIXA_BUILD_VERSION"] = previous;
+    }
+  });
+});

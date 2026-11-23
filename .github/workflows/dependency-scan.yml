@@ -81,11 +81,31 @@ jobs:
       - name: Capture the production audit report
         run: pnpm audit --prod --json > dependency-audit.json || true
 
+      # On a pull request, the same audit of the target branch is the
+      # baseline: findings already there were not introduced by the pull
+      # request and are reported without failing it. Pushes to main and the
+      # nightly run have no baseline, so a pre-existing finding still fails
+      # where it can be fixed. The baseline comes from origin, not from the
+      # pull request, and `pnpm audit` needs no install to read it.
+      - name: Capture the base branch's production audit report
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -eu
+          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          git worktree add --detach "$RUNNER_TEMP/base" FETCH_HEAD
+          (cd "$RUNNER_TEMP/base" && pnpm audit --prod --json) > base-dependency-audit.json || true
+
       - name: Fail on unexcepted high or critical advisories
-        run: >
-          node infra/ci/dependency-scan.mjs
-          --audit dependency-audit.json
-          --exceptions infra/ci/security-exceptions.json
+        env:
+          BASELINE: ${{ github.event_name == 'pull_request' && 'base-dependency-audit.json' || '' }}
+        run: |
+          set -eu
+          node infra/ci/dependency-scan.mjs \
+            --audit dependency-audit.json \
+            --exceptions infra/ci/security-exceptions.json \
+            ${BASELINE:+--baseline "$BASELINE"}
 
       # Kept even when the gate passes: the report is the evidence for what the
       # job looked at, and a nightly run whose artifact is missing cannot be

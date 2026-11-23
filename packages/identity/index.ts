@@ -96,6 +96,7 @@ export { withTenantContext } from "./infrastructure/persistence/prisma-tenant-co
 export { InMemoryUserRepository } from "./infrastructure/testing/in-memory-user-repository.js";
 export { InMemoryOrganizationRepository } from "./infrastructure/testing/in-memory-organization-repository.js";
 export { InMemoryOrganizationMembershipRepository } from "./infrastructure/testing/in-memory-organization-membership-repository.js";
+export { InMemoryInvitationRepository } from "./infrastructure/testing/in-memory-invitation-repository.js";
 export { InMemoryUnitOfWork } from "./infrastructure/testing/in-memory-unit-of-work.js";
 
 // ApiKey exports

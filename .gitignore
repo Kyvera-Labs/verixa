@@ -14,6 +14,7 @@ build/
 .env
 .env.*
 !.env.example
+!.env.*.example
 
 # Logs
 logs/
@@ -42,6 +43,14 @@ Thumbs.db
 
 # Docker
 *.pid
+
+# Edge TLS material. The CI smoke job writes a throwaway self-signed pair
+# here; production certificates are issued on the host and must never be
+# committed either. The directory itself stays tracked via its .gitkeep.
+infra/nginx/certs/*.pem
+infra/nginx/certs/*.key
+infra/nginx/certbot/*
+!infra/nginx/certbot/.gitkeep
 
 # Claude Code local state
 .claude/
