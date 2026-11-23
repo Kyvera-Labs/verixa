@@ -35,7 +35,10 @@
     "check:lockfile": "node infra/ci/check-lockfile-integrity.mjs",
     "check:malware": "node infra/ci/check-malware-indicators.mjs",
     "sbom:generate": "tsx infra/ci/generate-sbom.ts",
-    "typecheck:ci": "tsc -p infra/ci/tsconfig.json --noEmit"
+    "typecheck:ci": "tsc -p infra/ci/tsconfig.json --noEmit",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs"
   },
   "lint-staged": {
     "*.{ts,tsx}": [
@@ -65,6 +68,7 @@
     "tsx": "^4.23.15",
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.18.1",
+    "vitepress": "^1.6.4",
     "yaml": "^2.9.1"
   }
 }

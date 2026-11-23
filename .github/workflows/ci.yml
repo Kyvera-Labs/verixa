@@ -638,3 +638,78 @@ jobs:
       - name: Stop rollback drill container
         if: always()
         run: docker rm -f verixa-api-drill || true
+
+  # Docs-as-code (Issue 422): the VitePress site under docs/ is built on every
+  # push, so a broken docs link fails CI the same way a broken import does.
+  #
+  # `ignoreDeadLinks` is off in docs/.vitepress/config.ts, so a link to a page
+  # that doesn't exist fails the build. That's what makes this a check rather
+  # than a formality: without it, renaming a doc would quietly break every page
+  # linking to it, and the docs would drift from the code in exactly the way
+  # docs-as-code exists to prevent. Tutorials also import code regions from
+  # real test files (`<<< @/...#region`), so a renamed region fails here too.
+  #
+  # Needs no workspace build or database: the site reads Markdown and source
+  # files, never compiled output. The static site is uploaded so a reviewer
+  # can open the rendered docs for a PR without running anything locally.
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The site config is TypeScript but belongs to no workspace package, so
+      # `pnpm typecheck` (recursive over packages) never sees it.
+      - name: Typecheck the docs site config
+        run: pnpm exec tsc -p docs/.vitepress/tsconfig.json
+
+      - name: Build the docs site
+        run: pnpm docs:build
+
+      - name: Upload the built docs site
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-site-${{ github.run_number }}
+          path: docs/.vitepress/dist/
+          retention-days: 14
+
+  # README quickstart smoke test (Issue 421). Runs the quickstart a newcomer
+  # follows (install, Postgres from docker-compose.yml, migrations, `pnpm dev`)
+  # and then one real auth flow, register then log in, failing on any non-2xx.
+  #
+  # The steps live in scripts/quickstart-smoke.sh, not inline here, so a person
+  # can run exactly what CI runs; the script also fails if README.md stops
+  # showing any command it runs, which is what keeps the two from drifting. A
+  # README whose first command is broken costs every first-time visitor, and
+  # nothing else in this pipeline would notice: the `ci` job uses a service
+  # container and builds before it tests, which is not what the README says.
+  #
+  # Deliberately no `pnpm build` beforehand. Starting from a fresh checkout is
+  # the point.
+  quickstart:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Run the README quickstart and one auth flow
+        run: bash scripts/quickstart-smoke.sh
+
+      - name: Stop the compose stack
+        if: always()
+        run: docker compose down -v
