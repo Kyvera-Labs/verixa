@@ -585,6 +585,12 @@ importers:
       '@verixa/audit':
         specifier: workspace:*
         version: link:../packages/audit
+      '@verixa/config':
+        specifier: workspace:*
+        version: link:../packages/config
+      '@verixa/authorization':
+        specifier: workspace:*
+        version: link:../packages/authorization
       '@verixa/credentials':
         specifier: workspace:*
         version: link:../packages/credentials
@@ -594,6 +600,9 @@ importers:
       '@verixa/identity':
         specifier: workspace:*
         version: link:../packages/identity
+      '@verixa/sessions':
+        specifier: workspace:*
+        version: link:../packages/sessions
       '@verixa/shared-kernel':
         specifier: workspace:*
         version: link:../packages/shared-kernel

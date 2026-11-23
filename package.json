@@ -34,6 +34,8 @@
     "audit:verify-chain": "pnpm --filter @verixa/audit^... run build && pnpm --filter @verixa/audit run verify-chain",
     "check:lockfile": "node infra/ci/check-lockfile-integrity.mjs",
     "check:malware": "node infra/ci/check-malware-indicators.mjs",
+    "check:env-matrix": "tsx infra/ci/check-env-matrix.ts",
+    "check:migration-safety": "tsx infra/ci/check-migration-safety.ts",
     "sbom:generate": "tsx infra/ci/generate-sbom.ts",
     "typecheck:ci": "tsc -p infra/ci/tsconfig.json --noEmit",
     "docs:dev": "vitepress dev docs",

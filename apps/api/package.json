@@ -14,6 +14,10 @@
     "./composition-root": {
       "types": "./dist/composition-root.d.ts",
       "default": "./dist/composition-root.js"
+    },
+    "./shutdown": {
+      "types": "./dist/shutdown.d.ts",
+      "default": "./dist/shutdown.js"
     }
   },
   "scripts": {

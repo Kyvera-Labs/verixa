@@ -59,6 +59,17 @@ import {
   WebAuthnAttestationVerifier,
 } from "@verixa/mfa";
 import {
+  InMemoryRevocationList,
+  InMemorySessionAuditLogger,
+  IssueSession,
+  JwtTokenSigner,
+  Logout,
+  PrismaSessionRepository,
+  RefreshAccessToken,
+  SessionExpiryPolicy,
+  SigningKeyProvider,
+} from "@verixa/sessions";
+import {
   BruteForcePolicy,
   InMemoryBruteForceAttemptStore,
   InMemoryEventPublisher,
@@ -265,6 +276,13 @@ export interface MfaUseCases {
   readonly verifyWebAuthnAssertion: VerifyWebAuthnAssertion;
 }
 
+/** Session authentication use cases. */
+export interface SessionUseCases {
+  readonly issueSession: IssueSession;
+  readonly refreshAccessToken: RefreshAccessToken;
+  readonly logout: Logout;
+}
+
 export interface Container {
   readonly prisma: PrismaClient;
   readonly eventPublisher: DomainEventPublisher;
@@ -272,6 +290,7 @@ export interface Container {
   readonly credentials: CredentialUseCases;
   readonly audit: AuditUseCases;
   readonly authorization: AuthorizationRepository;
+  readonly sessions?: SessionUseCases;
   /**
    * Drains any queued audit writes, then releases the database connection.
    * Call on shutdown.
@@ -529,6 +548,34 @@ export function buildContainer(
           : undefined),
     },
     authorization,
+    sessions: {
+      issueSession: new IssueSession(
+        new PrismaSessionRepository(prisma),
+        new JwtTokenSigner(
+          new SigningKeyProvider({
+            secret:
+              process.env["SESSION_ACCESS_TOKEN_SECRET"] ??
+              "verixa-development-secret-key-at-least-32-chars-long",
+          }),
+        ),
+        SessionExpiryPolicy.default(),
+        new InMemoryRevocationList(),
+        new InMemorySessionAuditLogger(),
+      ),
+      refreshAccessToken: new RefreshAccessToken(
+        new PrismaSessionRepository(prisma),
+        new JwtTokenSigner(
+          new SigningKeyProvider({
+            secret:
+              process.env["SESSION_ACCESS_TOKEN_SECRET"] ??
+              "verixa-development-secret-key-at-least-32-chars-long",
+          }),
+        ),
+        new InMemoryRevocationList(),
+        SessionExpiryPolicy.default(),
+      ),
+      logout: new Logout(new PrismaSessionRepository(prisma), new InMemoryRevocationList()),
+    },
     mfa: {
       registerWebAuthnCredential,
       verifyWebAuthnAssertion,

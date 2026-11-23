@@ -49,6 +49,47 @@ Trivy gate in `.github/workflows/container-scan.yml` blocks on, and the
 measured size and contents of the final image. This file stays about how to
 build and run it.
 
+## Build cache
+
+Dependency installation is the expensive part of this build, and it depends on
+manifests, not on application source. The `deps` stage therefore copies only
+`package.json` files, the lockfile, the workspace file and the Prisma schema
+with `COPY --parents`. `--parents` preserves their paths without an enumerated
+list of packages (which silently went stale when a new workspace was added),
+while avoiding the old `COPY packages packages`, whose source files
+invalidated the install layer on every edit.
+
+The pnpm store and Prisma engine downloads live in BuildKit cache mounts
+(`--mount=type=cache`) rather than in layers. A layer is tied to the
+instruction that produced it and is discarded as soon as a later layer
+changes; a cache mount is keyed by its ID and survives those changes. The
+store uses `sharing=locked` because multi-platform builds would otherwise
+write to it concurrently. Both `pnpm install` and `pnpm deploy` point at the
+same store directory so a cached install is not followed by a fresh download
+during deployment bundling.
+
+We rejected simply exporting the installed `node_modules` as an image layer:
+it would be rebuilt from scratch whenever any later instruction changed, and
+it would put build-only files into an image whose runtime stage deletes them
+anyway.
+
+The publish workflow imports and exports a registry-backed BuildKit cache
+(`type=gha`, `mode=max`) scoped to the API image. Runner-local caches vanish
+between pushes; the registry cache does not. `mode=max` exports intermediate
+stages, which is what lets a commit that only touched `apps/api/src/` reuse
+the install stage instead of merely reusing the final image.
+
+`infra/ci/docker-cache-check.mjs` guards both halves:
+
+- `dependencyFingerprint` hashes only the paths the `deps` stage copies. A
+  source edit leaves it unchanged; a manifest edit changes it. If someone
+  adds a whole-source `COPY` back into `deps`, the plan changes too.
+- the `cache-verification` job in `.github/workflows/docker-publish.yml`
+  measures a cold build, a source-only rebuild and a manifest-change rebuild,
+  parses BuildKit's plain progress log to assert that `pnpm install` was
+  `CACHED` for source-only and rebuilt after the manifest change, and fails if
+  either rebuild takes more than 75% of the cold build.
+
 ## Why the container doesn't run as root
 
 The runtime stage creates and switches to an unprivileged `verixa` user
@@ -160,3 +201,165 @@ this stage) — until then, verify manually after changing
 (Application code doesn't talk to Postgres/Redis yet — that starts in Phase
 03 and Phase 05 — so "connects successfully to both" is verified at the
 network level for now, via `nc`, not through app behavior.)
+
+## Production build (`apps/api`)
+
+The production build targets `production` in `apps/api/Dockerfile`:
+
+```bash
+docker build -f apps/api/Dockerfile --target production -t verixa-api:prod .
+```
+
+### Pinned base image digest
+
+The Dockerfile pins the exact SHA256 digest of the base Alpine image:
+
+```dockerfile
+# Pinned image digest for node:22-alpine:
+# sha256:1314fb30ec37592d5845e5a160d522c0e680972aa534549940b8d73bde88481a
+ARG NODE_IMAGE=node:22-alpine
+
+FROM ${NODE_IMAGE} AS base
+```
+
+#### Why digest pinning matters
+
+Docker tags like `node:22-alpine` or even `node:22.13.1-alpine3.21` are mutable references: upstream maintainers routinely rebuild and push new layers under existing tags to patch vulnerabilities or update underlying OS packages. While well-intentioned, this means builds run at different points in time against the exact same commit can pull different underlying binaries.
+
+Pinning by cryptographic hash (`@sha256:...`) ensures:
+
+1. **Bit-for-bit reproducibility:** every CI runner and production deployment builds on the exact same root filesystem layers.
+2. **Supply-chain defense:** upstream registry compromise or unintentional tag overwrite cannot inject altered layers into builds.
+3. **Auditability:** CVE scanners know the exact base image layer history without ambiguity.
+
+### Pruning devDependencies with `pnpm deploy --prod`
+
+TypeScript, ESLint, Vitest, and associated dev tooling are required to build the monorepo but represent unnecessary bloat and potential security exposure in production.
+
+In stage `build`, we run:
+
+```dockerfile
+RUN pnpm --filter=@verixa/api deploy /out --prod
+RUN find /out -name "*.map" -type f -delete
+```
+
+This constructs a clean, isolated directory `/out` containing only:
+
+- The compiled runtime artifacts (`dist/`) of `apps/api` and its workspace dependencies (`@verixa/shared-kernel`, `@verixa/database`, `@verixa/identity`, etc.)
+- Only production `dependencies` resolved into a fresh, isolated `node_modules`
+- Zero devDependencies (no compiler, no test runners, no linters)
+- Stripped `.map` files (source maps are omitted to reduce final artifact size and prevent internal source layout leakage)
+
+### Built-in HEALTHCHECK
+
+The production image includes an explicit container healthcheck:
+
+```dockerfile
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 3000) + '/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+```
+
+Using Node 22's built-in `fetch` avoids relying on `curl` or `wget` (which may be omitted in distroless or ultra-minimal Alpine images). Container orchestrators (Docker Compose, Kubernetes, ECS) query this status:
+
+```bash
+docker inspect --format='{{json .State.Health.Status}}' <container-id>
+```
+
+### Image size comparison
+
+By discarding the build stage (pnpm store, dev dependencies, compilers, source files) and copying only the pruned `/out` bundle, the final `production` runtime container is measurably smaller than the dev/builder stages (typically >65% size reduction).
+
+---
+
+## Extracting a context to its own service
+
+Verixa is built as a **modular monolith** with clean bounded contexts (`packages/*`). Per `ARCHITECTURE.md` §2.6 ("Service-ready later"), the architecture ensures any context can be split into a standalone network microservice with zero changes to domain logic.
+
+To enforce and prove this boundary, `infra/docker/package.Dockerfile.template` provides a reusable parameterized multi-stage Dockerfile for packaging any package in `packages/` into a standalone service.
+
+### Reusable template (`infra/docker/package.Dockerfile.template`)
+
+The template takes three build arguments:
+
+- `PACKAGE_NAME`: the full package specifier (e.g. `@verixa/notifications`)
+- `PACKAGE_PATH`: directory path relative to workspace root (e.g. `packages/notifications`)
+- `PORT`: default listening port (e.g. `3001`)
+
+```bash
+docker build -f infra/docker/package.Dockerfile.template \
+  --build-arg PACKAGE_NAME=@verixa/notifications \
+  --build-arg PACKAGE_PATH=packages/notifications \
+  --build-arg PORT=3001 \
+  -t verixa-notifications:latest .
+```
+
+### Pilot implementation: `packages/notifications`
+
+`packages/notifications/Dockerfile` implements this standalone pattern for the notifications context:
+
+1. **Self-contained build:** copies workspace manifests and builds only `@verixa/notifications` and its upstream workspace dependencies (`@verixa/shared-kernel`).
+2. **Pruned runtime:** runs `pnpm --filter=@verixa/notifications deploy /out --prod` to isolate the package into `/out`.
+3. **Dedicated port and healthcheck:** exposes port `3001` and serves `/health` from `packages/notifications/src/server.ts`.
+4. **Isolated execution:** runs as unprivileged user `verixa`.
+
+Building and running the isolated notifications service:
+
+```bash
+docker build -f packages/notifications/Dockerfile -t verixa-notifications .
+docker run -d -p 3001:3001 --name notif verixa-notifications
+curl http://localhost:3001/health
+# {"status":"ok","service":"notifications"}
+```
+
+If a package cannot compile or start in this template, that immediately surfaces a leaky abstraction or hidden circular dependency on another context.
+
+---
+
+## Multi-architecture builds (`amd64` and `arm64`)
+
+Production workloads increasingly run on ARM-based servers (such as AWS Graviton, Ampere Altra) for price-performance benefits, while developers frequently develop on Apple Silicon (M1/M2/M3) or traditional x86-64 workstations. Shipping single-architecture images causes emulation overhead or deployment failures.
+
+### Buildx Bake configuration (`infra/docker/buildx-bake.hcl`)
+
+Verixa uses Docker Buildx Bake to standardize build targets across architectures:
+
+```hcl
+group "default" {
+  targets = ["api", "notifications"]
+}
+
+target "api" {
+  context    = "."
+  dockerfile = "apps/api/Dockerfile"
+  target     = "production"
+  platforms  = [
+    "linux/amd64",
+    "linux/arm64"
+  ]
+  tags = [
+    "ghcr.io/kyvera-labs/verixa-api:latest"
+  ]
+}
+```
+
+### Local multi-arch builds
+
+To build multi-arch images locally with Buildx:
+
+```bash
+# Ensure a buildx builder is active
+docker buildx create --use --name multiarch-builder
+
+# Build both architectures concurrently using bake
+docker buildx bake -f infra/docker/buildx-bake.hcl api
+```
+
+### OCI manifest lists in CI
+
+In `.github/workflows/docker-publish.yml`, GitHub Actions runs Buildx with QEMU:
+
+1. `docker/setup-qemu-action@v3` enables emulation for non-native architectures.
+2. `docker/setup-buildx-action@v3` configures the builder.
+3. `docker/build-push-action@v5` compiles both `linux/amd64` and `linux/arm64` binaries and pushes an **OCI Image Index** (manifest list).
+
+When a client runs `docker pull ghcr.io/kyvera-labs/verixa-api:latest`, the Docker daemon inspects the manifest list and automatically downloads only the layers matching the client host's architecture.
