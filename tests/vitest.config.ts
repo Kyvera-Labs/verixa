@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
 
-import { defineConfig, mergeConfig } from "vitest/config";
+import { configDefaults, defineConfig, mergeConfig } from "vitest/config";
 
 import baseConfig from "../vitest.config.js";
 
@@ -49,6 +49,11 @@ export default mergeConfig(
     test: {
       name: "@verixa/integration-tests",
 
+      // The CI-tooling specs run under `vitest.ci.config.ts` instead, with
+      // file parallelism: they touch no database, so the serial rule below
+      // does not apply to them (Issue 415).
+      exclude: [...configDefaults.exclude, "ci/**"],
+
       /**
        * Spec files run one at a time, not in parallel.
        *
@@ -67,6 +72,10 @@ export default mergeConfig(
        * wall-clock time, and the alternative — a separate database per spec
        * file — is genuinely better but belongs with the Testcontainers work
        * rather than bolted on here. Noted rather than silently accepted.
+       *
+       * Issue 415 left this as it is on purpose: running these files in
+       * parallel needs a database per worker, which is the isolation work of
+       * Issue 408 (#520), not yet done.
        */
       fileParallelism: false,
     },

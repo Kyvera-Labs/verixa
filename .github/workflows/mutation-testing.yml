@@ -1,0 +1,133 @@
+name: Mutation testing
+
+# Stryker mutation testing for the two piloted packages only (Issue 417).
+# Why these two, how the thresholds were chosen and what it costs:
+# docs/guides/testing/mutation-testing.md and mutation-testing-spike.md.
+#
+# Kept out of ci.yml on purpose. A full run is 13-116x a normal test run
+# (measured in the spike), so folding it into the main job would swamp the
+# test-duration budget that job enforces (Issue 415). It runs only when the
+# code it judges, or its own configuration, changes.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/shared-kernel/**"
+      - "packages/identity/**"
+      - ".github/workflows/mutation-testing.yml"
+      - "pnpm-lock.yaml"
+  pull_request:
+    paths:
+      - "packages/shared-kernel/**"
+      - "packages/identity/**"
+      - ".github/workflows/mutation-testing.yml"
+      - "pnpm-lock.yaml"
+
+jobs:
+  mutation:
+    name: Mutation testing (${{ matrix.package }})
+    runs-on: ubuntu-latest
+    # The pilot's time budget. Incremental PR runs are expected to be a small
+    # fraction of this; a run that hits it is the signal to look at
+    # docs/guides/testing/mutation-testing.md "When it is too slow", not to
+    # raise the number.
+    timeout-minutes: 30
+    strategy:
+      # One package failing its threshold should not hide the other's result.
+      fail-fast: false
+      matrix:
+        package: [shared-kernel, identity]
+    env:
+      # Database-backed specs skip without a database, exactly as on a fresh
+      # clone. Mutation testing judges the unit tests; it does not need, and
+      # should not wait on, a Postgres service.
+      TEST_DATABASE_URL: postgres://verixa:verixa@127.0.0.1:1/unused
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # identity imports @verixa/database, whose client is generated rather
+      # than committed. Same reason as the step of the same name in ci.yml.
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      # Only the package's workspace dependencies, not the whole repo: the
+      # tests resolve them through package.json "exports", which point at
+      # dist/. See the Build step in ci.yml.
+      - name: Build workspace dependencies
+        run: pnpm --filter "@verixa/${{ matrix.package }}^..." run build
+
+      # Same injected-workspace-package refresh as ci.yml's "Re-link
+      # workspace packages" step, for the same reason.
+      - name: Re-link workspace packages
+        run: pnpm install --frozen-lockfile
+
+      # The incremental file records which mutants survived or died against
+      # which code and tests, so a PR run re-tests only what changed. Keyed
+      # per package and branch; a branch's first run starts from main's.
+      - name: Restore incremental mutation results
+        uses: actions/cache@v4
+        with:
+          path: packages/${{ matrix.package }}/reports/mutation/stryker-incremental.json
+          key: stryker-incremental-${{ matrix.package }}-${{ github.ref }}-${{ github.sha }}
+          restore-keys: |
+            stryker-incremental-${{ matrix.package }}-${{ github.ref }}-
+            stryker-incremental-${{ matrix.package }}-refs/heads/main-
+
+      # Fails when the score is under `thresholds.break` in the package's
+      # stryker.conf.json.
+      - name: Run Stryker
+        run: pnpm --filter "@verixa/${{ matrix.package }}" run test:mutation
+
+      # The "badge": the score, written to the job summary from Stryker's own
+      # JSON report, so it needs no external service and cannot disagree
+      # with the report it summarises. Runs on failure too, since a failed
+      # threshold is exactly when someone needs the number.
+      - name: Summarise mutation score
+        if: always()
+        working-directory: packages/${{ matrix.package }}
+        run: |
+          node -e '
+            const fs = require("node:fs");
+            const file = "reports/mutation/mutation.json";
+            if (!fs.existsSync(file)) { console.log("No mutation report was produced."); process.exit(0); }
+            const report = JSON.parse(fs.readFileSync(file, "utf8"));
+            const counts = {};
+            for (const f of Object.values(report.files)) for (const m of f.mutants) counts[m.status] = (counts[m.status] ?? 0) + 1;
+            const n = (s) => counts[s] ?? 0;
+            const detected = n("Killed") + n("Timeout");
+            const valid = detected + n("Survived") + n("NoCoverage");
+            const score = valid === 0 ? 0 : (100 * detected) / valid;
+            const breakAt = JSON.parse(fs.readFileSync("stryker.conf.json", "utf8")).thresholds.break;
+            const mark = score >= breakAt ? "✅" : "❌";
+            const lines = [
+              `### ${mark} Mutation score — @verixa/${process.env.PACKAGE}: ${score.toFixed(2)}%`,
+              "",
+              `Threshold (break): ${breakAt}% · killed ${n("Killed")} · timeout ${n("Timeout")} · survived ${n("Survived")} · no coverage ${n("NoCoverage")}`,
+              "",
+              "Full report: the `mutation-report-" + process.env.PACKAGE + "` artifact (open mutation.html).",
+            ];
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");
+          '
+        env:
+          PACKAGE: ${{ matrix.package }}
+
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-report-${{ matrix.package }}
+          path: |
+            packages/${{ matrix.package }}/reports/mutation/mutation.html
+            packages/${{ matrix.package }}/reports/mutation/mutation.json
+          if-no-files-found: ignore
+          retention-days: 30

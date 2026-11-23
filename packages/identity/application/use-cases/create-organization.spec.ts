@@ -70,3 +70,27 @@ describe("CreateOrganization", () => {
     await expect(unitOfWork.repositories.organizations.existsBySlug("a")).resolves.toBe(false);
   });
 });
+
+/**
+ * Added in Issue 417: kills create-organization.ts:43 (`.trim()` dropped from
+ * the slug the duplicate check uses), which the mutation-testing spike found
+ * surviving. Every existing duplicate case differed only in letter case.
+ */
+describe("CreateOrganization: duplicate check normalisation", () => {
+  it("treats a slug with surrounding whitespace as the duplicate it is", async () => {
+    // Without the trim, " acme " passes the pre-check, then Organization.create
+    // trims it and a second "acme" is saved: against Postgres that is the
+    // unique index throwing (a 500) instead of a clean CONFLICT.
+    const unitOfWork = new InMemoryUnitOfWork();
+    const createOrganization = new CreateOrganization(unitOfWork);
+    await createOrganization.execute({ name: "Acme Inc", slug: "acme", ownerId: OWNER_ID });
+
+    const second = await createOrganization.execute({
+      name: "Acme Again",
+      slug: "  acme  ",
+      ownerId: asId("00000000-0000-0000-0000-000000000002"),
+    });
+
+    expect(Result.isErr(second) && second.error.code).toBe("CONFLICT");
+  });
+});

@@ -60,3 +60,45 @@ describe("Organization", () => {
     expect(Result.isOk(result) && result.value.ownerId).toBe(ownerId);
   });
 });
+
+/**
+ * Added in Issue 417. Each test kills mutants the mutation-testing spike found
+ * surviving in organization.ts: the limits were tested well inside and well
+ * outside, never at the edge, and the slug pattern's `^` anchor was never
+ * needed by any test.
+ */
+describe("Organization.create: limits and format, at the edges", () => {
+  const create = (name: string, slug: string) => Organization.create({ name, slug, ownerId });
+
+  it("accepts a name of exactly the maximum length and rejects one more", () => {
+    // Kills :76 (`>` -> `>=`, and the condition -> false).
+    expect(Result.isOk(create("n".repeat(128), "acme"))).toBe(true);
+    const tooLong = create("n".repeat(129), "acme");
+    expect(Result.isErr(tooLong) && tooLong.error).toMatchObject({
+      fieldErrors: { name: ["too_long"] },
+    });
+  });
+
+  it("accepts a slug of exactly the minimum length", () => {
+    // Kills :80 (`<` -> `<=`).
+    expect(Result.isOk(create("Acme", "abc"))).toBe(true);
+  });
+
+  it("accepts a slug of exactly the maximum length and rejects one more", () => {
+    // Kills :82 (`>` -> `>=`, and the condition -> false).
+    expect(Result.isOk(create("Acme", "a".repeat(63)))).toBe(true);
+    const tooLong = create("Acme", "a".repeat(64));
+    expect(Result.isErr(tooLong) && tooLong.error).toMatchObject({
+      fieldErrors: { slug: ["too_long"] },
+    });
+  });
+
+  it("rejects a slug segment with a character outside a-z0-9 anywhere in it", () => {
+    // Kills :13 (the `^` anchor dropped, so "acme_corp" matched on its "corp"
+    // suffix) and :85 (the `invalid_format` field error emptied).
+    const result = create("Acme", "acme_corp");
+    expect(Result.isErr(result) && result.error).toMatchObject({
+      fieldErrors: { slug: ["invalid_format"] },
+    });
+  });
+});

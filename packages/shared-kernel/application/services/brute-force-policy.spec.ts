@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { InMemoryBruteForceAttemptStore } from "../../infrastructure/in-memory-brute-force-attempt-store.js";
 import type { RateLimiter, RateLimitResult } from "../ports/rate-limiter.js";
@@ -260,5 +260,99 @@ describe("composition with a rate limiter", () => {
     // Absent, not zero: a caller that surfaces this must not promise admission
     // in 0 seconds when the limiter has no idea.
     expect(decision.retryAfterSeconds).toBeUndefined();
+  });
+});
+
+/**
+ * Added in Issue 417. Each test below kills a mutant that survived the
+ * mutation-testing spike (docs/guides/testing/mutation-testing-spike.md):
+ * the existing composition tests exercised these lines without pinning what
+ * they decide.
+ */
+describe("composition with a rate limiter: details the decision depends on", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("asks the limiter about the scope and the normalised identifier", async () => {
+    // Kills brute-force-policy.ts:156 (the argument object emptied) and :158
+    // (`.toLowerCase()` replaced by `.toUpperCase()`, or the normalisation
+    // dropped). The lockout key is normalised and tested above; this is the
+    // same promise for the limiter's budget, so `Admin@Example.com ` cannot
+    // buy a fresh rate-limit bucket by changing case.
+    const asked: Parameters<RateLimiter["check"]>[0][] = [];
+    const limiter: RateLimiter = {
+      check: (request) => {
+        asked.push(request);
+        return Promise.resolve(toResult({ allowed: true }));
+      },
+      recordFailure: () => Promise.resolve(),
+      reset: () => Promise.resolve(),
+    };
+    const policy = new BruteForcePolicy(
+      new InMemoryBruteForceAttemptStore(),
+      DEFAULT_BRUTE_FORCE_THRESHOLDS,
+      limiter,
+    );
+
+    await policy.check("login", "  Admin@Example.COM ");
+
+    expect(asked).toEqual([{ action: "login", identifier: "admin@example.com" }]);
+  });
+
+  it("reports the limiter's wait when it is longer than the lockout's", async () => {
+    // Kills brute-force-policy.ts:170 (`lockout !== undefined && limiter !==
+    // undefined` -> `false`), which would fall back to the lockout's 60s and
+    // promise admission a minute before the limiter allows it.
+    const store = new InMemoryBruteForceAttemptStore();
+    const thresholds = { ...DEFAULT_BRUTE_FORCE_THRESHOLDS, threshold: 1 };
+    await new BruteForcePolicy(store, thresholds).recordFailure("mfa", "h@example.com");
+
+    const policy = new BruteForcePolicy(
+      store,
+      thresholds,
+      limiterReturning({ allowed: false, retryAfterSeconds: 120 }),
+    );
+    const decision = await policy.check("mfa", "h@example.com");
+
+    expect(decision.source).toBe("both");
+    expect(decision.retryAfterSeconds).toBe(120);
+  });
+
+  it("leaves the retry key out entirely, not present-and-undefined, when it has no window", async () => {
+    // Kills brute-force-policy.ts:177 (the conditional spread -> always
+    // spread), which adds `retryAfterSeconds: undefined`. A serialiser or a
+    // `"retryAfterSeconds" in decision` check treats those differently.
+    const policy = new BruteForcePolicy(
+      new InMemoryBruteForceAttemptStore(),
+      DEFAULT_BRUTE_FORCE_THRESHOLDS,
+      limiterReturning({ allowed: false }),
+    );
+
+    const decision = await policy.check("password-reset", "token-digest");
+
+    expect(decision).not.toHaveProperty("retryAfterSeconds");
+  });
+
+  it("treats a limiter reset time of exactly now as unknown, not as zero seconds", async () => {
+    // Kills brute-force-policy.ts:219 (`remainingMs > 0` -> `>= 0`), which
+    // would tell the caller to retry in 0 seconds and be refused again.
+    vi.useFakeTimers({ now: new Date("2026-06-01T12:00:00.000Z") });
+    const limiter: RateLimiter = {
+      check: () =>
+        Promise.resolve({ allowed: false, remaining: 0, resetAt: Date.now(), limit: 10 }),
+      recordFailure: () => Promise.resolve(),
+      reset: () => Promise.resolve(),
+    };
+    const policy = new BruteForcePolicy(
+      new InMemoryBruteForceAttemptStore(),
+      DEFAULT_BRUTE_FORCE_THRESHOLDS,
+      limiter,
+    );
+
+    const decision = await policy.check("api-key", "key-2");
+
+    expect(decision.allowed).toBe(false);
+    expect(decision).not.toHaveProperty("retryAfterSeconds");
   });
 });

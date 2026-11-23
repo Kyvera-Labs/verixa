@@ -6,9 +6,9 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run",
+    "test": "vitest run && vitest run --config vitest.ci.config.ts",
     "test:load": "vitest run --config vitest.load.config.ts",
-    "test:coverage": "vitest run --coverage",
+    "test:coverage": "vitest run --coverage && vitest run --config vitest.ci.config.ts --coverage --coverage.reportsDirectory=coverage/ci",
     "lint": "eslint ."
   },
   "devDependencies": {

@@ -31,6 +31,7 @@ const LOCKFILE_GATE = join(REPO_ROOT, "infra", "ci", "check-lockfile-integrity.m
 const MALWARE_INDICATOR_GATE = join(REPO_ROOT, "infra", "ci", "check-malware-indicators.mjs");
 const SBOM_GENERATOR = join(REPO_ROOT, "infra", "ci", "generate-sbom.ts");
 const DEPENDENCY_SCAN_GATE = join(REPO_ROOT, "infra", "ci", "dependency-scan.mjs");
+const PERF_BUDGET = join(REPO_ROOT, "infra", "ci", "perf-budget.ts");
 const SECURITY_FIXTURE_CONFIG = join(
   REPO_ROOT,
   "infra",
@@ -127,6 +128,11 @@ export function runDependencyScan(args: readonly string[]): ToolResult {
 /** `tsx infra/ci/generate-sbom.ts <args>` */
 export function runSbomGenerator(args: readonly string[]): ToolResult {
   return run(process.execPath, [TSX_CLI, SBOM_GENERATOR, ...args], REPO_ROOT);
+}
+
+/** `tsx infra/ci/perf-budget.ts <args>` — the Issue 415 suite-duration gate. */
+export function runPerfBudget(args: readonly string[]): ToolResult {
+  return run(process.execPath, [TSX_CLI, PERF_BUDGET, ...args], REPO_ROOT);
 }
 
 /** `pnpm run sbom:generate <args>` — what `release.yml` calls. */

@@ -23,6 +23,10 @@ pnpm-debug.log*
 
 # Testing
 coverage/
+# Stryker mutation testing: its sandbox copies and generated reports
+# (docs/guides/testing/mutation-testing-spike.md).
+.stryker-tmp/
+**/reports/mutation/
 
 # Prisma's generated client — platform-specific (ships a compiled query-engine
 # binary for whichever OS generated it), so it must never be committed.
