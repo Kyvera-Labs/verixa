@@ -1,7 +1,8 @@
-import { ConflictError, Result, ValidationError } from "@verixa/shared-kernel";
+import { ConflictError, NotFoundError, Result, ValidationError } from "@verixa/shared-kernel";
 
 import { OrganizationMembership } from "../../domain/entities/organization-membership.js";
 import { Organization } from "../../domain/entities/organization.js";
+import type { OrganizationId } from "../../domain/entities/organization.js";
 import type { UserId } from "../../domain/entities/user.js";
 import type { UnitOfWork } from "../ports/unit-of-work.js";
 
@@ -9,6 +10,7 @@ export interface CreateOrganizationCommand {
   readonly name: string;
   readonly slug: string;
   readonly ownerId: UserId;
+  readonly parentOrganizationId?: OrganizationId | null;
 }
 
 export interface CreateOrganizationResult {
@@ -16,7 +18,7 @@ export interface CreateOrganizationResult {
   readonly membership: OrganizationMembership;
 }
 
-export type CreateOrganizationError = ValidationError | ConflictError;
+export type CreateOrganizationError = ValidationError | ConflictError | NotFoundError;
 
 /**
  * Creates a new `Organization` together with the owner's initial
@@ -56,9 +58,28 @@ export class CreateOrganization {
         name: command.name,
         slug: command.slug,
         ownerId: command.ownerId,
+        ...(command.parentOrganizationId === undefined
+          ? {}
+          : { parentOrganizationId: command.parentOrganizationId }),
       });
       if (Result.isErr(organizationResult)) {
         return organizationResult;
+      }
+
+      if (organizationResult.value.parentOrganizationId !== null) {
+        const parent = await repositories.organizations.findById(
+          organizationResult.value.parentOrganizationId,
+        );
+        if (parent === undefined) {
+          return Result.err(new NotFoundError("Parent organization was not found."));
+        }
+        if (parent.parentOrganizationId !== null) {
+          return Result.err(
+            new ValidationError("Organization hierarchy is limited to one parent level.", {
+              parentOrganizationId: ["max_depth_exceeded"],
+            }),
+          );
+        }
       }
 
       const membershipResult = OrganizationMembership.create({

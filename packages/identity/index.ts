@@ -80,6 +80,7 @@ export type {
   UpdateOrganizationError,
 } from "./application/use-cases/update-organization.js";
 export { UpdateOrganization } from "./application/use-cases/update-organization.js";
+export { ListChildOrganizations } from "./application/use-cases/list-child-organizations.js";
 
 // Infrastructure: Prisma-backed adapters. Exported so the composition root
 // (apps/api) can construct them — it is the one place allowed to know which

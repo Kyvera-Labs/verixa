@@ -69,4 +69,53 @@ describe("CreateOrganization", () => {
     expect(Result.isErr(result)).toBe(true);
     await expect(unitOfWork.repositories.organizations.existsBySlug("a")).resolves.toBe(false);
   });
+
+  it("allows a root to create one direct child", async () => {
+    const root = await createOrganization.execute({
+      name: "Acme Inc",
+      slug: "acme",
+      ownerId: OWNER_ID,
+    });
+    if (Result.isErr(root)) throw new Error("fixture setup failed");
+
+    const child = await createOrganization.execute({
+      name: "Acme Europe",
+      slug: "acme-europe",
+      ownerId: OWNER_ID,
+      parentOrganizationId: root.value.organization.id,
+    });
+
+    expect(Result.isOk(child)).toBe(true);
+    if (Result.isOk(child)) {
+      expect(child.value.organization.parentOrganizationId).toBe(root.value.organization.id);
+    }
+  });
+
+  it("rejects a child of a child to keep the hierarchy shallow", async () => {
+    const root = await createOrganization.execute({
+      name: "Acme Inc",
+      slug: "acme",
+      ownerId: OWNER_ID,
+    });
+    if (Result.isErr(root)) throw new Error("fixture setup failed");
+    const child = await createOrganization.execute({
+      name: "Acme Europe",
+      slug: "acme-europe",
+      ownerId: OWNER_ID,
+      parentOrganizationId: root.value.organization.id,
+    });
+    if (Result.isErr(child)) throw new Error("fixture setup failed");
+
+    const grandchild = await createOrganization.execute({
+      name: "Acme France",
+      slug: "acme-france",
+      ownerId: OWNER_ID,
+      parentOrganizationId: child.value.organization.id,
+    });
+
+    expect(Result.isErr(grandchild)).toBe(true);
+    if (Result.isErr(grandchild)) {
+      expect(grandchild.error.code).toBe("VALIDATION_ERROR");
+    }
+  });
 });

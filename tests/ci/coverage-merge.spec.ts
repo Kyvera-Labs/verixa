@@ -176,7 +176,7 @@ describe("coverage-merge (Issue 412)", () => {
       packages: Record<string, { lines: { pct: number } }>;
     };
     expect(summary.total.lines.pct).toBe(83.33);
-    expect(summary.packages["@verixa/pkg-a"].lines.pct).toBe(66.67);
-    expect(summary.packages["@verixa/pkg-b"].lines.pct).toBe(100);
+    expect(summary.packages["@verixa/pkg-a"]?.lines.pct).toBe(66.67);
+    expect(summary.packages["@verixa/pkg-b"]?.lines.pct).toBe(100);
   });
 });

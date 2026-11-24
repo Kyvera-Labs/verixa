@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { mkdirSync } from "node:fs";
+import { chmodSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { composeArguments, runDocker } from "./compose-command.mjs";
@@ -62,7 +62,7 @@ export function createBackupPlan(options) {
       },
       {
         name: "redis-copy",
-        argv: [...compose, "cp", `redis:${redisContainerPath}`],
+        argv: [...compose, "cp", `redis:${redisContainerPath}`, redisFile],
         outputFile: redisFile,
       },
     ],
@@ -81,6 +81,11 @@ export async function performBackup(options, runner = runDocker) {
       outputFile: step.outputFile,
       ...(step.stdinFile ? { stdinFile: step.stdinFile } : {}),
     });
+  }
+  try {
+    chmodSync(plan.redisFile, 0o644);
+  } catch {
+    // Ignore if runner did not create file directly (e.g. mocked in tests)
   }
   return plan;
 }

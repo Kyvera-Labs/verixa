@@ -1,4 +1,4 @@
-import { Result } from "@verixa/shared-kernel";
+import { RateLimitExceededError, Result, type RateLimiter } from "@verixa/shared-kernel";
 
 import type { UserId } from "../../domain/entities/mfa-method.js";
 import { BackupCodeSet } from "../../domain/services/backup-code-set.js";
@@ -21,10 +21,26 @@ export class ConsumeBackupCode {
   constructor(
     private readonly mfaMethodRepository: MfaMethodRepository,
     private readonly auditLogger: AuditLogger,
+    private readonly rateLimiter?: RateLimiter,
   ) {}
 
   async execute(command: ConsumeBackupCodeCommand): Promise<ConsumeBackupCodeResult> {
     const userId = command.userId as UserId;
+
+    if (this.rateLimiter) {
+      const limitResult = await this.rateLimiter.check({
+        action: "mfa",
+        identifier: command.userId,
+      });
+      if (!limitResult.allowed) {
+        await this.auditLogger.record("mfa.rate_limit_exceeded", command.userId);
+        throw new RateLimitExceededError(
+          { action: "mfa", identifier: command.userId },
+          limitResult.resetAt,
+          limitResult.limit,
+        );
+      }
+    }
 
     const activeMethods = await this.mfaMethodRepository.findActiveByUserId(userId);
     const backupMethod = activeMethods.find((m) => m.type === "backup_codes");
@@ -34,11 +50,13 @@ export class ConsumeBackupCode {
       // Actually we should burn time here to prevent timing attacks,
       // but without a decoy hash, we can't easily burn time.
       // For now we'll just fail.
+      await this.rateLimiter?.recordFailure({ action: "mfa", identifier: command.userId });
       return Result.ok({ kind: "failed" });
     }
 
     const hashes = parseStoredHashes(backupMethod.secret);
     if (hashes === null) {
+      await this.rateLimiter?.recordFailure({ action: "mfa", identifier: command.userId });
       return Result.ok({ kind: "failed" });
     }
 
@@ -55,6 +73,7 @@ export class ConsumeBackupCode {
     }
 
     if (matchedIndex === -1) {
+      await this.rateLimiter?.recordFailure({ action: "mfa", identifier: command.userId });
       await this.auditLogger.record("backup_code.failed", userId);
       return Result.ok({ kind: "failed" });
     }
@@ -65,6 +84,8 @@ export class ConsumeBackupCode {
     // Update the record with the remaining hashes.
     backupMethod.updateSecret(JSON.stringify(hashes));
     await this.mfaMethodRepository.save(backupMethod);
+
+    await this.rateLimiter?.reset({ action: "mfa", identifier: command.userId });
 
     await this.auditLogger.record("backup_code.consumed", userId, {
       remaining: hashes.length.toString(),
