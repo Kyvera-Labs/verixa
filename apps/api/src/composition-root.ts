@@ -47,6 +47,7 @@ import {
   GetUsersByOrganizationIds,
   InviteUserToOrganization,
   ListOrganizations,
+  ListChildOrganizations,
   PrismaInvitationRepository,
   PrismaOrganizationMembershipRepository,
   PrismaOrganizationRepository,
@@ -245,6 +246,7 @@ export interface IdentityUseCases {
   readonly getUserOrganizations: GetUserOrganizations;
   readonly getUsersByOrganizationIds: GetUsersByOrganizationIds;
   readonly listOrganizations: ListOrganizations;
+  readonly listChildOrganizations: ListChildOrganizations;
 }
 
 /** Use cases spanning identity and credentials. */
@@ -539,6 +541,7 @@ export function buildContainer(
       getUserOrganizations: new GetUserOrganizations(memberships, organizations),
       getUsersByOrganizationIds: new GetUsersByOrganizationIds(memberships, users),
       listOrganizations: new ListOrganizations(organizations),
+      listChildOrganizations: new ListChildOrganizations(organizations),
     },
     credentials: {
       registerUserWithPassword: new RegisterUserWithPassword(

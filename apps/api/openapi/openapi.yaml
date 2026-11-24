@@ -32,6 +32,29 @@ tags:
   - name: Notifications
     description: Delivery and notification preferences.
 paths:
+  /v1/organizations/{organizationId}/children:
+    get:
+      tags:
+        - Identity
+      summary: List direct child organizations
+      description: Returns only immediate children; organization hierarchies are intentionally one level deep.
+      parameters:
+        - name: organizationId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Direct child organizations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OrganizationResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /v1/audit:
     get:
       tags:
@@ -316,6 +339,18 @@ components:
       name: X-API-Key
       description: Machine credential; never place it in a URL.
   schemas:
+    OrganizationResponse:
+      type: object
+      required: [id, name, slug, ownerId, parentOrganizationId, status, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        slug: { type: string }
+        ownerId: { type: string }
+        parentOrganizationId: { type: [string, "null"] }
+        status: { type: string, enum: [active, suspended, deleted] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
     ComplianceWorkflowType:
       type: string
       enum: [verification-review, data-subject-request]

@@ -12,6 +12,7 @@ import type { Organization, OrganizationId } from "../../domain/entities/organiz
 export interface OrganizationRepository {
   findById(id: OrganizationId): Promise<Organization | undefined>;
   findManyByIds(ids: readonly OrganizationId[]): Promise<Organization[]>;
+  findChildren(parentOrganizationId: OrganizationId): Promise<Organization[]>;
   findBySlug(slug: string): Promise<Organization | undefined>;
   findAll(): Promise<Organization[]>;
   save(organization: Organization): Promise<void>;
