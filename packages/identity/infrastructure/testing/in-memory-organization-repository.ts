@@ -15,14 +15,6 @@ export class InMemoryOrganizationRepository implements OrganizationRepository {
     return Promise.resolve(orgs);
   }
 
-  findChildren(parentOrganizationId: OrganizationId): Promise<Organization[]> {
-    return Promise.resolve(
-      [...this.organizationsById.values()].filter(
-        (organization) => organization.parentOrganizationId === parentOrganizationId,
-      ),
-    );
-  }
-
   findBySlug(slug: string): Promise<Organization | undefined> {
     return Promise.resolve(
       [...this.organizationsById.values()].find((organization) => organization.slug === slug),
