@@ -75,6 +75,11 @@ export { GetUserOrganizations } from "./application/use-cases/get-user-organizat
 export type { GetUsersByOrganizationIdsCommand } from "./application/use-cases/get-users-by-organization-ids.js";
 export { GetUsersByOrganizationIds } from "./application/use-cases/get-users-by-organization-ids.js";
 export { ListOrganizations } from "./application/use-cases/list-organizations.js";
+export type {
+  UpdateOrganizationCommand,
+  UpdateOrganizationError,
+} from "./application/use-cases/update-organization.js";
+export { UpdateOrganization } from "./application/use-cases/update-organization.js";
 export { ListChildOrganizations } from "./application/use-cases/list-child-organizations.js";
 
 // Infrastructure: Prisma-backed adapters. Exported so the composition root

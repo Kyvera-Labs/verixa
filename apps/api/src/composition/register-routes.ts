@@ -46,6 +46,7 @@ export function registerContextRoutes<TLogger extends FastifyBaseLogger>(
       prefix: "/admin",
       plugin: (scope) => {
         registerAdminAuthorizationRoutes(scope, container.authorization);
+        registerOrganizationRoutes(scope, container);
       },
     },
     ...(container.governance === undefined
