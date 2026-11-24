@@ -4,7 +4,7 @@
   "private": true,
   "description": "Intentionally vulnerable production dependencies, used only to prove the issue 207 gate fires. Never installed.",
   "dependencies": {
-    "minimist": "1.2.0",
+    "minimist": "1.2.6",
     "lodash": "4.17.15"
   },
   "devDependencies": {
