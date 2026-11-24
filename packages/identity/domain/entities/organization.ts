@@ -30,7 +30,6 @@ interface OrganizationProps {
   readonly name: string;
   readonly slug: string;
   readonly ownerId: UserId;
-  readonly parentOrganizationId?: OrganizationId | null;
   readonly status: OrganizationStatus;
   readonly createdAt: Date;
   readonly updatedAt: Date;
@@ -48,7 +47,6 @@ export class Organization {
   readonly name: string;
   readonly slug: string;
   readonly ownerId: UserId;
-  readonly parentOrganizationId: OrganizationId | null;
   readonly status: OrganizationStatus;
   readonly createdAt: Date;
   readonly updatedAt: Date;
@@ -58,7 +56,6 @@ export class Organization {
     this.name = props.name;
     this.slug = props.slug;
     this.ownerId = props.ownerId;
-    this.parentOrganizationId = props.parentOrganizationId ?? null;
     this.status = props.status;
     this.createdAt = props.createdAt;
     this.updatedAt = props.updatedAt;
@@ -68,7 +65,6 @@ export class Organization {
     name: string;
     slug: string;
     ownerId: UserId;
-    parentOrganizationId?: OrganizationId | null;
   }): Result<Organization, ValidationError> {
     const normalizedName = params.name.trim();
     const normalizedSlug = params.slug.trim().toLowerCase();
@@ -100,7 +96,6 @@ export class Organization {
         name: normalizedName,
         slug: normalizedSlug,
         ownerId: params.ownerId,
-        parentOrganizationId: params.parentOrganizationId ?? null,
         status: "active",
         createdAt: now,
         updatedAt: now,
@@ -111,26 +106,5 @@ export class Organization {
   /** Rebuilds an `Organization` from already-trusted data (e.g. a database row). */
   static reconstitute(props: OrganizationProps): Organization {
     return new Organization(props);
-  }
-
-  update(params: { name?: string; slug?: string }): Result<Organization, ValidationError> {
-    const candidate = Organization.create({
-      name: params.name ?? this.name,
-      slug: params.slug ?? this.slug,
-      ownerId: this.ownerId,
-    });
-    if (Result.isErr(candidate)) {
-      return candidate;
-    }
-
-    return Result.ok(
-      new Organization({
-        ...candidate.value,
-        id: this.id,
-        status: this.status,
-        createdAt: this.createdAt,
-        updatedAt: new Date(),
-      }),
-    );
   }
 }

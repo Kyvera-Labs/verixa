@@ -32,29 +32,6 @@ tags:
   - name: Notifications
     description: Delivery and notification preferences.
 paths:
-  /v1/organizations/{organizationId}/children:
-    get:
-      tags:
-        - Identity
-      summary: List direct child organizations
-      description: Returns only immediate children; organization hierarchies are intentionally one level deep.
-      parameters:
-        - name: organizationId
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Direct child organizations
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/OrganizationResponse"
-        "404":
-          $ref: "#/components/responses/NotFound"
   /v1/audit:
     get:
       tags:
@@ -175,32 +152,6 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "403":
           $ref: "#/components/responses/Forbidden"
-  /admin/organizations:
-    get:
-      tags:
-        - Governance
-      summary: List organizations
-      description: Returns all active organizations to a platform administrator.
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: Organizations ordered by creation time.
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Organization"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-    post:
-      tags:
-        - Governance
-      summary: Create an organization
-      description: Creates an organization and its initial owner membership.
-      security:
-        - bearerAuth: []
   /admin/organizations/{orgId}/compliance-cases:
     parameters:
       - $ref: "#/components/parameters/ComplianceOrgId"
@@ -215,52 +166,6 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CreateOrganizationRequest"
-      responses:
-        "201":
-          description: The created organization.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Organization"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "409":
-          $ref: "#/components/responses/Conflict"
-  /admin/organizations/{id}:
-    parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          minLength: 1
-    get:
-      tags:
-        - Governance
-      summary: Get an organization
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: The requested organization.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Organization"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-    patch:
-      tags:
-        - Governance
-      summary: Update an organization
-      description: Updates the mutable organization fields and returns the resource.
-      security:
-        - bearerAuth: []
               $ref: "#/components/schemas/ComplianceCaseCreate"
       responses:
         "201":
@@ -382,22 +287,6 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/UpdateOrganizationRequest"
-      responses:
-        "200":
-          description: The updated organization.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Organization"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "409":
-          $ref: "#/components/responses/Conflict"
               $ref: "#/components/schemas/ComplianceCaseApproval"
       responses:
         "200":
@@ -427,18 +316,6 @@ components:
       name: X-API-Key
       description: Machine credential; never place it in a URL.
   schemas:
-    OrganizationResponse:
-      type: object
-      required: [id, name, slug, ownerId, parentOrganizationId, status, createdAt, updatedAt]
-      properties:
-        id: { type: string }
-        name: { type: string }
-        slug: { type: string }
-        ownerId: { type: string }
-        parentOrganizationId: { type: [string, "null"] }
-        status: { type: string, enum: [active, suspended, deleted] }
-        createdAt: { type: string, format: date-time }
-        updatedAt: { type: string, format: date-time }
     ComplianceWorkflowType:
       type: string
       enum: [verification-review, data-subject-request]
@@ -591,33 +468,6 @@ components:
         status:
           type: string
           const: ok
-    Organization:
-      type: object
-      additionalProperties: false
-      required: [id, name, slug, ownerId, status, createdAt, updatedAt]
-      properties:
-        id: { type: string }
-        name: { type: string }
-        slug: { type: string }
-        ownerId: { type: string }
-        status: { type: string, enum: [active, suspended, deleted] }
-        createdAt: { type: string, format: date-time }
-        updatedAt: { type: string, format: date-time }
-    CreateOrganizationRequest:
-      type: object
-      additionalProperties: false
-      required: [name, slug, ownerId]
-      properties:
-        name: { type: string }
-        slug: { type: string }
-        ownerId: { type: string }
-    UpdateOrganizationRequest:
-      type: object
-      additionalProperties: false
-      minProperties: 1
-      properties:
-        name: { type: string }
-        slug: { type: string }
   parameters:
     ComplianceOrgId:
       name: orgId
@@ -678,12 +528,6 @@ components:
             $ref: "#/components/schemas/ErrorResponse"
     NotFound:
       description: The requested resource does not exist or is not visible to this principal.
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/ErrorResponse"
-    Conflict:
-      description: The request conflicts with an existing resource.
       content:
         application/json:
           schema:

@@ -28,14 +28,6 @@ export class PrismaOrganizationRepository implements OrganizationRepository {
     return rows.map((row) => OrganizationMapper.toDomain(row));
   }
 
-  async findChildren(parentOrganizationId: OrganizationId): Promise<Organization[]> {
-    const rows = await this.prisma.organization.findMany({
-      where: { parentOrganizationId, status: { not: "deleted" } },
-      orderBy: { createdAt: "desc" },
-    });
-    return rows.map((row) => OrganizationMapper.toDomain(row));
-  }
-
   async findBySlug(slug: string): Promise<Organization | undefined> {
     // `citext` column, so this is case-insensitive without a LOWER() wrapper.
     const row = await this.prisma.organization.findUnique({ where: { slug } });

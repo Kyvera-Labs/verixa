@@ -182,7 +182,6 @@ model Organization {
   slug String @unique @db.Citext
 
   ownerId String @map("owner_id") @db.Uuid
-  parentOrganizationId String? @map("parent_organization_id") @db.Uuid
 
   status OrganizationStatus
 
@@ -196,15 +195,12 @@ model Organization {
   /// catastrophic and irreversible. Ownership has to be transferred first;
   /// forcing that as a hard database error is the point.
   owner User @relation("OrganizationOwner", fields: [ownerId], references: [id], onDelete: Restrict)
-  parent   Organization? @relation("OrganizationHierarchy", fields: [parentOrganizationId], references: [id], onDelete: Restrict)
-  children Organization[] @relation("OrganizationHierarchy")
 
   memberships          OrganizationMembership[]
   invitations          Invitation[]
   verificationRequests VerificationRequest[]    @relation("VerificationRequestOrganization")
 
   @@map("organizations")
-  @@index([parentOrganizationId])
 }
 
 /// The join entity linking a user to an organization. Maps to

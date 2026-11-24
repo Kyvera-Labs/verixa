@@ -47,7 +47,6 @@ import {
   GetUsersByOrganizationIds,
   InviteUserToOrganization,
   ListOrganizations,
-  ListChildOrganizations,
   PrismaInvitationRepository,
   PrismaOrganizationMembershipRepository,
   PrismaOrganizationRepository,
@@ -56,7 +55,6 @@ import {
   ReactivateUser,
   RegisterUser,
   SuspendUser,
-  UpdateOrganization,
   UpdateUserProfile,
 } from "@verixa/identity";
 import {
@@ -247,8 +245,6 @@ export interface IdentityUseCases {
   readonly getUserOrganizations: GetUserOrganizations;
   readonly getUsersByOrganizationIds: GetUsersByOrganizationIds;
   readonly listOrganizations: ListOrganizations;
-  readonly updateOrganization: UpdateOrganization;
-  readonly listChildOrganizations: ListChildOrganizations;
 }
 
 /** Use cases spanning identity and credentials. */
@@ -543,8 +539,6 @@ export function buildContainer(
       getUserOrganizations: new GetUserOrganizations(memberships, organizations),
       getUsersByOrganizationIds: new GetUsersByOrganizationIds(memberships, users),
       listOrganizations: new ListOrganizations(organizations),
-      updateOrganization: new UpdateOrganization(organizations),
-      listChildOrganizations: new ListChildOrganizations(organizations),
     },
     credentials: {
       registerUserWithPassword: new RegisterUserWithPassword(
