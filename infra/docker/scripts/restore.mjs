@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync } from "node:fs";
+import { chmodSync, existsSync } from "node:fs";
 
 import { composeArguments, runDocker } from "./compose-command.mjs";
 
@@ -52,7 +52,7 @@ export function createRestorePlan(options) {
     },
     {
       name: "start-redis",
-      argv: [...compose, "up", "-d", "redis"],
+      argv: [...compose, "up", "-d", "--wait", "redis"],
     },
     {
       // --clean makes the result the dump's state rather than a merge on top
@@ -89,6 +89,11 @@ export async function performRestore(options, runner = runDocker) {
   assertRestoreConfirmation(options);
   for (const file of [options.postgresFile, options.redisFile]) {
     if (!existsSync(file)) throw new Error(`backup file not found: ${file}`);
+  }
+  try {
+    chmodSync(options.redisFile, 0o644);
+  } catch {
+    // Ignore if non-critical
   }
   for (const step of createRestorePlan(options)) {
     await runner(step.argv, {

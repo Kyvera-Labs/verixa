@@ -41,6 +41,7 @@ RUN --mount=type=cache,id=verixa-pnpm-store,target=/root/.local/share/pnpm/store
 # ---- build: compile apps/api and every package it depends on ----
 FROM deps AS build
 COPY tsconfig.base.json ./
+COPY packages packages
 COPY apps/api apps/api
 
 # The Prisma client is generated, never committed (it ships a

@@ -246,6 +246,12 @@ jobs:
       - name: Verification coverage gate
         run: pnpm --filter @verixa/verification run test:coverage
 
+      # packages/rate-limiting implements Phase 15 rate limiting and abuse
+      # prevention. Held to an enforced coverage floor (vitest.config.ts)
+      # following the Issue 037 pattern (Issue 298 / #312).
+      - name: Rate limiting coverage gate
+        run: pnpm --filter @verixa/rate-limiting run test:coverage
+
   # Verifies the *other* database strategy. The `ci` job above points
   # TEST_DATABASE_URL at a service container, so it never exercises the
   # Testcontainers path in database-harness.ts (Issue 047). This job
@@ -725,6 +731,7 @@ jobs:
       DATABASE_MIGRATION_URL: postgres://verixa:ci-postgres-password@postgres:5432/verixa
       SESSION_ACCESS_TOKEN_SECRET: ci-smoke-secret-at-least-32-characters
       VERIXA_API_IMAGE: verixa-api:ci
+      VERIXA_MIGRATION_IMAGE: verixa-migration:ci
     steps:
       - uses: actions/checkout@v4
 
@@ -772,6 +779,7 @@ jobs:
       REDIS_URL: redis://:ci-redis-password@redis:6379
       SESSION_ACCESS_TOKEN_SECRET: ci-smoke-secret-at-least-32-characters
       VERIXA_API_IMAGE: verixa-api:ci
+      VERIXA_MIGRATION_IMAGE: verixa-migration:ci
       PGUSER: verixa
       PGPASSWORD: ci-postgres-password
       REDISCLI_AUTH: ci-redis-password
@@ -806,6 +814,7 @@ jobs:
           node infra/docker/scripts/backup.mjs \
             --compose-file docker-compose.yml --compose-file docker-compose.prod.yml \
             --output-dir backups --label ci
+          chmod 644 backups/redis-ci.rdb || true
           test -s backups/postgres-ci.dump
           test -s backups/redis-ci.rdb
 

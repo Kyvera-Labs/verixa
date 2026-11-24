@@ -1,0 +1,327 @@
+name: Deploy
+
+# Phase 19 (Issue 378 / #490) — Staging and production deployment workflow.
+#
+# Connects the release pipeline (.github/workflows/release.yml) and published
+# container images (.github/workflows/docker-publish.yml) to staging and
+# production targets using progressive delivery:
+#
+#   Release succeeds -> auto-deploy to staging -> post-deploy smoke test
+#                    -> manual approval gate   -> deploy to production -> smoke test
+#
+# Why a separate workflow triggered via `workflow_run` instead of jobs inside
+# `release.yml`:
+#   1. Least privilege: `release.yml` needs `contents: write` to attach SBOMs
+#      and create releases, whereas deployment needs `deployments: write` and
+#      access to environment-scoped secrets. Keeping them separate bounds the
+#      blast radius of each token.
+#   2. Independent re-runs and rollbacks: operators can re-deploy or promote a
+#      specific immutable tag via `workflow_dispatch` without re-running SBOM
+#      generation or release creation.
+#   3. Observability: `.github/workflows/notify-on-failure.yml` watches this
+#      workflow by name ("Deploy") and alerts on any failed deployment.
+
+on:
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Immutable container image tag to deploy (e.g. v1.2.3 or sha-0123456)"
+        required: true
+        type: string
+      target:
+        description: "Highest environment to deploy to (production always deploys to staging first)"
+        required: true
+        default: "staging"
+        type: choice
+        options:
+          - staging
+          - production
+      rollback_tag:
+        description: "Optional previous known-good image tag for automatic rollback on smoke-test failure"
+        required: false
+        default: ""
+        type: string
+
+# Never cancel an in-flight deployment: interrupting a container replacement or
+# rollback mid-flight leaves staging or production in an unknown state.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: read
+  deployments: write
+
+jobs:
+  # Resolves the immutable image tag and verifies it exists in GHCR before
+  # mutating any environment. Failing here leaves both staging and production
+  # completely untouched.
+  resolve-release:
+    name: Resolve and verify release image
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    outputs:
+      image: ${{ steps.resolve.outputs.image }}
+      image_tag: ${{ steps.resolve.outputs.image_tag }}
+      rollback_tag: ${{ steps.resolve.outputs.rollback_tag }}
+    steps:
+      - name: Determine immutable image tag
+        id: resolve
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.image_tag }}
+          INPUT_ROLLBACK_TAG: ${{ inputs.rollback_tag }}
+          RELEASE_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          RELEASE_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          IMAGE: ghcr.io/kyvera-labs/verixa
+        run: |
+          set -eu
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            TAG="$INPUT_TAG"
+            ROLLBACK_TAG="$INPUT_ROLLBACK_TAG"
+          else
+            # Release runs are triggered on semver tags (vX.Y.Z). Prefer the
+            # semver tag when present, falling back to the immutable short-SHA
+            # tag published by docker-publish.yml.
+            if echo "$RELEASE_HEAD_BRANCH" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+              TAG="$RELEASE_HEAD_BRANCH"
+            else
+              TAG="sha-$(printf '%s' "$RELEASE_HEAD_SHA" | cut -c1-7)"
+            fi
+            ROLLBACK_TAG=""
+          fi
+
+          # Reject `latest` and malformed tags: automated deployments must pin
+          # an immutable reference so staging and production run the exact same
+          # digest and rollbacks are reproducible.
+          if [ "$TAG" = "latest" ] || ! echo "$TAG" | grep -Eq '^(v[0-9]+\.[0-9]+\.[0-9]+|sha-[0-9a-f]{7,40})$'; then
+            echo "::error::Refusing to deploy non-immutable or malformed image tag: $TAG"
+            exit 1
+          fi
+
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "image_tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "rollback_tag=$ROLLBACK_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify image exists in registry
+        env:
+          IMAGE: ${{ steps.resolve.outputs.image }}
+          IMAGE_TAG: ${{ steps.resolve.outputs.image_tag }}
+        run: |
+          set -eu
+          docker buildx imagetools inspect "$IMAGE:$IMAGE_TAG" >/dev/null
+          echo "Verified immutable image $IMAGE:$IMAGE_TAG exists in GHCR."
+
+  # Every successful release automatically deploys to staging. If the deploy or
+  # post-deploy smoke test fails, staging is rolled back to the previous
+  # known-good tag and the job fails, blocking promotion to production.
+  deploy-staging:
+    name: Deploy to staging
+    needs: [resolve-release]
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: ${{ vars.STAGING_URL }}
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Trigger staging deployment
+        id: deploy
+        env:
+          IMAGE: ${{ needs.resolve-release.outputs.image }}
+          IMAGE_TAG: ${{ needs.resolve-release.outputs.image_tag }}
+          DEPLOY_WEBHOOK_URL: ${{ secrets.STAGING_DEPLOY_WEBHOOK_URL }}
+          DEPLOY_TOKEN: ${{ secrets.STAGING_DEPLOY_TOKEN }}
+        run: |
+          set -eu
+          if [ -z "$DEPLOY_WEBHOOK_URL" ]; then
+            echo "::error::STAGING_DEPLOY_WEBHOOK_URL secret is not configured in the staging environment."
+            exit 1
+          fi
+
+          curl --fail --silent --show-error -X POST \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $DEPLOY_TOKEN" \
+            --data "{\"environment\":\"staging\",\"image\":\"$IMAGE\",\"tag\":\"$IMAGE_TAG\"}" \
+            "$DEPLOY_WEBHOOK_URL"
+
+      # Required post-deploy health and version assertion. Passing /health alone
+      # is not enough: checking /version confirms the new container is actually
+      # serving traffic rather than the previous container surviving a failed
+      # replacement.
+      - name: Run staging post-deploy smoke test
+        id: smoke_test
+        env:
+          STAGING_URL: ${{ vars.STAGING_URL }}
+          IMAGE_TAG: ${{ needs.resolve-release.outputs.image_tag }}
+        run: |
+          set -eu
+          node infra/ci/deploy-smoke-test.mjs \
+            --url "$STAGING_URL" \
+            --expected-version "$IMAGE_TAG" \
+            --retries 15 \
+            --interval-ms 2000
+
+      # Automatic rollback when the smoke test fails so staging is never left
+      # in an unhealthy or unknown state. Even if rollback succeeds, this job
+      # still fails because the smoke_test step failed, which blocks promotion
+      # to production.
+      - name: Roll back staging on smoke-test failure
+        if: failure() && steps.smoke_test.outcome == 'failure'
+        env:
+          IMAGE: ${{ needs.resolve-release.outputs.image }}
+          ROLLBACK_TAG: ${{ needs.resolve-release.outputs.rollback_tag || vars.STAGING_LAST_KNOWN_GOOD_TAG }}
+          ROLLBACK_WEBHOOK_URL: ${{ secrets.STAGING_ROLLBACK_WEBHOOK_URL }}
+          DEPLOY_TOKEN: ${{ secrets.STAGING_DEPLOY_TOKEN }}
+          STAGING_URL: ${{ vars.STAGING_URL }}
+        run: |
+          set -eu
+          if [ -z "$ROLLBACK_WEBHOOK_URL" ] || [ -z "$ROLLBACK_TAG" ]; then
+            echo "::warning::Automatic staging rollback skipped (ROLLBACK_WEBHOOK_URL or ROLLBACK_TAG not configured). Manual intervention required."
+            exit 1
+          fi
+
+          echo "Rolling back staging to $IMAGE:$ROLLBACK_TAG..."
+          curl --fail --silent --show-error -X POST \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $DEPLOY_TOKEN" \
+            --data "{\"environment\":\"staging\",\"image\":\"$IMAGE\",\"tag\":\"$ROLLBACK_TAG\",\"reason\":\"smoke_test_failed\"}" \
+            "$ROLLBACK_WEBHOOK_URL"
+
+          node infra/ci/deploy-smoke-test.mjs \
+            --url "$STAGING_URL" \
+            --retries 15 \
+            --interval-ms 2000
+
+      - name: Write staging deployment summary
+        if: always()
+        env:
+          IMAGE: ${{ needs.resolve-release.outputs.image }}
+          IMAGE_TAG: ${{ needs.resolve-release.outputs.image_tag }}
+          SMOKE_OUTCOME: ${{ steps.smoke_test.outcome }}
+        run: |
+          cat <<EOF >> "$GITHUB_STEP_SUMMARY"
+          ## Staging Deployment
+          - **Image:** \`$IMAGE:$IMAGE_TAG\`
+          - **Smoke test:** \`$SMOKE_OUTCOME\`
+          EOF
+
+  # Production promotion is gated by two invariants:
+  #   1. `needs: [resolve-release, deploy-staging]` — a failed staging deploy
+  #      automatically blocks promotion.
+  #   2. `environment: production` — GitHub Environment protection rules
+  #      (documented in .github/environments/production.yml) pause this job
+  #      until a designated reviewer explicitly approves the deployment.
+  deploy-production:
+    name: Deploy to production
+    needs: [resolve-release, deploy-staging]
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name != 'workflow_dispatch' ||
+      inputs.target == 'production'
+    environment:
+      name: production
+      url: ${{ vars.PRODUCTION_URL }}
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Trigger production deployment
+        id: deploy
+        env:
+          IMAGE: ${{ needs.resolve-release.outputs.image }}
+          IMAGE_TAG: ${{ needs.resolve-release.outputs.image_tag }}
+          DEPLOY_WEBHOOK_URL: ${{ secrets.PRODUCTION_DEPLOY_WEBHOOK_URL }}
+          DEPLOY_TOKEN: ${{ secrets.PRODUCTION_DEPLOY_TOKEN }}
+        run: |
+          set -eu
+          if [ -z "$DEPLOY_WEBHOOK_URL" ]; then
+            echo "::error::PRODUCTION_DEPLOY_WEBHOOK_URL secret is not configured in the production environment."
+            exit 1
+          fi
+
+          curl --fail --silent --show-error -X POST \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $DEPLOY_TOKEN" \
+            --data "{\"environment\":\"production\",\"image\":\"$IMAGE\",\"tag\":\"$IMAGE_TAG\"}" \
+            "$DEPLOY_WEBHOOK_URL"
+
+      - name: Run production post-deploy smoke test
+        id: smoke_test
+        env:
+          PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
+          IMAGE_TAG: ${{ needs.resolve-release.outputs.image_tag }}
+        run: |
+          set -eu
+          node infra/ci/deploy-smoke-test.mjs \
+            --url "$PRODUCTION_URL" \
+            --expected-version "$IMAGE_TAG" \
+            --retries 20 \
+            --interval-ms 3000
+
+      - name: Roll back production on smoke-test failure
+        if: failure() && steps.smoke_test.outcome == 'failure'
+        env:
+          IMAGE: ${{ needs.resolve-release.outputs.image }}
+          ROLLBACK_TAG: ${{ needs.resolve-release.outputs.rollback_tag || vars.PRODUCTION_LAST_KNOWN_GOOD_TAG }}
+          ROLLBACK_WEBHOOK_URL: ${{ secrets.PRODUCTION_ROLLBACK_WEBHOOK_URL }}
+          DEPLOY_TOKEN: ${{ secrets.PRODUCTION_DEPLOY_TOKEN }}
+          PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
+        run: |
+          set -eu
+          if [ -z "$ROLLBACK_WEBHOOK_URL" ] || [ -z "$ROLLBACK_TAG" ]; then
+            echo "::warning::Automatic production rollback skipped (ROLLBACK_WEBHOOK_URL or ROLLBACK_TAG not configured). Manual intervention required."
+            exit 1
+          fi
+
+          echo "Rolling back production to $IMAGE:$ROLLBACK_TAG..."
+          curl --fail --silent --show-error -X POST \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $DEPLOY_TOKEN" \
+            --data "{\"environment\":\"production\",\"image\":\"$IMAGE\",\"tag\":\"$ROLLBACK_TAG\",\"reason\":\"smoke_test_failed\"}" \
+            "$ROLLBACK_WEBHOOK_URL"
+
+          node infra/ci/deploy-smoke-test.mjs \
+            --url "$PRODUCTION_URL" \
+            --retries 20 \
+            --interval-ms 3000
+
+      - name: Write production deployment summary
+        if: always()
+        env:
+          IMAGE: ${{ needs.resolve-release.outputs.image }}
+          IMAGE_TAG: ${{ needs.resolve-release.outputs.image_tag }}
+          SMOKE_OUTCOME: ${{ steps.smoke_test.outcome }}
+        run: |
+          cat <<EOF >> "$GITHUB_STEP_SUMMARY"
+          ## Production Deployment
+          - **Image:** \`$IMAGE:$IMAGE_TAG\`
+          - **Smoke test:** \`$SMOKE_OUTCOME\`
+          EOF

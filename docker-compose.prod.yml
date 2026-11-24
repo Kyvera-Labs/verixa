@@ -40,7 +40,15 @@ services:
     restart: unless-stopped
     ports: !reset []
     command: >
-      sh -c 'if [ -n "$$REDIS_PASSWORD" ]; then
+      sh -c 'if [ -f /data/dump.rdb ] && { [ ! -d /data/appendonlydir ] || [ ! -f /data/appendonlydir/appendonly.aof.manifest ]; }; then
+               mkdir -p /data/appendonlydir &&
+               cp /data/dump.rdb /data/appendonlydir/appendonly.aof.1.base.rdb &&
+               printf "file appendonly.aof.1.base.rdb seq 1 type b\n" > /data/appendonlydir/appendonly.aof.manifest &&
+               chmod -R 777 /data/appendonlydir 2>/dev/null || true;
+               chown -R redis:redis /data/appendonlydir 2>/dev/null || true;
+               rm -f /data/dump.rdb;
+             fi;
+             if [ -n "$$REDIS_PASSWORD" ]; then
                redis-server --appendonly yes --appendfsync everysec --dir /data --requirepass "$$REDIS_PASSWORD";
              else
                redis-server --appendonly yes --appendfsync everysec --dir /data;
@@ -72,7 +80,7 @@ services:
       context: .
       dockerfile: apps/api/Dockerfile
       target: build
-    image: ${VERIXA_API_IMAGE:-ghcr.io/kyvera-labs/verixa-api:build}
+    image: ${VERIXA_MIGRATION_IMAGE:-ghcr.io/kyvera-labs/verixa-api:build}
     restart: "no"
     command: pnpm --filter @verixa/database run db:migrate:deploy
     environment:

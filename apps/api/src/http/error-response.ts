@@ -1,6 +1,8 @@
-import { DomainError, ValidationError } from "@verixa/shared-kernel";
+import { DomainError, RateLimitExceededError, ValidationError } from "@verixa/shared-kernel";
 import type { FastifyError, FastifyReply, FastifyRequest } from "fastify";
 import { ZodError } from "zod";
+
+import { applyRateLimitHeaders } from "../plugins/rate-limit-headers.js";
 
 import { API_ERROR_CODES, isApiErrorCode, type ApiErrorCode } from "./error-code-registry.js";
 
@@ -84,12 +86,55 @@ function validationDetails(error: ErrorWithValidation): Readonly<Record<string, 
   return { fields };
 }
 
+/** Determines whether an error is a rate-limit-exceeded failure. */
+export function isRateLimitExceededError(error: unknown): boolean {
+  if (error instanceof RateLimitExceededError) {
+    return true;
+  }
+  if (error instanceof Error && error.message.startsWith("Rate limit exceeded")) {
+    return true;
+  }
+  return false;
+}
+
+/** Handles a rate-limit-exceeded error by applying response headers and sending a 429 status. */
+export function handleRateLimitExceeded(reply: FastifyReply, error: unknown): void {
+  const err = error as { resetAt?: number; limit?: number; message?: string };
+  let resetAt = err.resetAt;
+  if (!resetAt || Number.isNaN(resetAt)) {
+    const msg = typeof err.message === "string" ? err.message : "";
+    const match = /Resets at (.*)$/.exec(msg);
+    if (match && match[1]) {
+      const parsed = Date.parse(match[1]);
+      if (!Number.isNaN(parsed)) {
+        resetAt = parsed;
+      }
+    }
+  }
+  const finalResetAt = resetAt && !Number.isNaN(resetAt) ? resetAt : Date.now() + 60_000;
+  const limit = err.limit ?? 5;
+
+  applyRateLimitHeaders(reply, {
+    allowed: false,
+    limit,
+    remaining: 0,
+    resetAt: finalResetAt,
+  });
+
+  sendApiError(reply, "RATE_LIMITED", "Rate limit exceeded. Please retry later.");
+}
+
 /** Converts Fastify and domain failures into the one public error contract. */
 export function handleApiError(
   error: FastifyError,
   _request: FastifyRequest,
   reply: FastifyReply,
 ): void {
+  if (isRateLimitExceededError(error)) {
+    handleRateLimitExceeded(reply, error);
+    return;
+  }
+
   if (error instanceof DomainError) {
     if (!isApiErrorCode(error.code)) {
       sendUnexpectedError(reply, error);
@@ -201,6 +246,10 @@ export function sendUnexpectedError(reply: FastifyReply, error: unknown): void {
 
 /** Routes `error` to the right handler based on whether it is a domain error. */
 export function sendError(reply: FastifyReply, error: unknown): void {
+  if (isRateLimitExceededError(error)) {
+    handleRateLimitExceeded(reply, error);
+    return;
+  }
   if (error instanceof DomainError) {
     sendDomainError(reply, error);
     return;

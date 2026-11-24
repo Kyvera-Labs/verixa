@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { createReadStream, mkdirSync, writeFileSync } from "node:fs";
+import { createReadStream, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
 /**
@@ -48,7 +48,7 @@ export async function runDocker(argv, options = {}) {
         return;
       }
       const output = Buffer.concat(chunks);
-      if (options.outputFile) {
+      if (options.outputFile && (output.length > 0 || !existsSync(options.outputFile))) {
         mkdirSync(dirname(options.outputFile), { recursive: true });
         writeFileSync(options.outputFile, output);
       }
