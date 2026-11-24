@@ -739,3 +739,35 @@ API_IMAGE='ghcr.io/kyvera-labs/verixa' \
 The script pulls the requested image, replaces the API container, and waits for `/health`. It reports `/version` so the operator can confirm which build is serving. It does not alter database state. Adapt the container replacement step to the deployment platform when running Kubernetes or another scheduler; the invariant is to point the API deployment at the selected immutable tag, then verify health and version before declaring the rollback complete.
 
 CI exercises this procedure with version A and B images: it starts B, selects A with the same rollback script, and asserts that both the health response and version response match A.
+
+---
+
+## 9. Staging and production deployment workflow
+
+Verixa connects its release pipeline (`.github/workflows/release.yml`) and immutable container images (`.github/workflows/docker-publish.yml`) to staging and production via `.github/workflows/deploy.yml`.
+
+### Progressive delivery: why staging-then-production with a human gate
+
+Fully automated continuous deployment directly to production maximizes velocity, but it also maximizes blast radius: an unreviewed migration interaction, a misconfigured secret, or a subtle runtime regression reaches all users immediately. Conversely, fully manual deployments slow down feedback loops and encourage batching large, risky releases.
+
+Verixa uses **progressive delivery** to balance both:
+
+1. **Automatic staging deployment:** Every successful `Release` workflow run automatically deploys the newly published immutable image tag (`vX.Y.Z` or `sha-<short>`) to the `staging` GitHub Environment and verifies it with a post-deploy smoke test.
+2. **Gated production promotion:** The `deploy-production` job depends on `deploy-staging` (`needs: [resolve-release, deploy-staging]`) and targets the `production` GitHub Environment. GitHub Environment protection rules (specified in `.github/environments/production.yml`) pause the workflow until a designated reviewer explicitly approves promotion.
+3. **Fail-closed promotion and automatic rollback:** If staging deployment or its smoke test fails, staging automatically rolls back to its last known-good tag and the job fails — blocking production promotion completely. Production runs the same smoke test and automatic rollback on failure, so neither environment is ever left in an unknown state.
+
+### Post-deploy smoke testing
+
+Both staging and production run `infra/ci/deploy-smoke-test.mjs` before marking a deployment successful:
+
+- Polls `GET /health` until HTTP `200` is returned within the retry budget.
+- Verifies `GET /version` returns HTTP `200` and includes the expected immutable image tag.
+
+Checking `/version` alongside `/health` is deliberate: if an orchestrator fails to replace the running container, the previous healthy container may continue serving `200 OK` on `/health`. A `/health`-only check would falsely report the deployment as successful; asserting `/version` catches that failure mode immediately.
+
+### Key design decisions and rejected alternatives
+
+- **`workflow_run` trigger vs. deploying inside `release.yml`:** We rejected adding deployment jobs directly to `release.yml`. `release.yml` requires `contents: write` to attach SBOMs and manage releases, while `deploy.yml` requires `deployments: write` and environment-scoped deployment secrets. Splitting them enforces least privilege and allows operators to re-deploy or roll back via `workflow_dispatch` without re-running release creation.
+- **Human approval gate vs. fixed `wait_timer`:** `.github/environments/production.yml` sets `wait_timer: 0` and requires explicit reviewer approval (`prevent_self_review: true`). A fixed timer delays urgent security patches without verifying anything; a human gate lets maintainers verify staging telemetry and approve immediately when ready.
+- **Immutable tags vs. `latest`:** `resolve-release` explicitly refuses to deploy `latest` and verifies the immutable tag exists in GHCR before touching staging. This guarantees staging and production run the exact same image digest and makes automatic rollback deterministic.
+- **`cancel-in-progress: false`:** Concurrency groups for both `deploy-staging` and `deploy-production` never cancel an in-flight deployment, preventing half-applied rollouts or interrupted rollbacks.
