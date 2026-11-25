@@ -29,9 +29,7 @@
     "@vitest/coverage-v8": "^5.1.0",
     "supertest": "^7.3.2",
     "@verixa/verification": "workspace:*",
-    "@vitest/coverage-v8": "^3.2.6",
-    "supertest": "^7.0.0",
-    "testcontainers": "^12.2.0",
+    "testcontainers": "^12.2.1",
     "typescript": "^6.0.3",
     "vitest": "^5.1.0"
   }
