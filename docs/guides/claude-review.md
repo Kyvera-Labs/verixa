@@ -5,8 +5,8 @@ first-pass review: inline comments on specific lines, plus one summary comment
 with a verdict.
 
 It's **advice for the maintainer, not a gate**. It can't approve, request
-changes, push or merge. Branch protection still requires a code-owner approval,
-and the maintainer makes the decision.
+changes, push or merge. The maintainer reads every pull request and makes the
+decision.
 
 ## When it runs
 
@@ -58,8 +58,12 @@ isn't a required check, so it doesn't block merging.
 ## Cost
 
 Each review is billed to the API key, and the cost scales with the size of the
-diff. The workflow uses `claude-opus-5-5` for review quality. For a cheaper
-review, change `--model` in `claude_args` to `claude-sonnet-5-5`. Automatic
+diff. The workflow uses `claude-sonnet-5-5` with at most 25 turns per review to
+keep the cost down. For a deeper review of a risky change, temporarily set
+`--model` in `claude_args` to `claude-opus-5-5`.
+
+Until the `ANTHROPIC_API_KEY` secret is added, the job skips with a notice
+instead of failing, so it is safe to merge the workflow before the key exists. Automatic
 reviews run only on open, reopen and ready-for-review, not on every push, so a
 pull request with twenty pushes costs one review unless a maintainer asks for
 more.
