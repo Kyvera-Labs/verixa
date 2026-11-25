@@ -222,6 +222,7 @@ The Phase 15 rate limiting subsystem is wired centrally in `apps/api/src/composi
    - If Redis becomes unreachable, `RateLimiterStore` automatically degrades to the in-memory fallback store on each process instance. This prevents an external cache failure from causing full API downtime while preserving local defense.
 3. **Emergency Allowlisting**:
    - In the event that a critical external partner or integration proxy is throttled during traffic bursts, add their CIDR block or service token to `RATE_LIMIT_ALLOWLIST_IPS` / `RATE_LIMIT_ALLOWLIST_SERVICE_TOKENS` and restart or reload the service. All bypasses are recorded in the audit trail.
+
 # Rate Limiting Guide
 
 This guide describes Verixa's rate-limiting architecture, strategy selection rules, threat models, and integration patterns across sensitive endpoints such as authentication, password resets, registration, and administrative operations.
@@ -279,7 +280,7 @@ When combining sub-strategies in `CompositeRateLimitStrategy`:
 - **Accepted Rule (Strictest Wins)**: If _either_ IP or account strategy denies the request, the composite strategy denies (`allowed = false`).
 - **Rejected Alternative (Weighted Scoring / Threshold Summation)**: Summing denial probabilities or assigning weights was rejected because authentication security requires deterministic guarantees: an account undergoing brute force must be shielded even if the IP appears innocent, and an abusive IP must be throttled even if it targets a non-existent account.
 - **Auditing Visibility**: The result explicitly annotates `deniedBy` (`"ip" | "account" | "both"`) so security teams and audit logs can distinguish distributed stuffing attacks from localized volumetric abuse without exposing internal state to the untrusted caller.
-Rate limiting in Verixa is structured into layered components:
+  Rate limiting in Verixa is structured into layered components:
 
 1. **Storage Ports (`RateLimiter`)**: Defined in `@verixa/shared-kernel`, providing sliding-window or token-bucket counter persistence.
 2. **Specialized Strategies (`@verixa/rate-limiting`)**:

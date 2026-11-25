@@ -10,9 +10,7 @@ import {
 describe("normalizeAccountIdentifier", () => {
   it("lowercases and trims email identifiers", () => {
     expect(normalizeAccountIdentifier("  User.Name@Example.COM  ")).toBe("user.name@example.com");
-    expect(normalizeAccountIdentifier("  User.Name@Example.COM  ")).toBe(
-      "user.name@example.com",
-    );
+    expect(normalizeAccountIdentifier("  User.Name@Example.COM  ")).toBe("user.name@example.com");
   });
 
   it("trims non-email identifiers preserving casing", () => {
