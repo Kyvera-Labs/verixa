@@ -59,4 +59,17 @@ describe("OrganizationMembership", () => {
     original.changeRole("owner", "admin", 2);
     expect(original.role).toBe("member");
   });
+
+  it("reconstitutes a stored membership exactly as persisted", () => {
+    const stored = OrganizationMembership.reconstitute({
+      id: asId<"OrganizationMembershipId">("mem_1"),
+      organizationId,
+      userId,
+      role: "admin",
+      active: false,
+    });
+    expect(stored.id).toBe("mem_1");
+    expect(stored.role).toBe("admin");
+    expect(stored.active).toBe(false);
+  });
 });
