@@ -50,7 +50,9 @@ describe("LocalTransactionSigner", () => {
 });
 
 describe("KmsTransactionSigner", () => {
-  it("satisfies the signing contract through a fake key service", () => {
+  // The contract registers its own describe/it blocks, so it runs at suite
+  // level: Vitest 5 rejects suites declared inside a test.
+  describe("satisfies the signing contract through a fake key service", () => {
     const kms = fakeKmsClient();
 
     transactionSignerContract({
