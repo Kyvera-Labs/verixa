@@ -23,7 +23,7 @@
     "@types/supertest": "^6.0.2",
     "@verixa/database": "workspace:*",
     "@vitest/coverage-v8": "^3.2.6",
-    "fastify": "^5.12.1",
+    "fastify": "^5.12.8",
     "ioredis": "^5.11.1",
     "supertest": "^7.0.0",
     "typescript": "^5.7.2",
