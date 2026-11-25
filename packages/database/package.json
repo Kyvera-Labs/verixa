@@ -23,7 +23,7 @@
     "db:drift": "prisma migrate diff --from-migrations ./prisma/migrations --to-schema-datamodel ./prisma/schema.prisma --shadow-database-url $SHADOW_DATABASE_URL --exit-code"
   },
   "dependencies": {
-    "@prisma/client": "^6.2.1"
+    "@prisma/client": "^7.10.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
