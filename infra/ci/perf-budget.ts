@@ -37,7 +37,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
@@ -307,12 +307,35 @@ function requiredFlag(argv: readonly string[], name: string): string {
   return value;
 }
 
+/**
+ * Reads and parses a JSON input. Reads first and maps ENOENT, rather than
+ * checking existsSync and then reading, so there is no window in which the
+ * file can change between the check and the read (CodeQL js/file-system-race).
+ */
+/** Previously recorded timings, or none when this is the first suite measured. */
+function readTimingsIfPresent(timingsFile: string): ReturnType<typeof parseTimings> {
+  try {
+    return parseTimings(readJson(timingsFile, "timings"), timingsFile);
+  } catch (error) {
+    if (error instanceof BudgetInputError && error.message.startsWith("timings file not found")) {
+      return {};
+    }
+    throw error;
+  }
+}
+
 function readJson(file: string, what: string): unknown {
-  if (!existsSync(file)) {
-    throw new BudgetInputError(`${what} file not found: ${file}`);
+  let text: string;
+  try {
+    text = readFileSync(file, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new BudgetInputError(`${what} file not found: ${file}`);
+    }
+    throw error;
   }
   try {
-    return JSON.parse(readFileSync(file, "utf8")) as unknown;
+    return JSON.parse(text) as unknown;
   } catch (error) {
     throw new BudgetInputError(
       `${what} file is not valid JSON: ${file} (${error instanceof Error ? error.message : String(error)})`,
@@ -349,9 +372,7 @@ function measure(argv: readonly string[]): number {
   // Merged into the existing file so each suite can be measured in its own CI
   // step. A file left over from an earlier, unrelated run would be merged too,
   // which is why CI writes to a fresh path in the job's workspace.
-  const existing = existsSync(timingsFile)
-    ? parseTimings(readJson(timingsFile, "timings"), timingsFile)
-    : {};
+  const existing = readTimingsIfPresent(timingsFile);
   const updated = { suites: { ...existing, [suite]: { seconds: round(seconds, 2), exitCode } } };
   mkdirSync(path.dirname(timingsFile), { recursive: true });
   writeFileSync(timingsFile, `${JSON.stringify(updated, null, 2)}\n`, "utf8");
