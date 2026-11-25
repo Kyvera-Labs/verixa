@@ -105,9 +105,31 @@ The generated report (`ci-dashboard.md`) is exported as a workflow artifact and 
 directly to the GitHub Actions workflow run summary for transparent pipeline visibility.
 Verixa's deployment and release pipeline extends Continuous Integration into an automated delivery pipeline:
 
-1. **Conventional Commits & Semantic Versioning:** Commit titles enforce the Conventional Commits specification. On merge to `master`, `semantic-release` automatically calculates the next semantic version, produces formatted `CHANGELOG.md` updates, tags the repository, and creates GitHub Releases.
+1. **Conventional Commits & Semantic Versioning:** Commit titles enforce the Conventional Commits specification. When a maintainer runs the manual Semantic release workflow on `main`, `semantic-release` calculates the next semantic version from the commits, tags the repository, and creates a GitHub Release (see [Release Process](release-process.md)).
 2. **Container Image Publishing:** Hardened multi-stage Docker builds produce production images tagged by commit SHA (`sha-<short>`), release version (`vX.Y.Z`), and `latest`. Multi-architecture builds (`linux/amd64` and `linux/arm64`) are compiled via Buildx Bake and published to the GitHub Container Registry (`ghcr.io`).
 3. **Automated Dependency Updates & Auto-Merge:** Renovate proposes grouped dependency upgrades. Non-breaking patch and minor updates that pass all CI suites and do not touch sensitive security/crypto packages are merged automatically, keeping dependencies current while preserving human review for sensitive updates.
 4. **Ephemeral Preview Environments:** Pull requests deploy isolated ephemeral instances of `apps/api` with dedicated backing services. Environments use scoped credentials from the `preview` GitHub Environment and are automatically torn down when the PR is closed or merged.
 
 For a full, end-to-end educational walkthrough of how a commit traverses every stage of the pipeline, see [Building an End-to-End CI/CD Pipeline](tutorials/building-a-cicd-pipeline.md).
+
+## Test Workflow & Coverage Reporting
+
+`.github/workflows/test.yml` separates unit-level test suites with coverage collection from Testcontainers-backed integration tests:
+
+- **`unit-tests` job**: runs `pnpm test:workspace:coverage` to enforce every package's `vitest.config.ts` threshold (Issue 037 and its repeats), then runs `pnpm coverage:ratchet` against `infra/ci/coverage-baseline.json`. The composite action `.github/actions/coverage-report/action.yml` publishes a GitHub Actions check annotation, appends the markdown breakdown to `$GITHUB_STEP_SUMMARY`, and maintains a single sticky comment on pull requests.
+- **`integration-tests` job**: omits `TEST_DATABASE_URL` and sets `REQUIRE_DATABASE_TESTS=1`, forcing the database test harness (Issue 047) to spin up an ephemeral Postgres instance via Testcontainers.
+
+### Why Testcontainers in CI?
+
+Mocked unit tests cannot catch SQL constraint mismatches, Prisma migration drift, transaction isolation bugs, or PostgreSQL row-level security (RLS) behavior. Running ephemeral real dependencies in CI catches integration defects before merge without requiring contributors to maintain shared staging databases.
+
+**Rejected alternative:** Mocking Postgres/Redis in the test workflow to speed up CI runs. Rejected because mocks silently drift from real database behavior and give false confidence on repository and session-revocation code.
+
+## Commit Conventions & PR-Title Linting
+
+`.github/workflows/commitlint.yml` enforces the [Conventional Commits](conventional-commits.md) specification (Issue 010) on every pull request in two jobs:
+
+1. **`pr-title`**: validates `github.event.pull_request.title` directly against `commitlint.config.cjs` on `opened`, `edited`, `synchronize`, and `reopened` events. Because GitHub squash-merge defaults the commit message on `main` to the PR title, linting the PR title guarantees that every commit landing on `main` is machine-parseable by `semantic-release` (see [Release Process](release-process.md)).
+2. **`commitlint`**: validates every individual commit in the PR branch, catching `--no-verify` bypasses of the local Husky `commit-msg` hook.
+
+**Rejected alternative:** Using a separate regex-based PR-title action with its own duplicated list of allowed commit types. Rejected because two separate type lists inevitably drift; piping the PR title through `pnpm exec commitlint --config commitlint.config.cjs` guarantees one source of truth across local hooks, PR titles, and branch commits.

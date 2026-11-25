@@ -1,0 +1,18 @@
+# Grafana dashboard provisioning (Issue 359 / #471).
+# Loads all version-controlled dashboard JSON files from /var/lib/grafana/dashboards
+# into the "Verixa" folder so dashboard state is reproducible from git.
+apiVersion: 1
+
+providers:
+  - name: verixa-dashboards
+    orgId: 1
+    folder: Verixa
+    folderUid: verixa
+    type: file
+    disableDeletion: true
+    editable: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false
