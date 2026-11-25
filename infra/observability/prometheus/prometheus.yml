@@ -1,0 +1,14 @@
+# Prometheus scrape configuration for local observability stack (Issue 359 / #471).
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: verixa-api
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["api:3000"]

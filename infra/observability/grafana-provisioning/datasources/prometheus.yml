@@ -1,0 +1,16 @@
+# Grafana datasource provisioning (Issue 359 / #471).
+# Automatically connects Grafana to the local Prometheus instance on startup so
+# dashboards load populated with live metrics without manual UI configuration.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      httpMethod: POST
+      timeInterval: 15s
