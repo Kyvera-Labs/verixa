@@ -35,3 +35,8 @@ export {
   HttpNotificationSender,
   type HttpNotificationSenderConfig,
 } from "./infrastructure/adapters/http-notification-sender.js";
+export type {
+  NotificationComposition,
+  NotificationSubscriber,
+  NotificationWorker,
+} from "./application/ports/notification-runtime.js";

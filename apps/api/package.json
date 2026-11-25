@@ -42,6 +42,7 @@
     "@verixa/governance": "workspace:*",
     "@verixa/identity": "workspace:*",
     "@verixa/mfa": "workspace:*",
+    "@verixa/notifications": "workspace:*",
     "@verixa/rate-limiting": "workspace:*",
     "@verixa/sessions": "workspace:*",
     "@verixa/shared-kernel": "workspace:*",
