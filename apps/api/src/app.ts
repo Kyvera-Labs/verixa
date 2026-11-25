@@ -24,6 +24,7 @@ import {
   type SecurityHeadersOptions,
 } from "./plugins/security-headers.js";
 import { registerCspReportRoute } from "./routes/csp-report.js";
+import { registerLivenessRoute } from "./routes/health/live.js";
 import { registerSecurityTxtRoute } from "./routes/well-known/security-txt.js";
 
 /**
@@ -195,6 +196,9 @@ export function buildApp(options: BuildAppOptions = {}) {
     // lastError can carry provider hostnames or connection details.
     app.get("/health/notifications", () => ({ running: notificationWorker.health().running }));
   }
+  // Dedicated Kubernetes-style liveness endpoint (Issue 357 / #469),
+  // dependency-free and excluded from auth and rate limiting.
+  registerLivenessRoute(app);
 
   // Kept separate from liveness so deployments can verify which immutable
   // image is serving traffic without making health probes depend on metadata.

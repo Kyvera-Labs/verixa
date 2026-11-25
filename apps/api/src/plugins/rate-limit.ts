@@ -12,7 +12,6 @@ import type { Redis } from "ioredis";
 import { sendApiError } from "../http/error-response.js";
 
 import { applyRateLimitHeaders } from "./rate-limit-headers.js";
-
 export interface RateLimitPluginOptions {
   redisClient?: Redis;
   defaultMax?: number;
@@ -105,6 +104,11 @@ export function registerRateLimit<TLogger extends FastifyBaseLogger = FastifyBas
   const store = new RateLimiterStore(opts.redisClient);
 
   fastify.addHook("onRequest", async (request: FastifyRequest, reply: FastifyReply) => {
+    const routeConfig = request.routeOptions?.config?.rateLimit;
+    if (routeConfig?.skip === true) {
+      return;
+    }
+
     // Determine principal key: user id from session/header or API key, falling back to IP
     const userHeader = request.headers["x-user-id"];
     const principalId =
@@ -114,7 +118,6 @@ export function registerRateLimit<TLogger extends FastifyBaseLogger = FastifyBas
           ? `apikey:${request.headers["x-api-key"]}`
           : `ip:${request.ip}`;
 
-    const routeConfig = request.routeOptions?.config?.rateLimit;
     const max = routeConfig?.max ?? defaultMax;
     const windowMs = routeConfig?.timeWindowMs ?? defaultTimeWindowMs;
     const key = routeConfig?.identifier
