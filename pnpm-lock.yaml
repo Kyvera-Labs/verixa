@@ -135,6 +135,9 @@ importers:
       '@verixa/mfa':
         specifier: workspace:*
         version: link:../../packages/mfa
+      '@verixa/notifications':
+        specifier: workspace:*
+        version: link:../../packages/notifications
       '@verixa/rate-limiting':
         specifier: workspace:*
         version: link:../../packages/rate-limiting

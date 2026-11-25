@@ -189,6 +189,13 @@ export function buildApp(options: BuildAppOptions = {}) {
     return { status: "ok" };
   });
 
+  const notificationWorker = options.container?.notifications?.worker;
+  if (notificationWorker !== undefined) {
+    // Public and unauthenticated, so only the running flag: the worker's
+    // lastError can carry provider hostnames or connection details.
+    app.get("/health/notifications", () => ({ running: notificationWorker.health().running }));
+  }
+
   // Kept separate from liveness so deployments can verify which immutable
   // image is serving traffic without making health probes depend on metadata.
   app.get("/version", () => ({ version: process.env["VERIXA_BUILD_VERSION"] ?? "unknown" }));
