@@ -1,6 +1,12 @@
 # Release Process
 
-Verixa uses [`semantic-release`](https://semantic-release.gitbook.io/) configured in `.releaserc.json` and executed by `.github/workflows/release.yml` to automate versioning, git tagging, and GitHub Release creation.
+Verixa uses [`semantic-release`](https://semantic-release.gitbook.io/) configured in `.releaserc.json` and executed by `.github/workflows/semantic-release.yml` to automate versioning, git tagging, and GitHub Release creation.
+
+## Cutting a release
+
+Releases are **manual**: a maintainer runs **Actions -> Semantic release -> Run workflow** on `main`. The `dry_run` input defaults to on, so the first run only prints the computed version and notes; run it again with `dry_run` off to publish.
+
+It does not run on every push to `main`. That would publish a release for every merge, and since `deploy.yml` follows the `Release` workflow, it would also try to deploy each one. semantic-release and its plugins are root devDependencies installed from the lockfile, not fetched with `npx`, so they pass the same supply-chain checks as everything else.
 
 ## Semantic Versioning as a Communication Contract
 
@@ -21,7 +27,7 @@ Semantic Versioning (`MAJOR.MINOR.PATCH`) is a contract with downstream consumer
 2. **`@semantic-release/release-notes-generator`** (`conventionalcommits` preset): generates structured release notes grouped by commit type.
 3. **`@semantic-release/github`**: creates the annotated git tag (`vX.Y.Z`) and publishes the GitHub Release.
 
-When the tag `vX.Y.Z` is pushed, the `sbom` job in `.github/workflows/release.yml` automatically generates and attaches the CycloneDX SBOM for that exact locked commit.
+When a maintainer pushes the tag `vX.Y.Z`, the `sbom` job in `.github/workflows/release.yml` generates and attaches the CycloneDX SBOM for that exact locked commit. A tag created by the Semantic release workflow uses its `GITHUB_TOKEN`, which by GitHub design does not start other workflows, so to attach the SBOM, re-push that tag from a maintainer account (`git push origin :refs/tags/vX.Y.Z && git push origin vX.Y.Z` after fetching it).
 
 ## Dry-Run Verification
 

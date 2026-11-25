@@ -46,8 +46,11 @@ runs:
         fi
 
     - name: Post or update PR coverage comment
-      if: inputs.post-pr-comment == 'true' && github.event_name == 'pull_request'
-      uses: actions/github-script@v7
+      # Fork pull requests get a read-only token, so commenting would fail the
+      # job; comment only on same-repository PRs, and never fail on it.
+      if: inputs.post-pr-comment == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+      continue-on-error: true
+      uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
       env:
         RATCHET_MD_PATH: ${{ inputs.ratchet-markdown-path }}
       with:

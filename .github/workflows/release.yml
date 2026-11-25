@@ -1,21 +1,20 @@
 name: Release
 
-# Automated release pipeline:
-# 1. On push to `main`: runs `semantic-release` (Issue 368 / #480) to analyze
-#    Conventional Commits since the last tag, compute the next SemVer version,
-#    create the annotated git tag (`vX.Y.Z`), and publish a GitHub Release with
-#    generated release notes.
-# 2. On semver tag push (`vX.Y.Z`): generates and attaches the CycloneDX SBOM
-#    (Issue 215) to the release from the exact locked dependency graph at that
-#    commit.
+# Issue 215 — a Software Bill of Materials has to be produced at the same
+# moment, and from the same commit, as the thing it describes. Generating one
+# later, from whatever `pnpm install` resolves today, produces a document that
+# is confidently wrong about a release nobody can rebuild: the lockfile is the
+# only input here that was reviewed, so the SBOM is generated from it and from
+# nothing else.
 #
-# Keeping both jobs in release.yml preserves the existing tag-triggered SBOM
-# contract while ensuring `semantic-release` runs strictly on `main`.
+# Scope is deliberately narrow. This builds and publishes the SBOM and nothing
+# else — pushing a container image belongs to Issue 216 (the image is not
+# hardened yet, so an SBOM claiming it is would be a liability rather than an
+# asset), and vulnerability scanning of the packages listed here belongs to
+# Issue 207. Both consume this file's output; neither is this file's job.
 
 on:
   push:
-    branches:
-      - main
     tags:
       # A full semver tag, not `v*`. A half-matching trigger is worse than none:
       # a tag like `v2-migration-experiment` would produce an SBOM that looks
@@ -23,64 +22,24 @@ on:
       # people downstream reading it have no way to tell the two apart.
       - "v[0-9]+.[0-9]+.[0-9]+"
 
-# Runs are not cancelled: a release or tag is immutable in practice, and two
-# concurrent runs for the same ref would race on the same release asset.
+# Runs are not cancelled: a tag is immutable in practice, and two concurrent
+# runs for the same tag would race on the same release asset. The group is
+# per-ref so releasing two versions in quick succession does not serialize them.
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
-  # `contents: write` is required by semantic-release to push tags and create
-  # GitHub Releases, and by the SBOM job to attach release assets.
-  # `issues: write` and `pull-requests: write` allow @semantic-release/github
-  # to comment on released issues/PRs.
+  # The only write this workflow performs is attaching the SBOM to the release,
+  # and GitHub gates release assets behind the `contents` scope — there is no
+  # narrower scope that gets the asset uploaded. Everything else it does reads.
+  # The SBOM is additionally uploaded as a workflow artifact below, which needs
+  # no write permission at all.
   contents: write
-  issues: write
-  pull-requests: write
 
 jobs:
-  semantic-release:
-    name: Compute version and publish GitHub Release
-    # Runs strictly on pushes to `main` — never on pull requests or feature
-    # branches, so unreleased commits cannot publish tags.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          # Full history is required so semantic-release can walk commits back
-          # to the previous release tag.
-          fetch-depth: 0
-          persist-credentials: false
-
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts
-
-      # Uses .releaserc.json at the monorepo root with
-      # @semantic-release/commit-analyzer, @semantic-release/release-notes-generator,
-      # and @semantic-release/github.
-      - name: Run semantic-release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: >-
-          npx --yes
-          -p semantic-release@24
-          -p @semantic-release/commit-analyzer@13
-          -p @semantic-release/release-notes-generator@14
-          -p @semantic-release/github@11
-          -p conventional-changelog-conventionalcommits@8
-          semantic-release
-
   sbom:
     name: Generate and publish the CycloneDX SBOM
-    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
