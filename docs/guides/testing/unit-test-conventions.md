@@ -255,7 +255,7 @@ Database-backed integration tests may skip when their documented test database
 is unavailable. Report that limitation rather than treating a skip as a pass
 for the database behavior.
 
-## Fixtures and Object Mothers (`@verixa/testing-kit/factories`)
+## Fixtures and Object Mothers (`@verixa/testing-kit`)
 
 Writing unit tests should never require configuring dozens of boilerplate fields or wrestling with internal invariants when only a specific behavior is under test. Verixa uses the **Object Mother** pattern (via factory functions) to generate valid domain aggregates, entities, and value objects.
 
@@ -268,14 +268,14 @@ Writing unit tests should never require configuring dozens of boilerplate fields
 
 ### Available Factories
 
-All factories are exported from `@verixa/testing-kit/factories`:
+All factories are exported from the package root, `@verixa/testing-kit`:
 
 | Factory                        | Target Entity / Aggregate            | Key Overrides                                                                         |
 | :----------------------------- | :----------------------------------- | :------------------------------------------------------------------------------------ |
 | `makeUser()`                   | `User` (identity)                    | `id`, `email`, `displayName`, `personName`, `status`, `createdAt`, `updatedAt`        |
 | `makeOrganization()`           | `Organization` (identity)            | `id`, `name`, `slug`, `ownerId`, `status`, `createdAt`, `updatedAt`                   |
 | `makeOrganizationMembership()` | `OrganizationMembership` (identity)  | `id`, `userId`, `organizationId`, `status`, `joinedAt`                                |
-| `makeInvitation()`             | `Invitation` (identity)              | `id`, `organizationId`, `email`, `invitedByUserId`, `ttlMs`                           |
+| `makeInvitation()`             | `Invitation` (identity)              | `id`, `organizationId`, `email`, `invitedByUserId`, `ttlMs`, `now`                    |
 | `makeSession()`                | `Session` (sessions)                 | `id`, `userId`, `policy`, `metadata`, `isRevoked`, `revokedAt`, `now`                 |
 | `makeRefreshToken()`           | `IssuedRefreshToken` (sessions)      | `sessionId`, `expiresAt`, `now`                                                       |
 | `makeCredential()`             | `Credential` (credentials)           | `id`, `userId`, `passwordHash`, `failedAttempts`, `lockedUntil`                       |
@@ -287,7 +287,7 @@ All factories are exported from `@verixa/testing-kit/factories`:
 
 ```ts
 import { describe, it, expect } from "vitest";
-import { makeUser, makeSession, makeCredential } from "@verixa/testing-kit/factories";
+import { makeUser, makeSession, makeCredential } from "@verixa/testing-kit";
 
 describe("AuthenticationService", () => {
   it("rejects authentication when user is suspended", async () => {
@@ -317,9 +317,146 @@ describe("AuthenticationService", () => {
 - **Bypassing Domain Guards:** Do not use `as any` or type assertions to produce illegal domain states that cannot exist at runtime.
 - **Global Mutable Fixtures:** Never share a single instantiated entity across tests. Each test should call the factory to obtain its own clean instance.
 
+## Builders for field-heavy aggregates
+
+A factory answers "give me a valid one". Some tests need a valid one _with a
+history_: a verification request a reviewer has claimed and then rejected, a
+credential that has failed enough logins to lock. For those, the overrides
+object gets opaque fast, and for some states the factory can't help at all.
+`@verixa/testing-kit` adds fluent builders, layered on the factories above, for
+the four factory-backed aggregates with the most fields (counted from the
+props each one's `reconstitute` accepts, excluding `domainEvents`):
+
+| Builder                  | Aggregate             | Fields |
+| :----------------------- | :-------------------- | -----: |
+| `anMfaMethod()`          | `MfaMethod`           |     11 |
+| `aVerificationRequest()` | `VerificationRequest` |     10 |
+| `aPendingInvitation()`   | `Invitation`          |      9 |
+| `aCredential()`          | `Credential`          |      8 |
+
+`Credential` shares 8 fields with `User`, `Session`, `Policy` and
+`AuditEvent`. It was picked from that tie because lockout and password history
+are multi-step preconditions, which is what a builder is for. Three entities
+have more fields but no factory to build on: `WebAuthnCredential` (12),
+`ApiKey` (10) and `AuditLogEntry` (9, deliberately not part of the audit
+package's public API). Add a builder for any of these when its tests start
+reaching for long override objects, not before.
+
+### Builder or factory?
+
+Use the **factory** when a test cares about one or two fields:
+`makeUser({ status: "suspended" })` is already as clear as it gets.
+
+Use a **builder** when the precondition is a sequence of things that happened
+to the aggregate, or when you would otherwise set two or more fields that have
+to agree with each other. Here is a lockout through the factory:
+
+```ts
+// Before: which of these numbers matter? Does 60_000 match the real policy?
+const credential = makeCredential({
+  failedAttempts: 5,
+  lockedUntil: new Date(Date.now() + 60_000),
+});
+```
+
+The overrides type in the _result_ of the lockout policy. If someone changes
+`DEFAULT_LOCKOUT_POLICY`, this fixture keeps passing while describing a state
+production can no longer reach. The builder states the _cause_ and lets the
+domain compute the effect:
+
+```ts
+// After: the chain is the precondition.
+const credential = aCredential().lockedOut().build();
+```
+
+For an aggregate with a state machine, the difference is bigger.
+`makeVerificationRequest()` can only produce `pending_evidence`. Without a
+builder, every test that needs a decided request has to unwrap four `Result`s by
+hand. With one:
+
+```ts
+const rejected = aVerificationRequest()
+  .ofType("address")
+  .inReview()
+  .claimedBy("rev_alice")
+  .rejectedBy("rev_alice", "Proof of address is older than three months.")
+  .build();
+```
+
+### How builders stay domain-valid
+
+`build()` starts from the matching factory, then **replays each chained call as
+the aggregate's own transition**: `submit()`, `claimBy()`, `accept()`,
+`recordFailedAttempt(policy)`. It never `reconstitute`s a status the state
+machine didn't walk to. This has two consequences:
+
+- Output is valid by construction, with the same guarantee the factories give.
+  The builder tests check this through the domain itself. For example, they
+  round-trip every verification-request state through
+  `VerificationRequest.reconstitute`, which rejects inconsistent fields.
+- Chain order is event order. An impossible history fails **at `build()`**
+  with the domain's own error, not a generic one, so a test can assert on it:
+
+  ```ts
+  expect(() => aVerificationRequest().inReview().approvedBy("rev_a").build()).toThrow(
+    ReviewDecisionNotPermittedError, // nobody claimed it
+  );
+  expect(() => aPendingInvitation().expired().accepted().build()).toThrow(
+    "This invitation has expired.",
+  );
+  ```
+
+`build(now)` takes an optional `now` used for every timestamped transition (and
+passed to the factory where it accepts one), so time-dependent preconditions
+such as expiry and lockout windows are judged against a single clock.
+
+### Naming `.with*()` methods
+
+Name a method after the **domain fact** the test depends on, not the field it
+happens to touch. The chain should read as the test's preconditions.
+
+| Prefer                           | Over                                   | Why                                                   |
+| :------------------------------- | :------------------------------------- | :---------------------------------------------------- |
+| `.lockedOut()`                   | `.withLockedUntil(date)`               | Names the state; the policy computes the date.        |
+| `.inReview().claimedBy("rev_a")` | `.withStatus("in_review")`             | Walks the state machine instead of asserting a value. |
+| `.expired()`                     | `.withExpiresAt(past)`                 | The test cares that it's expired, not when.           |
+| `.afterFailedLogins(3)`          | `.withFailedAttempts(3)`               | Describes what happened, which is what the code sees. |
+| `.forUser(id)`, `.sentTo(email)` | `.withUserId(id)`, `.withEmail(email)` | Reads as a sentence; plain data still gets a verb.    |
+
+Past-participle or state names (`accepted()`, `revoked()`, `disabled()`) are
+for transitions, and prepositions (`forUser`, `toOrganization`, `ofType`) for
+plain data. Entry points are articles plus the aggregate name: `aCredential()`,
+`anMfaMethod()`. The one exception, `aPendingInvitation()`, names its starting
+state because every other invitation status is reached from it.
+
+### Immutability
+
+Every chained call returns a **new** builder. The receiver is never modified.
+That makes a shared base safe:
+
+```ts
+const inReview = aVerificationRequest().inReview();
+
+const approved = inReview.claimedBy("rev_a").approvedBy("rev_a").build();
+const rejected = inReview.claimedBy("rev_b").rejectedBy("rev_b").build();
+const untouched = inReview.build(); // still in_review
+```
+
+Each `build()` also returns a fresh aggregate. This matters for `MfaMethod`,
+which mutates itself in place: two builds from the same builder never share an
+instance.
+
+**Rejected alternative: a mutable builder** (`this.steps.push(step); return
+this;`). It's a few lines shorter and is the textbook shape, but `inReview`
+above would collect _both_ branches' steps. The second `build()` would then
+fail, or worse, pass with the wrong state, depending on test order. That
+aliasing bug only shows up when someone hoists a builder into a `const` shared
+by several tests, which is exactly the reuse a builder invites. The builder
+spec includes a test for it.
+
 ---
 
-## Test doubles and the in-memory fake registry (`@verixa/testing-kit/fakes`)
+## Test doubles and the in-memory fake registry (`@verixa/testing-kit`)
 
 Verixa follows Ports and Adapters (Hexagonal Architecture). Application use cases depend strictly on abstract repository and service ports. For unit testing, we prefer **In-Memory Fakes** over mocks or stubs.
 
@@ -341,7 +478,7 @@ Every fake adapter in Verixa must satisfy the following checklist:
 
 ### Central Fake Registry
 
-Rather than duplicating fake implementations across different packages, `@verixa/testing-kit/fakes` serves as the centralized registry re-exporting in-memory adapters and test doubles across all bounded contexts:
+Rather than duplicating fake implementations across different packages, `@verixa/testing-kit` serves as the centralized registry re-exporting in-memory adapters and test doubles across all bounded contexts:
 
 - **Identity:** `InMemoryUserRepository`, `InMemoryOrganizationRepository`, `InMemoryOrganizationMembershipRepository`, `InMemoryInvitationRepository`, `InMemoryApiKeyRepository`, `InMemoryUnitOfWork`
 - **Sessions:** `InMemorySessionRepository`, `InMemoryRevocationList`, `InMemorySessionAuditLogger`
@@ -350,18 +487,19 @@ Rather than duplicating fake implementations across different packages, `@verixa
 - **Authorization:** `InMemoryRoleRepository`, `InMemoryPolicyRepository`, `InMemoryPermissionRepository`, `InMemoryUserRoleAssignmentRepository`
 - **Audit:** `InMemoryAuditLogRepository`, `InMemoryAuditEventReader`, `InMemoryAnchorRecordRepository`
 - **Verification:** `InMemoryVerificationRequestRepository`
-- **Infrastructure / Security:** `InMemoryRateLimiter`, `InMemoryCaptchaService`, `InMemoryBruteForceAttemptStore`, `InMemoryEventPublisher`
+- **Infrastructure / Security:** `InMemoryRateLimiter`, `InMemoryCaptchaValidator`, `NoopCaptchaValidator`, `InMemoryBruteForceAttemptStore`, `InMemoryEventPublisher`
+- **Stellar anchor:** `InMemoryHashAnchor`
 
 ### Usage Example
 
 ```ts
 import { describe, it, beforeEach, expect } from "vitest";
-import { makeUser } from "@verixa/testing-kit/factories";
 import {
-  InMemoryUserRepository,
-  InMemorySessionRepository,
   InMemoryRateLimiter,
-} from "@verixa/testing-kit/fakes";
+  InMemorySessionRepository,
+  InMemoryUserRepository,
+  makeUser,
+} from "@verixa/testing-kit";
 import { LoginUseCase } from "./login-use-case.js";
 
 describe("LoginUseCase", () => {

@@ -137,6 +137,7 @@ export async function startTestDatabase(): Promise<TestDatabase | undefined> {
     return undefined;
   }
 
+  // #region testcontainers
   let container: StartedPostgreSqlContainer | undefined;
   try {
     container = await new PostgreSqlContainer("postgres:16-alpine")
@@ -154,6 +155,7 @@ export async function startTestDatabase(): Promise<TestDatabase | undefined> {
 
   const url = container.getConnectionUri();
   applyMigrations(url);
+  // #endregion testcontainers
 
   const prisma = new PrismaClient({ datasources: { db: { url } } });
   const started = container;

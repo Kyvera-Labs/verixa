@@ -1,182 +1,163 @@
 # Verixa
 
+[![CI](https://github.com/Kyvera-Labs/verixa/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Kyvera-Labs/verixa/actions/workflows/ci.yml)
+[![Coverage gate](https://github.com/Kyvera-Labs/verixa/actions/workflows/coverage.yml/badge.svg?branch=main)](https://github.com/Kyvera-Labs/verixa/actions/workflows/coverage.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Verixa is open-source infrastructure for **authentication, authorization,
-identity, verification, audit logging, security, and governance** — built to be
-production-ready and, at the same time, a complete educational resource for
-learning backend engineering, software architecture, and security best practices.
+identity, verification, audit logging, security, and governance**, written in
+TypeScript. It's built to be read as well as run: every subsystem is a
+separately tested package with its design decisions written down next to it.
 
-Every subsystem (credentials, sessions, RBAC, audit logging, etc.) is designed as
-an independently testable, independently reusable module under `packages/`,
-composed together by the HTTP API in `apps/api`.
+> **Status: early, and honest about it.** The HTTP API registers users and
+> logs them in against Postgres, with password hashing, account lockout,
+> role-based authorization and a hash-chained audit log that can be anchored
+> to the Stellar testnet. Login does **not** issue a session token yet: the
+> sessions package exists but isn't wired into the API. The project is not yet
+> open to outside contributions. See the [roadmap](planning/ROADMAP.md).
 
-> **Status:** early, but running. Registration, login, account lockout, email
-> verification and password reset work end to end against Postgres, and the
-> audit log is anchored to Stellar. 70 of 500 planned issues are complete — see
-> [Roadmap](#roadmap). Sessions (Phase 05) are the next milestone and the
-> current limitation: login authenticates a user but does not yet issue a token.
+**Who it's for:** engineers who want to learn how authentication and
+authorization systems are built properly (Clean Architecture, DDD, threat
+models, tests at every layer) from a codebase you can read end to end, and
+teams evaluating it as a base to build on.
 
-## Why Verixa
-
-Most auth/identity building blocks are either a SaaS you pay for and can't audit,
-or a snippet you copy-paste and never fully understand. Verixa aims to be neither:
-a codebase you can read end to end, run yourself, and learn real architecture and
-security practice from — while still being solid enough to build on.
-
-## Verifiable audit logging on Stellar
-
-Verixa's audit log is **hash-chained** — every entry commits to its
-predecessor, so altering or removing one breaks every hash after it.
-
-That alone is weaker than it sounds, and Verixa says so rather than claiming
-otherwise. An attacker with write access to the database can rewrite the chain
-from any point and re-derive every subsequent hash; the result is internally
-consistent and indistinguishable from the truth. Hash chaining makes a log
-tamper-**evident to someone already holding an earlier hash**. It does not make
-it tamper-**proof**.
-
-Stellar is what closes that gap. The chain's head hash is committed to a
-Stellar transaction's `MEMO_HASH` — 32 bytes, exactly the size of a SHA-256
-digest, so the hash goes in whole. Rewriting history now also requires altering
-a public ledger the operator does not control.
-
-The property that matters is **independent verifiability**: an auditor, a
-regulator, or a suspicious user can check the log against the ledger with no
-access to, and no trust in, the operator's systems.
-
-### Try it — no database, no configuration
-
-```bash
-pnpm install
-pnpm --filter @verixa/audit demo
-```
-
-(The demo builds the packages it needs first, so this is genuinely the whole
-setup — no database, no keys, no `.env`.)
-
-It funds a throwaway testnet account from friendbot, records audit events,
-chains them, anchors the head, then verifies the commitment by reading it back
-off the ledger the way a third party would — and confirms a tampered hash is
-rejected.
-
-A real run:
-
-```
-4. Anchoring the chain head to Stellar
-   transaction: 21267a74f69d019fa40c1f93a6953896113ae2ee0e62af35326852a86a07d775
-   covers:      3 entries, through sequence 3
-
-5. Verifying the commitment from the public ledger
-   ledger commits to the head hash: true
-
-6. Confirming a tampered hash is rejected
-   altered hash verifies: false  (must be false)
-```
-
-That transaction is on the public testnet ledger:
-**[stellar.expert](https://stellar.expert/explorer/testnet/tx/21267a74f69d019fa40c1f93a6953896113ae2ee0e62af35326852a86a07d775)**
-— its memo is the audit log's head hash.
-
-### Only the hash
-
-Audit _content_ never leaves the operator's database. Audit records are exactly
-the records most likely to contain something sensitive, and a public ledger is
-irreversible. A digest proves the records existed unchanged while revealing
-nothing about them.
-
-### Honest scope
-
-- **Testnet today.** Mainnet needs KMS-backed key management, funding and
-  balance monitoring, and a rehearsed cutover — tracked as issues 190B–190D and
-  not yet done.
-- **Anchoring is scheduled, not per-entry.** A transaction per login would cost
-  a fee and seconds each time and buy little, since the chain already links
-  entries; anchoring the head commits to everything beneath it. How often is the
-  operator's knob, and it bounds the window for undetected tampering.
-- **Ledger-agnostic by construction.** Nothing above the adapter mentions
-  Stellar. `HashAnchor` is the port; `StellarHashAnchor` is one implementation.
-
-See `docs/adr/0003-stellar-audit-anchoring.md` for the full rationale.
-
-## Architecture
-
-Verixa is a TypeScript pnpm-workspaces monorepo following Clean Architecture and
-Domain-Driven Design: domain logic has no dependency on frameworks or databases,
-and each bounded context (identity, credentials, sessions, authorization,
-verification, audit, governance, notifications) lives in its own package.
-
-Full details: [`docs/adr/0001-monorepo-and-stack.md`](docs/adr/0001-monorepo-and-stack.md)
-records the stack decision; a broader architecture guide will grow under `docs/`
-as more contexts are built. Every non-trivial architectural decision from here
-on gets its own ADR — see [`docs/adr/0000-adr-process.md`](docs/adr/0000-adr-process.md)
-for the process.
-
-```
-verixa/
-├── apps/api/        # Fastify HTTP app (composition root)
-├── packages/        # Bounded-context packages (domain/application/infrastructure/interface)
-├── infra/           # Deployment & infrastructure config
-├── docs/            # Guides, ADRs, tutorials
-└── tests/           # Cross-package integration/e2e tests
-```
-
-## Prerequisites
-
-- [Node.js](https://nodejs.org/) 22.13 or later (required by pnpm 11)
-- [pnpm](https://pnpm.io/) 11 or later (`npm install -g pnpm`)
+**Who it isn't for (yet):** anyone who needs a drop-in, production-hardened
+identity provider today. Use an established one; come back when Verixa's
+roadmap reaches its launch phase.
 
 ## Quickstart
 
+Run the API and one real auth flow in about five minutes. You need
+[Node.js](https://nodejs.org/) 22.13+, [pnpm](https://pnpm.io/) 11
+(`corepack enable` picks the pinned version), and Docker with Compose.
+
 ```bash
+git clone https://github.com/Kyvera-Labs/verixa.git
+cd verixa
 pnpm install
-pnpm --filter @verixa/api dev
+docker compose up -d postgres
+pnpm db:wait
+export DATABASE_URL=postgres://verixa:verixa@localhost:5432/verixa
+pnpm db:migrate:deploy
+export SESSION_ACCESS_TOKEN_SECRET="$(openssl rand -base64 48)"
+pnpm dev
 ```
 
-`pnpm install` also generates the Prisma client, which is platform-specific
-and therefore never committed — see
-[`docs/guides/database.md`](docs/guides/database.md).
+`pnpm install` also generates the Prisma client. Nothing reads a `.env` file,
+so two variables are exported: the Prisma CLI needs `DATABASE_URL` (the API
+defaults to the same URL), and the API refuses to start without a session
+signing secret of at least 32 characters, which has no default on purpose.
+`pnpm dev` builds the packages the API depends on and starts it on port 3000.
 
-The API starts on `http://localhost:3000` (override with `PORT`). Verify it's up:
+In a second terminal, register a user, then log in:
 
 ```bash
-curl http://localhost:3000/health
-# {"status":"ok"}
+curl -i -X POST http://localhost:3000/auth/register \
+  -H 'content-type: application/json' \
+  -d '{"email":"ada@example.com","displayName":"Ada","password":"correct horse battery staple"}'
+
+curl -i -X POST http://localhost:3000/auth/login \
+  -H 'content-type: application/json' \
+  -d '{"email":"ada@example.com","password":"correct horse battery staple"}'
 ```
 
-Prefer one command and don't want Node/pnpm installed locally at all? Run the
-full stack (API + Postgres + Redis) in Docker instead:
+Registration answers `201 Created` and login `200 OK`, each with the user
+(never the password or its hash). Passwords need at least 12 characters. Run
+the registration again and it answers `409 Conflict`: the email is taken.
+
+These steps are exactly what [`scripts/quickstart-smoke.sh`](scripts/quickstart-smoke.sh)
+runs in CI, from a fresh checkout, on every pull request and every push to
+`main`. If this section breaks, the build does too. The OpenAPI document is
+served at `http://localhost:3000/docs/openapi.json`.
+
+## Architecture
+
+![Verixa architecture: apps/api wires bounded-context packages, each layered domain, application, infrastructure, on top of the shared kernel, Prisma/Postgres and an optional Stellar anchor](docs/assets/architecture-overview.svg)
+
+Verixa is a pnpm-workspaces monorepo following Clean Architecture and
+Domain-Driven Design:
+
+- **`apps/api`** is the only deployable. It's a Fastify app and the
+  **composition root**: the one place that chooses concrete adapters and
+  wires them into use cases.
+- **`packages/*`** hold one bounded context each (identity, credentials, MFA,
+  sessions, authorization, audit, verification, notifications, rate
+  limiting). Inside each, the **domain** has no framework or database
+  imports, the **application** layer defines use cases and the ports they
+  need, and **infrastructure** implements those ports. Lint rules enforce
+  both the layering and that other packages import only a context's curated
+  `index.ts`.
+- **Supporting packages:** `shared-kernel` (results, ids, errors), `config`
+  (validated environment), `database` (Prisma schema and migrations),
+  `stellar-anchor` (anchors the audit log's head hash to Stellar, optional),
+  and `testing-kit` (builders, fakes and contract tests, used by tests only).
+
+```
+verixa/
+├── apps/api/     # Fastify HTTP app, the composition root
+├── packages/     # bounded contexts and supporting packages
+├── tests/        # cross-package integration and end-to-end suites
+├── docs/         # guides, tutorials, ADRs, security design (the docs site)
+├── infra/        # CI tooling, Postgres init scripts, deployment config
+└── planning/     # roadmap, architecture vision, per-phase issues
+```
+
+Why it's built this way, and the alternatives that were rejected:
+[`planning/ARCHITECTURE.md`](planning/ARCHITECTURE.md),
+[domain modeling](docs/guides/domain-modeling.md), and the
+[architecture decision records](docs/adr/0000-adr-process.md).
+
+### A verifiable audit log
+
+Audit entries are hash-chained, so changing one breaks every hash after it.
+That alone only helps someone who already holds an earlier hash, because
+whoever controls the database can rewrite the whole chain. So Verixa can commit
+the chain's head hash to a Stellar transaction, which lets anyone check the
+log against a public ledger the operator doesn't control. Only the hash leaves
+the database, never audit content. It runs on testnet today. Try it without a
+database or any keys (it needs network access to the Stellar testnet):
 
 ```bash
-docker compose up
+pnpm --filter @verixa/audit demo
 ```
 
-See [`docs/guides/docker.md`](docs/guides/docker.md) for details, including
-the production image (`apps/api/Dockerfile`), which is a separate,
-intentionally different thing from the dev compose stack.
+Details: [ADR 0003](docs/adr/0003-stellar-audit-anchoring.md) and the
+[Stellar anchoring guide](docs/guides/stellar-anchoring.md).
 
-Other useful commands, run from the repo root:
+## Working on Verixa
 
 ```bash
-pnpm build       # build all workspace packages
-pnpm typecheck   # typecheck all workspace packages
-pnpm test        # run all unit/integration tests
-pnpm lint        # lint the whole workspace
-pnpm format      # auto-fix formatting with Prettier
+pnpm build        # build every workspace package
+pnpm typecheck    # typecheck every workspace package
+pnpm test         # unit and integration tests (database tests skip without Postgres)
+pnpm lint         # ESLint, including the architecture rules
+pnpm format       # Prettier
+pnpm docs:dev     # browse docs/ as a site at http://localhost:5173
 ```
 
-See [`docs/guides/code-style.md`](docs/guides/code-style.md) for what the
-linter checks and why.
+## Learn more
+
+The `docs/` folder is a [VitePress](https://vitepress.dev/) site: run
+`pnpm docs:dev` to browse it, or read the Markdown on GitHub. Good places to
+start:
+
+- [Documentation home](docs/index.md)
+- [Testing the platform](docs/guides/tutorials/testing-the-platform.md): unit,
+  integration, contract and end-to-end tests, step by step
+- Tutorials that build each context, starting with
+  [the identity context](docs/guides/tutorials/build-the-identity-context.md)
+- [Architecture decision records](docs/adr/0000-adr-process.md)
+- Security design: [authentication flows](docs/security/authentication-flows.md)
+  and the [threat register](docs/security/threat-register.md)
+- [Writing docs](docs/guides/writing-docs.md): how to add a page to the site
 
 ## Contributing
 
-Verixa isn't yet open for external contribution — the initial architecture and
-foundational tooling are still being laid down. See
-[`CONTRIBUTING.md`](CONTRIBUTING.md) for the local developer workflow so far.
-A `CODE_OF_CONDUCT.md` and issue/PR templates will land as part of the
-roadmap before the project accepts outside contributions.
+Verixa isn't open to outside contributions yet, while the foundations are
+being laid. [`CONTRIBUTING.md`](CONTRIBUTING.md) describes the workflow the
+maintainers use. To report a vulnerability, see [`SECURITY.md`](SECURITY.md).
 
 ## License
 
-[MIT](LICENSE) — see [`NOTICE`](NOTICE) for third-party attributions and
-[`docs/guides/licensing.md`](docs/guides/licensing.md) for why MIT.
+[MIT](LICENSE). See [`NOTICE`](NOTICE) for third-party attributions and
+[the licensing guide](docs/guides/licensing.md) for why MIT.
