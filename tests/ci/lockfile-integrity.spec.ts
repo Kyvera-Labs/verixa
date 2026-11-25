@@ -77,6 +77,49 @@ describe("check-lockfile-integrity", () => {
     );
   });
 
+  it("rejects a manifest with a duplicate key, naming the key", () => {
+    // JSON.parse keeps the last of two equal keys, so a stale duplicate left
+    // by a merge would silently win. The gate fails instead.
+    const result = runLockfileGate(
+      trackedFixture({
+        "package.json": FIXTURE_ROOT_MANIFEST.replace(
+          '"left-pad": "^1.3.0"',
+          '"left-pad": "^1.3.0",\n    "left-pad": "^1.0.0"',
+        ),
+      }).directory,
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("package.json: duplicate key(s) dependencies.left-pad");
+  });
+
+  it("checks workspace package manifests for duplicate keys too", () => {
+    const result = runLockfileGate(
+      trackedFixture({
+        "packages/widget/package.json": FIXTURE_WIDGET_MANIFEST.replace(
+          '"license": "MIT"',
+          '"license": "MIT",\n  "license": "ISC"',
+        ),
+      }).directory,
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("packages/widget/package.json: duplicate key(s) license");
+  });
+
+  it("allows the same key in different objects", () => {
+    const result = runLockfileGate(
+      trackedFixture({
+        "package.json": FIXTURE_ROOT_MANIFEST.replace(
+          '"license": "MIT"',
+          '"license": "MIT",\n  "exports": { ".": { "types": "./a.d.ts" }, "./b": { "types": "./b.d.ts" } }',
+        ),
+      }).directory,
+    );
+
+    expect(result.exitCode).toBe(0);
+  });
+
   it("names the dependency when a manifest gained one the lockfile never saw", () => {
     const result = runLockfileGate(
       trackedFixture({

@@ -369,6 +369,47 @@ function assertLockfileIsCommitted(repoRoot) {
   }
 }
 
+/**
+ * Keys that appear more than once in the same JSON object, as dotted paths.
+ *
+ * `JSON.parse` accepts duplicates and silently keeps the last one, so a merge
+ * that leaves two `"typescript"` entries behind installs whichever came
+ * second, usually the stale one, with no error anywhere. A merge of #612 did
+ * exactly that to @vitest/coverage-v8 and broke coverage on main. Strings are
+ * skipped as whole tokens, so braces or colons inside values cannot confuse
+ * the scan.
+ */
+export function findDuplicateKeys(text) {
+  const scopes = [];
+  const duplicates = [];
+  let previous = null;
+  let pendingKey = null;
+  for (const match of text.matchAll(/"(?:[^"\\]|\\.)*"|[{}[\]:,]/g)) {
+    const token = match[0];
+    if (token === ":" && previous !== null && previous.startsWith('"')) {
+      const key = JSON.parse(previous);
+      const scope = scopes[scopes.length - 1];
+      if (scope.keys.has(key)) duplicates.push(scope.path ? `${scope.path}.${key}` : key);
+      scope.keys.add(key);
+      pendingKey = key;
+    } else if (token === "{" || token === "[") {
+      // The top-level value has no name; a nested one is named by its key,
+      // or `[]` when it sits in an array.
+      const parent = scopes.length > 0 ? scopes[scopes.length - 1].path : null;
+      const name = pendingKey ?? "[]";
+      const path = parent === null ? "" : parent ? `${parent}.${name}` : name;
+      scopes.push({ path, keys: new Set() });
+      pendingKey = null;
+    } else if (token === "}" || token === "]") {
+      scopes.pop();
+    } else if (token === ",") {
+      pendingKey = null;
+    }
+    previous = token;
+  }
+  return duplicates;
+}
+
 function readManifest(repoRoot, relativePath) {
   const file = path.join(repoRoot, relativePath);
   if (!existsSync(file)) {
@@ -376,8 +417,16 @@ function readManifest(repoRoot, relativePath) {
       `${relativePath}: listed in pnpm-workspace.yaml but has no package.json`,
     );
   }
+  const text = readFileSync(file, "utf8");
+  const duplicates = findDuplicateKeys(text);
+  if (duplicates.length > 0) {
+    throw new CheckFailure(
+      `${relativePath}: duplicate key(s) ${duplicates.join(", ")}. JSON keeps only the last ` +
+        "value, so the other is silently ignored; remove the stale entry.",
+    );
+  }
   try {
-    return JSON.parse(readFileSync(file, "utf8"));
+    return JSON.parse(text);
   } catch (error) {
     throw new CheckFailure(`${relativePath}: cannot parse (${error.message})`);
   }
