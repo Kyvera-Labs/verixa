@@ -1,0 +1,32 @@
+{
+  "$comment": "Modes: off | warn | block. Read by infra/ci/quality-gate.mjs from the Code quality workflow. Promote a gate to block once its warnings have proved trustworthy; see docs/guides/code-quality.md.",
+  "gates": {
+    "packageCoverage": {
+      "mode": "warn",
+      "blockFrom": "2026-12-02",
+      "description": "Every changed package must still meet the coverage thresholds in its own vitest.config.ts. Packages are discovered from the diff, so a new package is covered as soon as it defines thresholds."
+    },
+    "patchCoverage": {
+      "mode": "warn",
+      "minPercent": 80,
+      "blockFrom": "2026-12-02",
+      "description": "At least 80% of the executable lines this pull request adds or changes must run under a test. Package-wide coverage can stay high while a pull request adds an untested branch; this measures the pull request itself."
+    },
+    "complexity": {
+      "mode": "warn",
+      "limits": {
+        "complexity": 12,
+        "max-depth": 4,
+        "max-lines-per-function": 80,
+        "max-params": 5,
+        "max-nested-callbacks": 3
+      },
+      "description": "Changed code stays readable: cyclomatic complexity, nesting depth, function length and parameter count. When a limit is genuinely wrong for a function, say why in an eslint-disable comment on that line."
+    },
+    "prTitle": {
+      "mode": "warn",
+      "blockFrom": "2026-12-02",
+      "description": "The pull request title becomes the squash-merge commit on main, so it must be a Conventional Commit, e.g. \"fix(sessions): revoke refresh tokens on logout\"."
+    }
+  }
+}

@@ -68,3 +68,25 @@ describe("GET /version", () => {
     }
   });
 });
+
+describe("Rate limiting plugin registration", () => {
+  it("registers rate-limiting plugin and enforces limits on requests", async () => {
+    const app = buildApp({ rateLimit: { defaultMax: 2, defaultTimeWindowMs: 60_000 } });
+    await app.ready();
+
+    const res1 = await app.inject({ method: "GET", url: "/health" });
+    expect(res1.statusCode).toBe(200);
+    expect(res1.headers["x-ratelimit-limit"]).toBe("2");
+    expect(res1.headers["x-ratelimit-remaining"]).toBe("1");
+
+    const res2 = await app.inject({ method: "GET", url: "/health" });
+    expect(res2.statusCode).toBe(200);
+    expect(res2.headers["x-ratelimit-remaining"]).toBe("0");
+
+    const res3 = await app.inject({ method: "GET", url: "/health" });
+    expect(res3.statusCode).toBe(429);
+    expect(res3.headers["retry-after"]).toBeDefined();
+
+    await app.close();
+  });
+});

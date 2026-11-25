@@ -29,6 +29,10 @@ export default defineConfig({
     },
   },
   test: {
+    // Vitest 4 narrowed the default exclude to node_modules and .git, so the
+    // compiled `*.spec.js` copies that `pnpm build` writes to dist/ would run
+    // as a second, stale set of tests. Keep only the sources.
+    exclude: ["**/node_modules/**", "**/.git/**", "**/dist/**", "**/coverage/**"],
     coverage: {
       provider: "v8",
       reporter: ["text", "html", "lcov"],

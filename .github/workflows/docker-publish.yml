@@ -1,33 +1,21 @@
-name: Docker Publish
 name: Publish API container
 
 on:
   push:
     branches: [main]
-    tags: ["v*"]
+    tags: ["v[0-9]*.[0-9]*.[0-9]*"]
   pull_request:
     paths:
       - "apps/api/**"
       - "packages/**"
       - "infra/docker/**"
+      - "infra/ci/docker-cache-check.mjs"
       - ".github/workflows/docker-publish.yml"
       - "pnpm-lock.yaml"
 
-jobs:
-  build-and-publish:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: linux/amd64,linux/arm64
-    tags: ["v[0-9]*.[0-9]*.[0-9]*"]
-
+# A commit tag identifies content and must never be silently replaced by a
+# rebuild. The per-SHA group serializes retries; the immutability check below
+# makes a retry fail visibly instead of changing what that reference runs.
 concurrency:
   group: container-${{ github.sha }}
   cancel-in-progress: false
@@ -40,7 +28,7 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Compute image tags
         id: tags
@@ -57,99 +45,11 @@ jobs:
             echo EOF
           } >> "$GITHUB_OUTPUT"
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata for Docker (apps/api)
-        id: meta-api
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/verixa-api
-          tags: |
-            type=sha,format=short,prefix=sha-
-            type=semver,pattern={{version}}
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-
-      - name: Build and push multi-arch image (apps/api)
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: apps/api/Dockerfile
-          target: production
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta-api.outputs.tags }}
-          labels: ${{ steps.meta-api.outputs.labels }}
-
-      - name: Verify buildx bake configuration
-        uses: docker/bake-action@v5
-        with:
-          files: infra/docker/buildx-bake.hcl
-          targets: api
-          set: |
-            *.push=false
-
-  smoke-test-matrix:
-    runs-on: ubuntu-latest
-    needs: build-and-publish
-    strategy:
-      matrix:
-        arch: [amd64, arm64]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: linux/${{ matrix.arch }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build image for architecture
-        run: |
-          docker buildx build \
-            --platform linux/${{ matrix.arch }} \
-            --target production \
-            -f apps/api/Dockerfile \
-            -t verixa-smoke:${{ matrix.arch }} \
-            --load .
-
-      - name: Run container and assert health
-        run: |
-          docker run -d --name smoke-${{ matrix.arch }} -p 3000:3000 \
-            -e SESSION_ACCESS_TOKEN_SECRET="ci-smoke-test-secret-at-least-32-characters" \
-            -e DATABASE_URL="postgresql://verixa:verixa@127.0.0.1:5432/verixa" \
-            verixa-smoke:${{ matrix.arch }}
-          for i in $(seq 1 30); do
-            if curl -sf http://localhost:3000/health; then
-              echo "Smoke test healthy on linux/${{ matrix.arch }}"
-              docker rm -f smoke-${{ matrix.arch }}
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "Failed to become healthy on linux/${{ matrix.arch }}"
-          docker logs smoke-${{ matrix.arch }}
-          docker rm -f smoke-${{ matrix.arch }}
-          exit 1
-      # A commit tag identifies content and must never be silently replaced by
-      # a rebuild. The per-SHA concurrency group serializes retries; this check
-      # makes a retry fail visibly instead of changing what that reference runs.
       # The commit tag is the first line container-tags.mjs emitted, so this
-      # checks exactly the reference the publish step is about to push.
+      # checks exactly the reference the publish step is about to push. It has
+      # to run before the build, once pushing has already happened is too late.
       - name: Refuse to overwrite an existing commit image
+        if: github.event_name != 'pull_request'
         env:
           IMAGE: ghcr.io/kyvera-labs/verixa
         run: |
@@ -160,14 +60,120 @@ jobs:
             exit 1
           fi
 
-      - name: Build and publish multi-platform image
-        uses: docker/build-push-action@v6
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for Docker (apps/api)
+        id: meta-api
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/verixa-api
+          tags: |
+            type=sha,format=short,prefix=sha-
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      # GHA cache is registry-backed: it survives runner replacement between
+      # pushes, which a local BuildKit cache cannot. mode=max exports the
+      # intermediate stages too, so a source-only commit can reuse the install
+      # layer rather than just the final image. The scope keeps the API cache
+      # separate from any future image built by the bake targets.
+      - name: Build and push multi-arch image (apps/api)
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           file: apps/api/Dockerfile
+          target: production
           platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.tags.outputs.tags }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-api.outputs.tags }}
+          labels: ${{ steps.meta-api.outputs.labels }}
           build-args: VERIXA_BUILD_VERSION=${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=verixa-api
+          cache-to: type=gha,mode=max,scope=verixa-api
+
+      - name: Verify buildx bake configuration
+        uses: docker/bake-action@4a9a8d494466d37134e2bfca2d3a8de8fb2681ad # v5.13.0
+        with:
+          files: infra/docker/buildx-bake.hcl
+          targets: api
+          set: |
+            *.push=false
+
+  # A cache that is configured but never exercised is a cache that silently
+  # stopped working. This job measures a cold build, a source-only rebuild and
+  # a manifest-change rebuild, and asserts both BuildKit's own CACHED verdict
+  # and the end-to-end timing. The local cache is exported by the cold build
+  # and imported by the two rebuilds so the measurement is about layer reuse,
+  # not about an empty runner cache.
+  cache-verification:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Check cache configuration
+        run: node infra/ci/docker-cache-check.mjs --repo .
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - name: Cold dependency build
+        id: cold
+        run: |
+          set -eu
+          start="$(date +%s)"
+          docker buildx build --progress=plain --no-cache \
+            --cache-to type=local,dest=/tmp/verixa-build-cache,mode=max \
+            -f apps/api/Dockerfile --target deps -t verixa-cache:cold . 2>&1 | tee build-cold.log
+          end="$(date +%s)"
+          echo "seconds=$((end - start))" >> "$GITHUB_OUTPUT"
+
+      - name: Change application source only
+        run: printf '\n' >> apps/api/src/app.ts
+
+      - name: Source-only rebuild
+        id: source
+        run: |
+          set -eu
+          start="$(date +%s)"
+          docker buildx build --progress=plain \
+            --cache-from type=local,src=/tmp/verixa-build-cache \
+            -f apps/api/Dockerfile --target deps -t verixa-cache:source . 2>&1 | tee build-source.log
+          end="$(date +%s)"
+          echo "seconds=$((end - start))" >> "$GITHUB_OUTPUT"
+
+      - name: Assert pnpm install was cached on the source-only rebuild
+        run: node infra/ci/docker-cache-check.mjs assert-log --log build-cold.log --expect rebuilt && node infra/ci/docker-cache-check.mjs assert-log --log build-source.log --expect cached
+
+      - name: Change a package manifest
+        run: |
+          node -e "const fs=require('node:fs'); const p='package.json'; const v=JSON.parse(fs.readFileSync(p,'utf8')); v.description=(v.description||'')+' cache-check'; fs.writeFileSync(p, JSON.stringify(v,null,2)+'\n')"
+
+      - name: Manifest-change rebuild
+        run: |
+          docker buildx build --progress=plain \
+            --cache-from type=local,src=/tmp/verixa-build-cache \
+            -f apps/api/Dockerfile --target deps -t verixa-cache:manifest . 2>&1 | tee build-manifest.log
+
+      # The invalidation half of the check: cache reuse is only useful if a
+      # real dependency change still reinstalls. A log that says CACHED here
+      # would mean a stale-dependency false negative.
+      - name: Assert pnpm install reran after the manifest change
+        run: node infra/ci/docker-cache-check.mjs assert-log --log build-manifest.log --expect rebuilt
+
+      - name: Assert rebuilds are a fraction of the cold build
+        run: |
+          node infra/ci/docker-cache-check.mjs assert-timings \
+            --cold "${{ steps.cold.outputs.seconds }}" \
+            --warm "${{ steps.source.outputs.seconds }}" \
+            --source "${{ steps.source.outputs.seconds }}"

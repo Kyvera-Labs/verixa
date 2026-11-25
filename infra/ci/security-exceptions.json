@@ -8,6 +8,13 @@
       "expiresOn": "2026-11-30"
     },
     {
+      "advisory": "GHSA-fc5q-39xc-vjpf",
+      "package": "picomatch",
+      "justification": "Withdrawn by GitHub on 2026-11-18 (withdrawn_at 2026-11-18T15:38:56Z, https://github.com/advisories/GHSA-fc5q-39xc-vjpf): the reported ReDoS through single-branch repeated extglobs was retracted and no patched version exists, because there is nothing to patch. The npm audit feed still lists it while it catches up. Locked version is picomatch 4.0.7, a transitive dev/build dependency. Short expiry on purpose: once the feed drops the advisory this entry matches nothing, and if it is still reported after expiry the scan fails again so someone re-checks.",
+      "reviewedOn": "2026-11-18",
+      "expiresOn": "2026-12-18"
+    },
+    {
       "advisory": "GHSA-7589-6fvf-x4pw",
       "package": "effect",
       "justification": "ReDoS in Schema.TemplateLiteral compiled regex in effect <=3.22.0. In this repository, effect is an indirect transitive dependency of @prisma/config (via prisma CLI tooling), used only at development and build time for Prisma client generation. It is not part of the runtime API request handling path, receives no untrusted network input, and is not deployed to production. Revisit when Prisma updates its @prisma/config dependency chain.",

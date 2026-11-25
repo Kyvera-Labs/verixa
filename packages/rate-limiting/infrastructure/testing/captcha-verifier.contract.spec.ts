@@ -1,5 +1,4 @@
 import { Result } from "@verixa/shared-kernel";
-import { defineContractTests } from "@verixa/testing-kit";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -11,6 +10,8 @@ import {
 } from "../../application/ports/captcha-verifier.js";
 import { HttpCaptchaVerifier } from "../adapters/http-captcha-verifier.js";
 import { NoopCaptchaVerifier } from "../adapters/noop-captcha-verifier.js";
+
+import { defineContractTests } from "./contract-test.js";
 
 /**
  * Creates a mock fetch function tailored to simulate vendor verification responses.
@@ -80,7 +81,7 @@ defineContractTests<CaptchaVerifier>(
         }),
     },
   ],
-  (getAdapter) => {
+  (getAdapter: () => CaptchaVerifier) => {
     it("returns Result.ok when verification succeeds with a valid token", async () => {
       const verifier = getAdapter();
       const result = await verifier.verify("valid-production-challenge-token-12345");

@@ -1,4 +1,5 @@
 import { buildContainer, type Container } from "@verixa/api/composition-root";
+import { PasswordResetToken } from "@verixa/credentials";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -103,33 +104,32 @@ describe.skipIf(!available)("E2E Journey: Login -> Forgot Password -> Reset -> L
     const forgotBody = forgotRes.body as ForgotPasswordResponse;
     expect(forgotBody.message).toContain("password reset instructions have been sent");
 
-    // Fetch the issued password reset token record from the database
-    const resetTokenRecord = await prisma.passwordResetToken.findFirst({
-      where: { userId, consumedAt: null },
+    const user = await prisma.user.findFirstOrThrow({ where: { email: userEmail } });
+    await prisma.passwordResetToken.deleteMany({ where: { userId: user.id, consumedAt: null } });
+    const issued = PasswordResetToken.issue({ userId: user.id as never });
+    await prisma.passwordResetToken.create({
+      data: {
+        id: issued.token.id,
+        userId: user.id,
+        tokenHash: issued.token.tokenHash,
+        expiresAt: issued.token.expiresAt,
+        createdAt: issued.token.createdAt,
+      },
     });
-    expect(resetTokenRecord).not.toBeNull();
 
     // -------------------------------------------------------------------------
     // Step 3: Complete Password Reset with New Password
     // -------------------------------------------------------------------------
-    // The endpoint takes the token and replaces the password hash
+    // The endpoint takes the raw token and replaces the password hash
     const resetRes = await client.request.post("/auth/reset-password").send({
-      token: resetTokenRecord!.tokenHash,
+      token: issued.rawToken,
       newPassword,
     });
 
-    if (resetRes.status === 200) {
-      const resetBody = resetRes.body as ResetPasswordResponse;
-      expect(resetBody.status).toBe("ok");
-      expect(resetBody.user.id).toBe(userId);
-    } else {
-      // In case the token hash needs matching digest, update password through container directly
-      const hash = await container.credentials.confirmPasswordReset.execute({
-        token: resetTokenRecord!.tokenHash,
-        newPassword,
-      });
-      expect(hash).toBeDefined();
-    }
+    expect(resetRes.status).toBe(200);
+    const resetBody = resetRes.body as ResetPasswordResponse;
+    expect(resetBody.status).toBe("ok");
+    expect(resetBody.user.id).toBe(userId);
 
     // -------------------------------------------------------------------------
     // Step 4: Login with OLD password must be rejected (401)

@@ -14,13 +14,15 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@verixa/shared-kernel": "workspace:*"
+    "@verixa/shared-kernel": "workspace:*",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
-    "@verixa/testing-kit": "workspace:*",
-    "@vitest/coverage-v8": "^3.2.6",
-    "typescript": "^5.7.2",
-    "vitest": "^3.2.6"
+    "@vitest/coverage-v8": "^5.1.0",
+    "ioredis": "^5.4.1",
+    "testcontainers": "^10.16.0",
+    "typescript": "^6.0.3",
+    "vitest": "^5.1.0"
   }
 }

@@ -305,7 +305,10 @@ export function registerAuthRoutes<TLogger extends FastifyBaseLogger>(
           return;
         }
 
-        const result = await container.sessions.refreshAccessToken.execute({ refreshToken });
+        const result = await container.sessions.refreshAccessToken.execute({
+          refreshToken,
+          identifier: request.ip,
+        });
         if (Result.isErr(result)) {
           sendDomainError(reply, result.error);
           return;

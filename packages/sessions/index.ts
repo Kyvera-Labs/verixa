@@ -85,3 +85,11 @@ export {
   InMemorySessionAuditLogger,
   type RecordedSessionAuditEntry,
 } from "./infrastructure/testing/in-memory-session-audit-logger.js";
+
+// Retention (consumed by governance's retention enforcement, joined structurally in the composition root)
+export type { SessionRetentionStore } from "./application/ports/session-retention-store.js";
+export {
+  SessionRetentionTarget,
+  type OrganizationUserLookup,
+} from "./infrastructure/session-retention-target.js";
+export { InMemorySessionRetentionStore } from "./infrastructure/testing/in-memory-session-retention-store.js";

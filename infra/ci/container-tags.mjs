@@ -13,6 +13,14 @@ export function containerTags({ eventName, ref, sha }) {
     return tags;
   }
 
+  if (eventName === "pull_request") {
+    const pr = /^refs\/pull\/(\d+)\/(?:merge|head)$/u.exec(ref);
+    if (pr !== null) {
+      tags.push(`pr-${pr[1]}`);
+      return tags;
+    }
+  }
+
   const release = /^refs\/tags\/(v\d+\.\d+\.\d+)$/u.exec(ref);
   if (eventName === "push" && release !== null) {
     tags.push(release[1], "latest");

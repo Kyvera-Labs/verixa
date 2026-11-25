@@ -1,17 +1,21 @@
-# Production single-host deployment stack: apps/api + Postgres + Redis + Migration Runner + Reverse Proxy
+# Production overlay for the single-host stack.
 #
-# Unlike the development docker-compose.yml, this compose file:
-# 1. Uses the multi-stage, hardened, non-root apps/api/Dockerfile image.
-# 2. Includes a dedicated `migration` service running `db:migrate:deploy` before API boots.
-# 3. Mounts NO host development source code or local node_modules.
-# 4. Features a fronting reverse proxy (Nginx) for edge TLS termination and rate limit headers.
+# This file is applied on top of docker-compose.yml:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up
+#
+# Compose merges maps by key and sequences by a unique key, which is why the
+# dev-only `ports`, `volumes` and `command` from the base file have to be
+# explicitly reset. `!reset` is a Compose v2 feature: leaving them out would
+# silently keep the dev source bind-mount and the host Postgres/Redis/API
+# ports — the exact opposite of the production posture this overlay exists to
+# provide. See docs/guides/deployment.md for the full rationale.
 #
 # See docs/guides/deployment.md for prerequisite setup, secrets, and operations.
 
 services:
   postgres:
-    image: postgres:16-alpine
     restart: unless-stopped
+    ports: !reset []
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-verixa}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
@@ -24,17 +28,30 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
     networks:
       - verixa-internal
 
   redis:
-    image: redis:7-alpine
     restart: unless-stopped
+    ports: !reset []
     command: >
-      sh -c 'if [ -n "$$REDIS_PASSWORD" ]; then
-               redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD";
+      sh -c 'if [ -f /data/dump.rdb ] && { [ ! -d /data/appendonlydir ] || [ ! -f /data/appendonlydir/appendonly.aof.manifest ]; }; then
+               mkdir -p /data/appendonlydir &&
+               cp /data/dump.rdb /data/appendonlydir/appendonly.aof.1.base.rdb &&
+               printf "file appendonly.aof.1.base.rdb seq 1 type b\n" > /data/appendonlydir/appendonly.aof.manifest &&
+               chmod -R 777 /data/appendonlydir 2>/dev/null || true;
+               chown -R redis:redis /data/appendonlydir 2>/dev/null || true;
+               rm -f /data/dump.rdb;
+             fi;
+             if [ -n "$$REDIS_PASSWORD" ]; then
+               redis-server --appendonly yes --appendfsync everysec --dir /data --requirepass "$$REDIS_PASSWORD";
              else
-               redis-server --appendonly yes;
+               redis-server --appendonly yes --appendfsync everysec --dir /data;
              fi'
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
@@ -50,6 +67,11 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
     networks:
       - verixa-internal
 
@@ -58,6 +80,7 @@ services:
       context: .
       dockerfile: apps/api/Dockerfile
       target: build
+    image: ${VERIXA_MIGRATION_IMAGE:-ghcr.io/kyvera-labs/verixa-api:build}
     restart: "no"
     command: pnpm --filter @verixa/database run db:migrate:deploy
     environment:
@@ -65,6 +88,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
     networks:
       - verixa-internal
 
@@ -72,7 +100,16 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+      target: production
+    image: ${VERIXA_API_IMAGE:-ghcr.io/kyvera-labs/verixa-api:latest}
     restart: unless-stopped
+    # The base service runs a hot-reload shell from /repo. Production runs the
+    # image's own entrypoint from /app; leaving the dev command or working_dir
+    # in place would pass that shell as arguments to `node dist/server.js`.
+    command: !reset []
+    working_dir: /app
+    ports: !reset []
+    volumes: !reset []
     environment:
       NODE_ENV: production
       PORT: 3000
@@ -81,6 +118,11 @@ services:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
       REDIS_URL: ${REDIS_URL:?REDIS_URL is required}
       SESSION_ACCESS_TOKEN_SECRET: ${SESSION_ACCESS_TOKEN_SECRET:?SESSION_ACCESS_TOKEN_SECRET is required}
+      # TLS is terminated at the proxy. Trusting its forwarded headers keeps
+      # rate limiting, secure cookies and HSTS correct without letting the
+      # application make its own transport-security decisions (Issue 387).
+      TRUST_PROXY: "true"
+      ENFORCE_HTTPS: "false"
     depends_on:
       postgres:
         condition: service_healthy
@@ -88,6 +130,11 @@ services:
         condition: service_healthy
       migration:
         condition: service_completed_successfully
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
     networks:
       - verixa-internal
     expose:
@@ -102,14 +149,57 @@ services:
     volumes:
       - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./infra/nginx/certs:/etc/nginx/certs:ro
+      # HTTP-01 challenges must be served on plain HTTP. If every path on 80
+      # redirected, Let's Encrypt could never validate a new certificate.
+      - ./infra/nginx/certbot:/var/www/certbot:ro
     depends_on:
       - api
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q --no-check-certificate -O /dev/null https://127.0.0.1/health || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
     networks:
       - verixa-internal
 
+  # Not part of `up`: run with `--profile certbot` to issue or renew a real
+  # certificate. The profile keeps the account credentials and ACME tooling
+  # out of ordinary application deploys.
+  certbot:
+    image: certbot/certbot:latest
+    profiles: ["certbot"]
+    restart: "no"
+    environment:
+      CERTBOT_EMAIL: ${CERTBOT_EMAIL:-}
+      CERTBOT_DOMAIN: ${CERTBOT_DOMAIN:-}
+    volumes:
+      - ./infra/nginx/certs:/etc/letsencrypt
+      - ./infra/nginx/certbot:/var/www/certbot
+    entrypoint: /bin/sh
+    command: >
+      -c 'if [ -n "$$CERTBOT_DOMAIN" ]; then
+            certbot certonly --webroot --webroot-path /var/www/certbot
+              --email "$$CERTBOT_EMAIL" --agree-tos --no-eff-email
+              --keep-until-expiring -d "$$CERTBOT_DOMAIN";
+          else
+            certbot renew --webroot --webroot-path /var/www/certbot;
+          fi'
+
 volumes:
   verixa-prod-postgres-data:
+    driver: local
   verixa-prod-redis-data:
+    driver: local
 
 networks:
   verixa-internal:

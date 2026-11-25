@@ -27,6 +27,89 @@ export const booleanFromEnv = z
 export const CORS_WILDCARD_ORIGIN = "*";
 
 /**
+ * Supported OTLP transport protocols (Issue 356 / #468).
+ *
+ * Kept collector-agnostic so operators can target Jaeger, Grafana Tempo,
+ * OpenTelemetry Collector, or any vendor OTLP endpoint without code changes.
+ */
+export const OTEL_EXPORTER_PROTOCOLS = ["http/protobuf", "http/json", "grpc"] as const;
+export type OtelExporterProtocol = (typeof OTEL_EXPORTER_PROTOCOLS)[number];
+
+/**
+ * Default trace sampling rates by `NODE_ENV` when `OTEL_TRACES_SAMPLER_RATE`
+ * is not explicitly configured.
+ *
+ * - `development`: 1.0 (100%) — every trace is captured locally for debugging.
+ * - `production`: 0.1 (10%) — bounds trace volume and collector cost while
+ *   keeping a statistically representative baseline; errors are always
+ *   force-sampled regardless of this rate.
+ * - `test`: 0.0 (0%) — avoids noisy telemetry output during automated tests.
+ */
+export const DEFAULT_OTEL_SAMPLING_RATES: Readonly<
+  Record<"development" | "test" | "production", number>
+> = Object.freeze({
+  development: 1.0,
+  test: 0.0,
+  production: 0.1,
+});
+
+/**
+ * Validates that an OTLP exporter endpoint is a well-formed `http:` or `https:`
+ * URL with a non-empty host.
+ */
+export function isValidOtlpEndpoint(endpoint: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(endpoint);
+  } catch {
+    return false;
+  }
+
+  return (url.protocol === "http:" || url.protocol === "https:") && url.hostname.length > 0;
+}
+
+/**
+ * Parses an OTel-standard comma-separated `key=value` header string into a
+ * plain record. Returns `undefined` if any non-empty entry is malformed.
+ */
+export function parseOtlpHeaders(raw: string): Record<string, string> | undefined {
+  const headers: Record<string, string> = {};
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) {
+    return headers;
+  }
+
+  for (const part of trimmed.split(",")) {
+    const entry = part.trim();
+    if (entry.length === 0) {
+      return undefined;
+    }
+    const eqIndex = entry.indexOf("=");
+    if (eqIndex <= 0) {
+      return undefined;
+    }
+    const key = entry.slice(0, eqIndex).trim();
+    const value = entry.slice(eqIndex + 1).trim();
+    if (key.length === 0 || value.length === 0) {
+      return undefined;
+    }
+    headers[key] = value;
+  }
+
+  return headers;
+}
+
+/**
+ * Resolves the effective trace sampling rate for the given `NODE_ENV`.
+ */
+export function resolveOtelSamplingRate(
+  nodeEnv: "development" | "test" | "production",
+  configuredRate: number | undefined,
+): number {
+  return configuredRate ?? DEFAULT_OTEL_SAMPLING_RATES[nodeEnv];
+}
+
+/**
  * A single origin entry the API is willing to reflect back in
  * `Access-Control-Allow-Origin`.
  *
@@ -392,18 +475,123 @@ export const rawEnvSchema = z.object({
             .filter(Boolean)
         : [],
     ),
+
+  // ---------------------------------------------------------------------------
+  // OpenTelemetry OTLP exporter & sampling policy (Phase 18, Issue 356 / #468)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Logical service name attached to emitted OpenTelemetry resource attributes.
+   */
+  OTEL_SERVICE_NAME: z.string().min(1).default("verixa-api"),
+
+  /**
+   * Collector-agnostic OTLP exporter endpoint URL (e.g. `http://localhost:4318`
+   * for HTTP or `http://localhost:4317` for gRPC).
+   *
+   * When omitted or empty, OTLP export is disabled so local development without
+   * a running collector does not fail or spam connection errors. When provided,
+   * an invalid URL or unsupported scheme fails fast at startup.
+   */
+  OTEL_EXPORTER_OTLP_ENDPOINT: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z
+      .string()
+      .refine(
+        isValidOtlpEndpoint,
+        'must be a valid http:// or https:// URL (for example "http://localhost:4318")',
+      )
+      .optional(),
+  ),
+
+  /**
+   * Transport protocol used by the OTLP exporter: `http/protobuf` (default),
+   * `http/json`, or `grpc`.
+   */
+  OTEL_EXPORTER_OTLP_PROTOCOL: z.enum(OTEL_EXPORTER_PROTOCOLS).default("http/protobuf"),
+
+  /**
+   * Optional comma-separated `key=value` headers sent with OTLP export requests
+   * (for example collector authentication tokens).
+   */
+  OTEL_EXPORTER_OTLP_HEADERS: z
+    .string()
+    .default("")
+    .superRefine((raw, ctx) => {
+      if (parseOtlpHeaders(raw) === undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            'must be a comma-separated list of "key=value" pairs (for example "Authorization=Bearer token")',
+        });
+      }
+    })
+    .transform((raw) => parseOtlpHeaders(raw) ?? {}),
+
+  /**
+   * Head-based probabilistic trace sampling rate in `[0, 1]`.
+   *
+   * When omitted or empty, defaults to `1.0` (100%) in `development`, `0.1`
+   * (10%) in `production`, and `0.0` in `test`. Error spans are always
+   * force-sampled regardless of this rate.
+   */
+  OTEL_TRACES_SAMPLER_RATE: z.preprocess(
+    (value) => {
+      if (value === undefined || (typeof value === "string" && value.trim() === "")) {
+        return undefined;
+      }
+      return Number(value);
+    },
+    z
+      .number({ invalid_type_error: "must be a number between 0 and 1" })
+      .finite("must be a finite number between 0 and 1")
+      .min(0, "must be between 0 and 1")
+      .max(1, "must be between 0 and 1")
+      .optional(),
+  ),
 });
 
-export const envSchema = rawEnvSchema.superRefine((config, ctx) => {
-  const error = corsConfigurationError(config.CORS_ALLOWED_ORIGINS, config.CORS_ALLOW_CREDENTIALS);
+export const envSchema = rawEnvSchema
+  .superRefine((config, ctx) => {
+    const error = corsConfigurationError(
+      config.CORS_ALLOWED_ORIGINS,
+      config.CORS_ALLOW_CREDENTIALS,
+    );
 
-  if (error !== undefined) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["CORS_ALLOWED_ORIGINS"],
-      message: error,
-    });
-  }
+    if (error !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["CORS_ALLOWED_ORIGINS"],
+        message: error,
+      });
+    }
+  })
+  .transform((config) => ({
+    ...config,
+    OTEL_TRACES_SAMPLER_RATE: resolveOtelSamplingRate(
+      config.NODE_ENV,
+      config.OTEL_TRACES_SAMPLER_RATE,
+    ),
+  }));
+
+/**
+ * Rate limit policy configuration schema (Issue 284 / #315).
+ * Validates per-route rate limit configuration with fail-fast Zod parsing.
+ */
+export const rateLimitPolicySchema = z.object({
+  limit: z.coerce.number().int().positive("Limit must be positive"),
+  windowMs: z.coerce.number().int().min(1000, "Window duration must be at least 1000ms"),
+  capacity: z.coerce.number().positive().optional(),
+  refillRatePerSecond: z.coerce.number().positive().optional(),
+});
+
+/**
+ * Rate limit allowlist configuration schema (Issue 289 / #304).
+ * Validates trusted IP addresses, CIDR blocks, and service-account tokens.
+ */
+export const rateLimitAllowlistSchema = z.object({
+  ipAddressesOrCidrs: z.array(z.string().trim()).default([]),
+  serviceTokens: z.array(z.string().trim()).default([]),
 });
 
 /**

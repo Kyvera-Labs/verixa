@@ -19,6 +19,12 @@ on:
     # without needing to push an empty commit.
     types: [opened, edited, synchronize, reopened]
 
+# Read-only token. The action reads the pull request's commits to lint their
+# messages and writes nothing.
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
   pr-title:
     name: Validate PR title (Conventional Commits)
@@ -53,8 +59,8 @@ jobs:
     name: Validate PR commits (Conventional Commits)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
 
-      - uses: wagoid/commitlint-github-action@v6
+      - uses: wagoid/commitlint-github-action@b948419dd99f3fd78a6548d48f94e3df7f6bf3ed # v6.2.1

@@ -34,27 +34,32 @@ not documented in this matrix will fail the CI build.
 
 ### Configuration Matrix Table
 
-| Variable                          | Type / Constraints                                     | Secret? | Development                                      | Test                                                  | Staging                           | Production                     | Description & Reference                                                                               |
-| :-------------------------------- | :----------------------------------------------------- | :-----: | :----------------------------------------------- | :---------------------------------------------------- | :-------------------------------- | :----------------------------- | :---------------------------------------------------------------------------------------------------- |
-| `NODE_ENV`                        | `enum(development, test, production)`                  |   No    | `development`                                    | `test`                                                | `production`                      | `production`                   | Node execution environment. Governs logging verbosity, HSTS header emission, and error serialization. |
-| `PORT`                            | `integer (1-65535)`                                    |   No    | `3000`                                           | `3000` (ephemeral in tests)                           | `3000`                            | `3000`                         | TCP port the Fastify HTTP server binds and listens on.                                                |
-| `HOST`                            | `string`                                               |   No    | `0.0.0.0`                                        | `127.0.0.1`                                           | `0.0.0.0`                         | `0.0.0.0`                      | Network interface to bind. `0.0.0.0` inside containers; `127.0.0.1` for restricted local execution.   |
-| `LOG_LEVEL`                       | `enum(trace, debug, info, warn, error, fatal, silent)` |   No    | `info` (or `debug`)                              | `silent`                                              | `info`                            | `info` (or `warn`)             | Minimum log level for Pino structured logger. `silent` in unit test runs.                             |
-| `DATABASE_URL`                    | `url`                                                  |   Yes   | `postgres://verixa:verixa@localhost:5432/verixa` | `postgres://verixa:verixa@localhost:5432/verixa_test` | Injected from Secrets Manager     | Injected from Secrets Manager  | Postgres connection string. Must target unprivileged `verixa_app` role in production.                 |
-| `DATABASE_POOL_SIZE`              | `integer (1-100)`                                      |   No    | `10`                                             | `5`                                                   | `10`                              | `20` (sized to replica count)  | Maximum pool connections per instance. Sized by `(peak concurrent DB requests) / (app instances)`.    |
-| `DATABASE_POOL_TIMEOUT_SECONDS`   | `integer (1-300)`                                      |   No    | `10`                                             | `5`                                                   | `10`                              | `10`                           | Maximum seconds to wait for an available pool connection before shedding load with an error.          |
-| `REDIS_URL`                       | `url`                                                  |   Yes   | `redis://localhost:6379`                         | `redis://localhost:6379`                              | Injected from Secrets Manager     | Injected from Secrets Manager  | Redis connection string used for session revocation deny-list (`RedisRevocationList`).                |
-| `SESSION_ACCESS_TOKEN_SECRET`     | `string (min 32 chars)`                                |   Yes   | Generated locally (`openssl rand -base64 48`)    | Test dummy (`a`.repeat(32))                           | Injected from Secrets Manager     | Injected from Secrets Manager  | HMAC secret key used by `@verixa/sessions` for signing access tokens. No default in code.             |
-| `SESSION_MAX_CONCURRENT_SESSIONS` | `integer (min 0)`                                      |   No    | `0` (disabled)                                   | `0` (disabled)                                        | `5`                               | `5`                            | Concurrency ceiling for simultaneous sessions per user. `0` disables session eviction.                |
-| `HSTS_MAX_AGE_SECONDS`            | `integer (0-63072000)`                                 |   No    | `31536000` (inert in non-prod)                   | `31536000` (inert)                                    | `31536000` (1 year)               | `31536000` (1 year)            | `Strict-Transport-Security` max-age. Only sent when `NODE_ENV=production`. Capped at 2 years.         |
-| `HSTS_INCLUDE_SUBDOMAINS`         | `boolean (true, false, 1, 0)`                          |   No    | `true`                                           | `true`                                                | `true`                            | `true`                         | Appends `includeSubDomains` to HSTS header. Requires all subdomains to serve valid TLS.               |
-| `HSTS_PRELOAD`                    | `boolean (true, false, 1, 0)`                          |   No    | `false`                                          | `false`                                               | `false`                           | `false` (until submitted)      | Appends `preload` to HSTS directive. Permanent commitment to HTTPS across all domains.                |
-| `ENFORCE_HTTPS`                   | `boolean (true, false, 1, 0)`                          |   No    | `false`                                          | `false`                                               | `false` (handled by LB)           | `false` (or `true` if exposed) | Issues 308 redirect for plaintext HTTP. Typically handled by edge reverse proxy / load balancer.      |
-| `TRUST_PROXY`                     | `boolean (true, false, 1, 0)`                          |   No    | `false`                                          | `false`                                               | `true`                            | `true`                         | Instructs Fastify to trust `X-Forwarded-Proto` and `X-Forwarded-For` from upstream ingress/proxy.     |
-| `CORS_ALLOWED_ORIGINS`            | `comma-separated urls or *`                            |   No    | `""` (empty denies all)                          | `""`                                                  | `https://staging-app.example.com` | `https://app.example.com`      | Allowlist of origins permitted for cross-origin browser requests. `*` forbidden with credentials.     |
-| `CORS_ALLOW_CREDENTIALS`          | `boolean (true, false, 1, 0)`                          |   No    | `false`                                          | `false`                                               | `false`                           | `false`                        | Emits `Access-Control-Allow-Credentials: true`. Refused when `CORS_ALLOWED_ORIGINS` is `*`.           |
-| `MFA_ENFORCEMENT_LEVEL`           | `enum(required, optional, disabled)`                   |   No    | `optional`                                       | `optional`                                            | `optional`                        | `required`                     | Global baseline MFA enforcement. Tenant and user overrides take precedence at runtime.                |
-| `MFA_ALLOWED_METHODS`             | `comma-separated methods`                              |   No    | `totp,webauthn,backup-codes`                     | `totp,webauthn,backup-codes`                          | `totp,webauthn,backup-codes`      | `totp,webauthn,backup-codes`   | Permitted MFA factors globally. Restrict e.g. to `webauthn` for phishing-resistant factor mandates.   |
+| Variable                          | Type / Constraints                                     | Secret? | Development                                      | Test                                                  | Staging                           | Production                     | Description & Reference                                                                                |
+| :-------------------------------- | :----------------------------------------------------- | :-----: | :----------------------------------------------- | :---------------------------------------------------- | :-------------------------------- | :----------------------------- | :----------------------------------------------------------------------------------------------------- |
+| `NODE_ENV`                        | `enum(development, test, production)`                  |   No    | `development`                                    | `test`                                                | `production`                      | `production`                   | Node execution environment. Governs logging verbosity, HSTS header emission, and error serialization.  |
+| `PORT`                            | `integer (1-65535)`                                    |   No    | `3000`                                           | `3000` (ephemeral in tests)                           | `3000`                            | `3000`                         | TCP port the Fastify HTTP server binds and listens on.                                                 |
+| `HOST`                            | `string`                                               |   No    | `0.0.0.0`                                        | `127.0.0.1`                                           | `0.0.0.0`                         | `0.0.0.0`                      | Network interface to bind. `0.0.0.0` inside containers; `127.0.0.1` for restricted local execution.    |
+| `LOG_LEVEL`                       | `enum(trace, debug, info, warn, error, fatal, silent)` |   No    | `info` (or `debug`)                              | `silent`                                              | `info`                            | `info` (or `warn`)             | Minimum log level for Pino structured logger. `silent` in unit test runs.                              |
+| `DATABASE_URL`                    | `url`                                                  |   Yes   | `postgres://verixa:verixa@localhost:5432/verixa` | `postgres://verixa:verixa@localhost:5432/verixa_test` | Injected from Secrets Manager     | Injected from Secrets Manager  | Postgres connection string. Must target unprivileged `verixa_app` role in production.                  |
+| `DATABASE_POOL_SIZE`              | `integer (1-100)`                                      |   No    | `10`                                             | `5`                                                   | `10`                              | `20` (sized to replica count)  | Maximum pool connections per instance. Sized by `(peak concurrent DB requests) / (app instances)`.     |
+| `DATABASE_POOL_TIMEOUT_SECONDS`   | `integer (1-300)`                                      |   No    | `10`                                             | `5`                                                   | `10`                              | `10`                           | Maximum seconds to wait for an available pool connection before shedding load with an error.           |
+| `REDIS_URL`                       | `url`                                                  |   Yes   | `redis://localhost:6379`                         | `redis://localhost:6379`                              | Injected from Secrets Manager     | Injected from Secrets Manager  | Redis connection string used for session revocation deny-list (`RedisRevocationList`).                 |
+| `SESSION_ACCESS_TOKEN_SECRET`     | `string (min 32 chars)`                                |   Yes   | Generated locally (`openssl rand -base64 48`)    | Test dummy (`a`.repeat(32))                           | Injected from Secrets Manager     | Injected from Secrets Manager  | HMAC secret key used by `@verixa/sessions` for signing access tokens. No default in code.              |
+| `SESSION_MAX_CONCURRENT_SESSIONS` | `integer (min 0)`                                      |   No    | `0` (disabled)                                   | `0` (disabled)                                        | `5`                               | `5`                            | Concurrency ceiling for simultaneous sessions per user. `0` disables session eviction.                 |
+| `HSTS_MAX_AGE_SECONDS`            | `integer (0-63072000)`                                 |   No    | `31536000` (inert in non-prod)                   | `31536000` (inert)                                    | `31536000` (1 year)               | `31536000` (1 year)            | `Strict-Transport-Security` max-age. Only sent when `NODE_ENV=production`. Capped at 2 years.          |
+| `HSTS_INCLUDE_SUBDOMAINS`         | `boolean (true, false, 1, 0)`                          |   No    | `true`                                           | `true`                                                | `true`                            | `true`                         | Appends `includeSubDomains` to HSTS header. Requires all subdomains to serve valid TLS.                |
+| `HSTS_PRELOAD`                    | `boolean (true, false, 1, 0)`                          |   No    | `false`                                          | `false`                                               | `false`                           | `false` (until submitted)      | Appends `preload` to HSTS directive. Permanent commitment to HTTPS across all domains.                 |
+| `ENFORCE_HTTPS`                   | `boolean (true, false, 1, 0)`                          |   No    | `false`                                          | `false`                                               | `false` (handled by LB)           | `false` (or `true` if exposed) | Issues 308 redirect for plaintext HTTP. Typically handled by edge reverse proxy / load balancer.       |
+| `TRUST_PROXY`                     | `boolean (true, false, 1, 0)`                          |   No    | `false`                                          | `false`                                               | `true`                            | `true`                         | Instructs Fastify to trust `X-Forwarded-Proto` and `X-Forwarded-For` from upstream ingress/proxy.      |
+| `CORS_ALLOWED_ORIGINS`            | `comma-separated urls or *`                            |   No    | `""` (empty denies all)                          | `""`                                                  | `https://staging-app.example.com` | `https://app.example.com`      | Allowlist of origins permitted for cross-origin browser requests. `*` forbidden with credentials.      |
+| `CORS_ALLOW_CREDENTIALS`          | `boolean (true, false, 1, 0)`                          |   No    | `false`                                          | `false`                                               | `false`                           | `false`                        | Emits `Access-Control-Allow-Credentials: true`. Refused when `CORS_ALLOWED_ORIGINS` is `*`.            |
+| `MFA_ENFORCEMENT_LEVEL`           | `enum(required, optional, disabled)`                   |   No    | `optional`                                       | `optional`                                            | `optional`                        | `required`                     | Global baseline MFA enforcement. Tenant and user overrides take precedence at runtime.                 |
+| `MFA_ALLOWED_METHODS`             | `comma-separated methods`                              |   No    | `totp,webauthn,backup-codes`                     | `totp,webauthn,backup-codes`                          | `totp,webauthn,backup-codes`      | `totp,webauthn,backup-codes`   | Permitted MFA factors globally. Restrict e.g. to `webauthn` for phishing-resistant factor mandates.    |
+| `OTEL_SERVICE_NAME`               | `string (min 1 char)`                                  |   No    | `verixa-api`                                     | `verixa-api`                                          | `verixa-api`                      | `verixa-api`                   | Service name attached to OpenTelemetry trace resource attributes.                                      |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`     | `optional http/https url`                              |   No    | `""` (or `http://localhost:4318`)                | `""` (disabled)                                       | `http://otel-collector:4318`      | `http://otel-collector:4318`   | Collector-agnostic OTLP exporter endpoint (Jaeger, Tempo, OTel Collector). Empty disables export.      |
+| `OTEL_EXPORTER_OTLP_PROTOCOL`     | `enum(http/protobuf, http/json, grpc)`                 |   No    | `http/protobuf`                                  | `http/protobuf`                                       | `http/protobuf`                   | `http/protobuf`                | OTLP exporter transport protocol. Invalid protocols fail fast at startup.                              |
+| `OTEL_EXPORTER_OTLP_HEADERS`      | `comma-separated key=value`                            |   No    | `""`                                             | `""`                                                  | `""` (or collector auth headers)  | Injected if auth required      | Optional headers sent with OTLP export requests (e.g. `Authorization=Bearer ...`).                     |
+| `OTEL_TRACES_SAMPLER_RATE`        | `number (0-1)`                                         |   No    | `1.0` (100%)                                     | `0.0` (0%)                                            | `0.25`                            | `0.1` (10%)                    | Head-based probabilistic trace sampling rate. Error spans are always force-sampled regardless of rate. |
 
 ---
 
@@ -154,10 +159,10 @@ managed by `createShutdownHandler` in `apps/api/src/server.ts`:
    `BatchedAuditWriter` to prevent data loss and disconnects Prisma (`prisma.$disconnect()`).
 5. **Clean Exit**: Once all teardown steps complete, the timer is cleared and the process
    exits with code 0.
-This guide details the supported production deployment paths for Verixa:
+   This guide details the supported production deployment paths for Verixa:
 
-1. **Single-Host Deployment (Docker Compose):** Self-hosted or virtual machine deployment via `docker-compose.prod.yml`.
-2. **Platform-as-a-Service (PaaS / Fly.io):** Managed container deployment via `infra/docker/platform.toml`.
+6. **Single-Host Deployment (Docker Compose):** Self-hosted or virtual machine deployment via `docker-compose.prod.yml`.
+7. **Platform-as-a-Service (PaaS / Fly.io):** Managed container deployment via `infra/docker/platform.toml`.
 
 It also details production requirements for secrets management, pre-deploy migrations, the forward-only migration policy, and the zero-downtime expand/contract schema evolution checklist.
 
@@ -165,7 +170,9 @@ It also details production requirements for secrets management, pre-deploy migra
 
 ## 1. Single-Host Deployment (Docker Compose)
 
-The single-host deployment path orchestrates the full production stack on a single Linux host using Docker and Docker Compose.
+The single-host deployment path orchestrates the full production stack on a single Linux host using Docker and Docker Compose. `docker-compose.prod.yml` is an **overlay**, applied with `-f docker-compose.yml -f docker-compose.prod.yml`: the base file stays readable for development, and the overlay resets only what production genuinely differs on — published ports, the hot-reload command, the source bind-mount and the working directory. Compose merges maps but keeps sequence entries unless they are reset, so those `!reset` lines are load-bearing; removing one silently brings back a dev port or the host source tree.
+
+Every service declares CPU and memory limits. On a single host, a runaway process is not isolated by a scheduler — without limits it can starve Postgres, Redis and the proxy on the same kernel, turning a bug in one container into a total outage.
 
 ### Topology
 
@@ -185,7 +192,7 @@ flowchart TD
 - **`redis`:** Redis 7 Alpine cache and rate-limiting store with AOF persistence enabled (`verixa-prod-redis-data`).
 - **`migration`:** One-off ephemeral service running `./infra/docker/scripts/migrate.sh` (`pnpm --filter @verixa/database run db:migrate:deploy`). It uses Prisma to safely apply pending database schema migrations before API containers launch.
 - **`api`:** Hardened, unprivileged (UID 10001) Node.js 22 runtime built via `apps/api/Dockerfile`. Only starts after `migration` completes successfully (`condition: service_completed_successfully`) and healthchecks pass.
-- **`proxy`:** Nginx reverse proxy terminating TLS, adding security headers, and forwarding requests to `api:3000`.
+- **`proxy`:** Nginx reverse proxy terminating TLS, adding security headers, and forwarding requests to `api:3000`. It is the only service publishing host ports (80 and 443); `api`, `postgres` and `redis` are reachable only over the internal bridge network.
 
 ### Environment Configuration
 
@@ -236,17 +243,107 @@ docker compose -f docker-compose.prod.yml logs migration
 docker compose -f docker-compose.prod.yml logs -f api
 ```
 
-### Backup and Restore
+### TLS at the edge
 
-Database snapshots should be created regularly before major upgrades:
+TLS is terminated by Nginx, not by the Fastify process. The application keeps
+speaking plain HTTP on the internal network and receives `X-Forwarded-Proto:
+https`, which it uses through `TRUST_PROXY=true` for cookies, redirects and
+rate limits. This keeps certificates, cipher suites and renewal out of the
+application image and out of every replica; transport security is one
+operator concern at one boundary. We rejected enabling TLS inside Fastify
+because it would duplicate configuration per replica, require private keys in
+the application's runtime environment, and make local development differ from
+production in the one place where mistakes are least forgiving.
+
+Port 80 serves one exception to the redirect: `/.well-known/acme-challenge/`.
+Let's Encrypt's HTTP-01 validation arrives over plain HTTP by definition. If
+that path redirected too, a certificate could never be issued or renewed.
+Every other HTTP request receives a `301` to the same path on HTTPS.
+
+For a real certificate, point DNS at the host, then set `CERTBOT_DOMAIN` and
+`CERTBOT_EMAIL` in the operator environment and run the profiled helper:
 
 ```bash
-# Backup database to backups/
-./scripts/db-backup.sh
-
-# Restore database from snapshot
-./scripts/db-restore.sh backups/verixa_backup_YYYYMMDD_HHMMSS.sql.gz
+docker compose --env-file .env.production -f docker-compose.yml \
+  -f docker-compose.prod.yml --profile certbot run --rm certbot
 ```
+
+Certbot writes under `infra/nginx/certs/live/$CERTBOT_DOMAIN/`. Nginx reads the
+two stable filenames it is configured with, so copy the issued files and
+reload the proxy:
+
+```bash
+cp infra/nginx/certs/live/$CERTBOT_DOMAIN/fullchain.pem infra/nginx/certs/fullchain.pem
+cp infra/nginx/certs/live/$CERTBOT_DOMAIN/privkey.pem infra/nginx/certs/privkey.pem
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec proxy nginx -s reload
+```
+
+Renewal reruns the same `certbot` command with `CERTBOT_DOMAIN` unset, which
+invokes `certbot renew --webroot`; copy and reload again afterwards. Generated
+PEM files are git-ignored — a private key in a commit is compromised even if
+the repository is private.
+
+CI does not use Let's Encrypt. `infra/ci/compose-tls-smoke.mjs` generates a
+one-day self-signed certificate, starts `infra/docker/docker-compose.tls-smoke.yml`
+(the production `nginx.conf` with a stub API), and asserts that plain HTTP
+returns a redirect to HTTPS, that an HTTPS request completes a verified TLS
+handshake, and that the response came from `api:3000`. That verifies the same
+configuration that ships without depending on external ACME availability.
+
+### Backup and restore
+
+Postgres and Redis data live in **named volumes**
+(`verixa-prod-postgres-data` and `verixa-prod-redis-data`). Named volumes are
+the right default for stateful containers: Docker owns their lifecycle, they
+survive `docker compose down && up` (without `-v`), and they are not tied to a
+host directory whose permissions or filesystem layout must be managed by
+hand. We rejected bind mounts for production because host paths make backups
+depend on a particular machine's directory structure, and anonymous volumes
+are discarded by the very command operators use to recreate containers. The
+mental model is simple: the container is disposable, the volume is not.
+
+`infra/docker/scripts/backup.mjs` runs the dump tools **inside** the running
+containers, so the client versions match the servers and no database port is
+published to the host. `pg_dump --format=custom` produces a compressed,
+selectively restorable dump; `redis-cli --rdb -` asks Redis for a consistent
+RDB snapshot even though AOF is the live persistence mode. Credentials are
+forwarded from the operator's environment with `docker compose exec -e KEY`
+rather than placed in the process arguments.
+
+```bash
+# From the repository root, with the production values in the environment:
+export PGUSER=verixa PGPASSWORD='...' REDISCLI_AUTH='...'
+node infra/docker/scripts/backup.mjs \
+  --compose-file docker-compose.yml --compose-file docker-compose.prod.yml \
+  --env-file .env.production --output-dir backups --label pre-upgrade
+```
+
+Restore is destructive and therefore needs an explicit acknowledgement:
+
+```bash
+VERIXA_RESTORE_CONFIRM=1 node infra/docker/scripts/restore.mjs \
+  --compose-file docker-compose.yml --compose-file docker-compose.prod.yml \
+  --env-file .env.production \
+  --dump backups/postgres-pre-upgrade.dump \
+  --rdb backups/redis-pre-upgrade.rdb
+```
+
+The restore stops Redis, deletes its AOF directory, copies the RDB into
+`/data`, and starts it again. Deleting the AOF is not cosmetic: Redis prefers
+an existing AOF over an RDB at startup, so leaving it in place would make the
+restore appear to succeed while serving the old dataset. Postgres is restored
+with `pg_restore --clean --if-exists --single-transaction`, which replaces the
+previous objects atomically instead of merging a half-restored dump into them.
+
+`scripts/db-backup.sh` and `scripts/db-restore.sh` remain development-only
+tools against a local `DATABASE_URL`; do not use them for the production
+compose stack.
+
+The `compose-backup-restore` CI job performs a real drill: it seeds a Postgres
+row and a Redis key, takes a backup, recreates the containers **without**
+`-v` to prove the named volumes hold the data, then runs `down --volumes`,
+starts from empty volumes, restores, and asserts both values came back. A
+backup that has never been restored is not a backup.
 
 ---
 
@@ -642,3 +739,35 @@ API_IMAGE='ghcr.io/kyvera-labs/verixa' \
 The script pulls the requested image, replaces the API container, and waits for `/health`. It reports `/version` so the operator can confirm which build is serving. It does not alter database state. Adapt the container replacement step to the deployment platform when running Kubernetes or another scheduler; the invariant is to point the API deployment at the selected immutable tag, then verify health and version before declaring the rollback complete.
 
 CI exercises this procedure with version A and B images: it starts B, selects A with the same rollback script, and asserts that both the health response and version response match A.
+
+---
+
+## 9. Staging and production deployment workflow
+
+Verixa connects its release pipeline (`.github/workflows/release.yml`) and immutable container images (`.github/workflows/docker-publish.yml`) to staging and production via `.github/workflows/deploy.yml`.
+
+### Progressive delivery: why staging-then-production with a human gate
+
+Fully automated continuous deployment directly to production maximizes velocity, but it also maximizes blast radius: an unreviewed migration interaction, a misconfigured secret, or a subtle runtime regression reaches all users immediately. Conversely, fully manual deployments slow down feedback loops and encourage batching large, risky releases.
+
+Verixa uses **progressive delivery** to balance both:
+
+1. **Automatic staging deployment:** Every successful `Release` workflow run automatically deploys the newly published immutable image tag (`vX.Y.Z` or `sha-<short>`) to the `staging` GitHub Environment and verifies it with a post-deploy smoke test.
+2. **Gated production promotion:** The `deploy-production` job depends on `deploy-staging` (`needs: [resolve-release, deploy-staging]`) and targets the `production` GitHub Environment. GitHub Environment protection rules (specified in `.github/environments/production.yml`) pause the workflow until a designated reviewer explicitly approves promotion.
+3. **Fail-closed promotion and automatic rollback:** If staging deployment or its smoke test fails, staging automatically rolls back to its last known-good tag and the job fails — blocking production promotion completely. Production runs the same smoke test and automatic rollback on failure, so neither environment is ever left in an unknown state.
+
+### Post-deploy smoke testing
+
+Both staging and production run `infra/ci/deploy-smoke-test.mjs` before marking a deployment successful:
+
+- Polls `GET /health` until HTTP `200` is returned within the retry budget.
+- Verifies `GET /version` returns HTTP `200` and includes the expected immutable image tag.
+
+Checking `/version` alongside `/health` is deliberate: if an orchestrator fails to replace the running container, the previous healthy container may continue serving `200 OK` on `/health`. A `/health`-only check would falsely report the deployment as successful; asserting `/version` catches that failure mode immediately.
+
+### Key design decisions and rejected alternatives
+
+- **`workflow_run` trigger vs. deploying inside `release.yml`:** We rejected adding deployment jobs directly to `release.yml`. `release.yml` requires `contents: write` to attach SBOMs and manage releases, while `deploy.yml` requires `deployments: write` and environment-scoped deployment secrets. Splitting them enforces least privilege and allows operators to re-deploy or roll back via `workflow_dispatch` without re-running release creation.
+- **Human approval gate vs. fixed `wait_timer`:** `.github/environments/production.yml` sets `wait_timer: 0` and requires explicit reviewer approval (`prevent_self_review: true`). A fixed timer delays urgent security patches without verifying anything; a human gate lets maintainers verify staging telemetry and approve immediately when ready.
+- **Immutable tags vs. `latest`:** `resolve-release` explicitly refuses to deploy `latest` and verifies the immutable tag exists in GHCR before touching staging. This guarantees staging and production run the exact same image digest and makes automatic rollback deterministic.
+- **`cancel-in-progress: false`:** Concurrency groups for both `deploy-staging` and `deploy-production` never cancel an in-flight deployment, preventing half-applied rollouts or interrupted rollbacks.

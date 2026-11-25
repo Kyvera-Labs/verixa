@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -148,6 +148,14 @@ describe("coverage-merge (Issue 412)", () => {
 
     writeFileSync(path.join(pkgADir, "lcov.info"), FIXTURE_LCOV_1);
     writeFileSync(path.join(pkgBDir, "lcov.info"), FIXTURE_LCOV_2);
+    writeFileSync(
+      path.join(tmpDir, "packages/pkg-a/package.json"),
+      JSON.stringify({ name: "@verixa/pkg-a" }),
+    );
+    writeFileSync(
+      path.join(tmpDir, "packages/pkg-b/package.json"),
+      JSON.stringify({ name: "@verixa/pkg-b" }),
+    );
 
     const outDir = path.join(tmpDir, "merged_output");
     const mdSummary = path.join(tmpDir, "summary.md");
@@ -160,5 +168,15 @@ describe("coverage-merge (Issue 412)", () => {
 
     expect(report.totalFiles).toBe(2);
     expect(report.aggregate.lines.pct).toBe(83.33);
+
+    const summary = JSON.parse(
+      readFileSync(path.join(outDir, "coverage-summary.json"), "utf8"),
+    ) as {
+      total: { lines: { pct: number } };
+      packages: Record<string, { lines: { pct: number } }>;
+    };
+    expect(summary.total.lines.pct).toBe(83.33);
+    expect(summary.packages["@verixa/pkg-a"]?.lines.pct).toBe(66.67);
+    expect(summary.packages["@verixa/pkg-b"]?.lines.pct).toBe(100);
   });
 });

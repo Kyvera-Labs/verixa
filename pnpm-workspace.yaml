@@ -27,6 +27,40 @@ allowBuilds:
   cpu-features: false
   protobufjs: false
   ssh2: false
+# Fail the install, instead of silently skipping the script, when a newly
+# added dependency wants to run an install script that is not listed in
+# allowBuilds above. A new script then has to be approved in review rather
+# than going unnoticed.
+strictDepBuilds: true
+
+# Supply-chain guards for resolution: they apply whenever pnpm picks a
+# version (`pnpm add`, `pnpm update`, Dependabot), not when installing from
+# the existing lockfile.
+#
+# Refuse versions published less than 3 days (4320 minutes) ago. Most
+# malicious releases of hijacked packages are found and pulled within that
+# window. An urgent security fix younger than that can be let through by
+# adding it to minimumReleaseAgeExclude for one pull request.
+minimumReleaseAge: 4320
+# Refuse transitive dependencies that come from a git repository or a
+# tarball URL instead of the registry, where none of the checks here apply.
+blockExoticSubdeps: true
+# Refuse a version that has weaker publishing evidence than earlier ones,
+# such as no provenance attestation after releases that had one. That is
+# what a hijacked maintainer account publishing from its own machine looks
+# like: eslint-config-prettier 9.1.1 (July 2025) was exactly that, and this
+# setting blocks it.
+trustPolicy: no-downgrade
+# Reviewed 2026-11-18: each exact version below is the one already locked,
+# its integrity hash matches the registry, and it was published by the
+# package's long-standing maintainer without CI provenance. Exact versions
+# only, so a later release that downgrades trust is still blocked.
+trustPolicyExclude:
+  # The clean re-release published by hand after the 9.1.1 compromise.
+  - eslint-config-prettier@9.1.2
+  - pino@9.14.0
+  - undici-types@6.21.0
+  - chokidar@4.0.3
 # fast-uri is a transitive dependency (via fastify's ajv-compiler chain and
 # commitlint's ajv chain), pulled in at vulnerable version ranges in some of
 # those paths (GHSA-8jxf-...: host confusion via a backslash authority
