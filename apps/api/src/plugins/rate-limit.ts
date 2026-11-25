@@ -105,6 +105,20 @@ export function registerRateLimit<TLogger extends FastifyBaseLogger = FastifyBas
   const store = new RateLimiterStore(opts.redisClient);
 
   fastify.addHook("onRequest", async (request: FastifyRequest, reply: FastifyReply) => {
+    // Exclude health probes, metrics endpoints, and system metadata from rate limits
+    const url = request.url;
+    if (
+      url === "/health" ||
+      url.startsWith("/health/") ||
+      url === "/health/live" ||
+      url === "/health/ready" ||
+      url === "/metrics" ||
+      url.startsWith("/metrics/") ||
+      url === "/version"
+    ) {
+      return;
+    }
+
     // Determine principal key: user id from session/header or API key, falling back to IP
     const userHeader = request.headers["x-user-id"];
     const principalId =

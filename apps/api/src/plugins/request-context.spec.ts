@@ -155,4 +155,91 @@ describe("request context and correlation ID plugin", () => {
 
     await app.close();
   });
+
+  it("links correlationId and traceId in logs and echoes traceId on error responses (Issue 355 / #467)", async () => {
+    const logLines: Array<Record<string, unknown>> = [];
+    const customStream = {
+      write(msg: string) {
+        try {
+          logLines.push(JSON.parse(msg) as Record<string, unknown>);
+        } catch {
+          // ignore
+        }
+      },
+    };
+
+    const logger = createLogger({ name: "trace-linkage-test" }, customStream);
+    const app = Fastify({ loggerInstance: logger });
+    app.setErrorHandler(handleApiError);
+    app.addSchema(errorResponseSchema);
+    registerRequestContext(app);
+
+    app.get("/error-with-trace", async (req, reply) => {
+      req.log.info("Processing traced route failure");
+      sendApiError(reply, "CONFLICT", "Conflict during traced operation");
+    });
+
+    await app.ready();
+
+    const correlationId = "corr-uuid-467";
+    const traceId = "4bf92f3577b34da6a3ce929d0e0e4736";
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/error-with-trace",
+      headers: {
+        "x-request-id": correlationId,
+        "x-trace-id": traceId,
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.headers[REQUEST_ID_HEADER]).toBe(correlationId);
+    expect(response.headers["x-trace-id"]).toBe(traceId);
+
+    const body = response.json<{
+      error: { code: string; message: string; requestId: string; traceId?: string };
+    }>();
+
+    expect(body.error.code).toBe("CONFLICT");
+    expect(body.error.requestId).toBe(correlationId);
+    expect(body.error.traceId).toBe(traceId);
+
+    // Verify structured log line contains BOTH correlationId (requestId) and traceId
+    const tracedLog = logLines.find((l) => l["msg"] === "Processing traced route failure");
+    expect(tracedLog).toBeDefined();
+    expect(tracedLog?.["requestId"]).toBe(correlationId);
+    expect(tracedLog?.["traceId"]).toBe(traceId);
+
+    await app.close();
+  });
+
+  it("extracts trace ID from W3C traceparent header when present", async () => {
+    const app = Fastify();
+    registerRequestContext(app);
+
+    app.get("/traceparent-check", (req) => {
+      return { traceId: req.traceId };
+    });
+
+    await app.ready();
+
+    const traceId = "4bf92f3577b34da6a3ce929d0e0e4736";
+    const traceparent = `00-${traceId}-00f067aa0ba902b7-01`;
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/traceparent-check",
+      headers: {
+        traceparent,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["x-trace-id"]).toBe(traceId);
+    const body = response.json<{ traceId: string }>();
+    expect(body.traceId).toBe(traceId);
+
+    await app.close();
+  });
 });
