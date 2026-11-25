@@ -153,40 +153,11 @@ onResponse Hook:
 
 ---
 
-## 5. OpenTelemetry Bootstrap & Resource Attributes
+## 5. OpenTelemetry Bootstrap
 
-Located at `packages/observability/infrastructure/otel-bootstrap.ts` and loaded by `apps/api/src/instrumentation.ts`.
+Tracing setup lives in `packages/observability/infrastructure/otel-bootstrap.ts` (from #592): `bootstrapOtel()` with `otelConfigFromAppConfig()` derives exporter, sampling and resource attributes from the validated app config (`OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME`, `OTEL_TRACES_SAMPLER_RATE`, ...), and `validateOtelBootstrapConfig()` rejects a bad combination at start-up.
 
-### Why SDK Initialization Must Occur at Process Start
-
-OpenTelemetry auto-instrumentation operates by patching Node's module resolution and loader hooks (`require` / ESM loaders) to wrap core modules (such as `node:http`, Fastify, Prisma, Redis) before their classes are instantiated.
-
-If an application imports database or network modules _before_ `NodeSDK.start()` runs, those modules bypass the monkey-patching hooks and will not emit spans. Therefore:
-
-1. `apps/api/src/instrumentation.ts` initializes OpenTelemetry at the entrypoint.
-2. `apps/api/src/server.ts` imports `./instrumentation.js` as its very first statement.
-3. Node process launches can also use `--import ./dist/instrumentation.js`.
-
-### Standard Resource Attributes
-
-Every span emitted by the tracing engine is tagged with standard semantic conventions:
-
-| Attribute                | Source                                    | Description                              |
-| ------------------------ | ----------------------------------------- | ---------------------------------------- |
-| `service.name`           | `OTEL_SERVICE_NAME` or `verixa-api`       | Identifies the logical service name      |
-| `service.version`        | `SERVICE_VERSION` or `0.1.0`              | Semantic version of the service          |
-| `deployment.environment` | `NODE_ENV` (e.g. `production`, `staging`) | Deployment tier                          |
-| `deployment.id`          | `DEPLOYMENT_ID` or hostname/UUID          | Unique instance/container identifier     |
-| `service.instance.id`    | Same as `deployment.id`                   | OpenTelemetry standard instance identity |
-
-### Test Environment Cleanliness
-
-Running full OpenTelemetry background exporters in test environments (`NODE_ENV === 'test'`) pollutes CI outputs with unhandled connection errors (`connect ECONNREFUSED ::1:4318`) when no OTLP collector is present.
-
-`initOtelBootstrap()` handles this cleanly:
-
-- When `NODE_ENV === 'test'`, the SDK defaults to an inactive no-op state (`active: false, reason: "disabled_in_test_environment"`).
-- In tests specifically exercising OTel behavior, `forceEnable: true` enables an in-memory exporter (`MemorySpanExporter`) that records spans synchronously without attempting network connections.
+The API does not start tracing yet. When it does, the bootstrap has to run before any instrumented module (`node:http`, Fastify, Prisma) is imported, because auto-instrumentation patches those modules as they load; an `--import` entry point is the usual way to guarantee that order.
 
 ## Dashboards-as-Code
 
