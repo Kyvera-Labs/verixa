@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -5,6 +7,7 @@ import {
   compareCoverage,
   updateBaselineMetrics,
   formatRatchetMarkdown,
+  normalizeCoverageSummary,
   type CoverageBaseline,
 } from "../../infra/ci/coverage-ratchet.js";
 
@@ -197,5 +200,55 @@ describe("coverage-ratchet (Issue 413)", () => {
       expect(md).toContain("### Required Action");
       expect(md).toContain("COVERAGE_RATCHET_OVERRIDE");
     });
+  });
+});
+
+describe("normalizeCoverageSummary", () => {
+  const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
+  const pct = (value: number) => ({ total: 10, covered: value / 10, skipped: 0, pct: value });
+  const metrics = (value: number) => ({
+    lines: pct(value),
+    statements: pct(value),
+    functions: pct(value),
+    branches: pct(value),
+  });
+
+  it("reads the summary coverage-merge writes: aggregate totals and directory keys", () => {
+    // The shape infra/ci/coverage-merge.ts produces. Before normalising, the
+    // ratchet looked for `total` and for package names, found neither, and
+    // scored every target 0%.
+    const merged = {
+      aggregate: metrics(83.65),
+      packages: { "packages/audit": metrics(93.93), "packages/config": metrics(98) },
+    };
+
+    const summary = normalizeCoverageSummary(merged, repoRoot);
+
+    expect(summary.total).toEqual(merged.aggregate);
+    expect(Object.keys(summary.packages ?? {}).sort()).toEqual(["@verixa/audit", "@verixa/config"]);
+
+    const result = compareCoverage(summary, {
+      version: 1,
+      updatedAt: "2026-11-20T00:00:00.000Z",
+      tolerance: 0.1,
+      aggregate: { lines: 83.6, statements: 83.6, functions: 83.6, branches: 83.6 },
+      packages: {
+        "@verixa/audit": { lines: 93.9, statements: 93.9, functions: 93.9, branches: 93.9 },
+      },
+    });
+    expect(result.passed).toBe(true);
+    expect(result.packages[0]?.metrics.find((m) => m.metric === "lines")?.current).toBe(93.93);
+  });
+
+  it("keeps keys that are already package names, or have no manifest", () => {
+    const summary = normalizeCoverageSummary(
+      {
+        total: metrics(80),
+        packages: { "@verixa/x": metrics(1), "tests/integration": metrics(2) },
+      },
+      repoRoot,
+    );
+
+    expect(Object.keys(summary.packages ?? {}).sort()).toEqual(["@verixa/x", "tests/integration"]);
   });
 });

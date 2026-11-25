@@ -69,11 +69,17 @@ jobs:
       - name: Apply migrations to the test database
         run: pnpm db:migrate:deploy
 
-      # Runs per-package coverage and merges into unified LCOV, HTML dashboard, and summary JSON (Issue 412)
+      # Runs per-package coverage and merges into unified LCOV, HTML dashboard,
+      # and summary JSON (Issue 412). Per-package vitest thresholds are turned
+      # off here (see `test:workspace:coverage`) and `--no-bail` runs every
+      # package: the thresholds are targets for each package's own
+      # `test:coverage`, and failing this job on the first package below its
+      # target hid every package after it. A failing *test* still fails here.
       - name: Collect and merge workspace coverage
         run: pnpm test:workspace:coverage
 
-      # Enforces that coverage does not drop below checked-in baseline (Issue 413)
+      # The gate: coverage must not drop below the checked-in, measured
+      # baseline (Issue 413), overall or for any package.
       - name: Enforce coverage ratchet gate
         run: |
           pnpm coverage:ratchet --output-markdown coverage/ratchet-summary.md
