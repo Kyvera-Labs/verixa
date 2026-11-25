@@ -47,6 +47,7 @@ export default mergeConfig(
       },
     },
     test: {
+      exclude: ["e2e/**", "**/node_modules/**", "**/dist/**"],
       name: "@verixa/integration-tests",
 
       /**

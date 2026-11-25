@@ -219,6 +219,34 @@ No changes to use cases required — the seam is already wired.
 Follow existing patterns in this repo for ports, adapters,
 use cases, dependency injection, and testing.
 
+### IP-Based Limiting & Proxy Trust (`IpRateLimitStrategy`)
+
+High-volume automated attacks from a single source are throttled using `IpRateLimitStrategy` (`packages/rate-limiting/application/strategies/ip-strategy.ts`).
+
+#### Why Blindly Trusting `X-Forwarded-For` Fails
+
+The HTTP `X-Forwarded-For` (XFF) request header is set by proxies to indicate the IP address of the client that initiated the connection. However, an untrusted client can send any arbitrary value in `X-Forwarded-For` (e.g. `X-Forwarded-For: 1.1.1.1`).
+
+If an application blindly parses the first IP from `X-Forwarded-For` without validating proxy trust:
+
+1. An attacker at `198.51.100.42` can rotate forged IP headers with every request (`1.1.1.1`, `1.1.1.2`, ...).
+2. The rate limiter derives a new bucket key for each forged IP.
+3. IP-based rate limiting is completely bypassed.
+
+To prevent header spoofing, `IpRateLimitStrategy` requires an explicit `trustedProxyCount`:
+
+- When `trustedProxyCount <= 0` (direct connection to node), all `X-Forwarded-For` headers are completely ignored, and the socket's `remoteAddress` is used.
+- When `trustedProxyCount > 0` (e.g. `trustedProxyCount = 1` behind a reverse proxy or cloud load balancer), the proxy appends the real client IP to the right of any client-supplied headers. The strategy extracts the IP at index `ips.length - trustedProxyCount`, correctly skipping trusted hops while ignoring any forged IPs prepended earlier in the header.
+
+### Account-Scoped Limiting (`AccountRateLimitStrategy`)
+
+Distributed credential-stuffing botnets rotate across thousands of distinct residential or proxy IP addresses, issuing only one or two requests per IP to intentionally bypass IP-based rate limiting.
+
+`AccountRateLimitStrategy` (`packages/rate-limiting/application/strategies/account-strategy.ts`) closes this vulnerability by deriving bucket keys from the target account identifier (e.g. `account:user@example.com` or `account:userId`), normalized to prevent casing and whitespace evasion:
+
+- All requests targeting the same account across any number of different IPs are throttled together.
+- Unrelated accounts remain unaffected.
+
 ## Transparent rehashing
 
 A successful login is the only moment the plaintext password exists in memory,
@@ -560,6 +588,37 @@ When a user has lost all MFA methods and backup codes, an administrator initiate
 6. On the user's next login, the MFA enforcement policy detects no active methods and gates on re-enrollment.
 
 The recovery cannot be self-triggered: the use case always requires a non-empty `actorAdminId` distinct from the user, enforcing that a human admin with elevated access authorises each recovery event.
+
+## Refresh-Token Rate Limiting & Oracle Prevention (Issue 295)
+
+The session token refresh endpoint (`POST /auth/refresh`) is a high-value abuse surface. While initial login requires full credentials, refresh token exchange issues fresh access tokens directly from an existing refresh token. Without strict rate limiting, attackers can exploit this endpoint for rapid-fire token enumeration, token guessing, or replay attempts against rotating tokens.
+
+### Pre-Validation Throttling
+
+To prevent timing oracles and database resource exhaustion, the `RateLimiter` is consulted **before** querying the session repository or validating the refresh token. If the rate limit is exceeded:
+
+- The use case immediately raises a `RateLimitExceededError`.
+- The HTTP layer responds with HTTP 429 (`RATE_LIMITED`) and standard rate-limiting headers (`Retry-After`, `X-RateLimit-*`).
+- **No information is disclosed** regarding whether the refresh token was well-formed, valid, expired, or already consumed.
+
+Any subsequent token verification failure (e.g. invalid token, unknown hash, or revoked session) records a failure on the rate-limiter identifier (client IP or token hash), tightening throttle pressure against distributed enumeration sweeps. A successful token exchange resets the throttle state.
+
+## MFA Verification Rate Limiting & Code-Space Protection (Issue 296)
+
+Multi-factor authentication codes (such as standard RFC 6238 6-digit TOTP codes) have a limited search space: exactly $10^6$ possible values. Within a standard 30-second time window (or extended drift window), an attacker who has compromised a user's password could attempt to brute-force the second factor if the verification endpoint allowed high-frequency submissions.
+
+### Account-Keyed Verification Throttling
+
+Unlike general API rate limiting that keys primarily on IP address, MFA verification rate limiting in `VerifyTotpChallenge` and `ConsumeBackupCode` is strictly **keyed by account identity** (`userId`). This prevents distributed botnets from distributing TOTP guesses across hundreds of rotating egress IPs.
+
+### Attempt Budget vs. Code-Space Mathematics
+
+The attempt budget is configured tightly (default: 5 attempts per 60-second window):
+
+- In a 6-digit space ($10^6$ codes), 5 attempts yield a success probability of $\frac{5}{10^6} = 0.0005\%$.
+- Even across a multi-window drift, the cumulative probability remains negligible ($< 0.002\%$).
+- If the threshold is exceeded, the request is immediately rejected with a lockout-style HTTP 429 (`RateLimitExceededError`).
+- An immutable audit log entry (`mfa.rate_limit_exceeded`) is emitted to alert operators and trigger automated account defense playbooks.
 
 - `docs/guides/use-cases.md` — the reviewer-decision use cases, why a
   rationale note is mandatory on every approval or rejection, and why the

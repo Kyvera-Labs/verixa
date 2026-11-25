@@ -16,6 +16,7 @@ import {
   registerBaselineResponseHeaders,
 } from "./plugins/baseline-response-headers.js";
 import { NO_CORS, registerCors, type CorsPolicy } from "./plugins/cors.js";
+import { registerRateLimit, type RateLimitPluginOptions } from "./plugins/rate-limit.js";
 import {
   NO_TRANSPORT_SECURITY,
   registerSecurityHeaders,
@@ -38,7 +39,7 @@ export type { HstsDirective, SecurityHeadersOptions };
  * the integration suite should be able to name the policy without reaching
  * into `src/plugins/`.
  */
-export type { CorsPolicy };
+export type { CorsPolicy, RateLimitPluginOptions };
 
 /** Re-exported for the integration suite, which builds a GraphQL-only app around a test container. */
 export { createGraphQLApp } from "./graphql/server.js";
@@ -88,6 +89,13 @@ export interface BuildAppOptions {
    * scheme; see `docs/security/tls-enforcement.md`.
    */
   readonly trustProxy?: boolean;
+  /**
+   * Rate-limiting response controls (Phase 15, Issue 297).
+   *
+   * Defaults to active in non-test environments (`process.env["NODE_ENV"] !== "test"`).
+   * Pass `false` to disable or pass a configuration object to tune limits.
+   */
+  readonly rateLimit?: boolean | RateLimitPluginOptions;
 }
 
 /**
@@ -123,6 +131,17 @@ export function buildApp(options: BuildAppOptions = {}) {
   });
 
   registerCors(app, options.cors ?? NO_CORS);
+
+  const enableRateLimit =
+    options.rateLimit !== undefined
+      ? options.rateLimit !== false
+      : process.env["NODE_ENV"] !== "test";
+
+  if (enableRateLimit) {
+    const rateLimitOpts = typeof options.rateLimit === "object" ? options.rateLimit : {};
+    registerRateLimit(app, rateLimitOpts);
+  }
+
   app.setErrorHandler(handleApiError);
   app.addSchema(errorResponseSchema);
   app.addHook("onRoute", (route) => assertRouteValidationSchemas(route));
@@ -169,6 +188,10 @@ export function buildApp(options: BuildAppOptions = {}) {
     // *does* check dependencies is a separate concern (Phase 18).
     return { status: "ok" };
   });
+
+  // Kept separate from liveness so deployments can verify which immutable
+  // image is serving traffic without making health probes depend on metadata.
+  app.get("/version", () => ({ version: process.env["VERIXA_BUILD_VERSION"] ?? "unknown" }));
 
   // Registered outside the container check for the same reason `/health` is:
   // the disclosure channel describes the software, not a tenant's data, and a

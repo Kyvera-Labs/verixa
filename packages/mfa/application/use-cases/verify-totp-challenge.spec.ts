@@ -109,4 +109,93 @@ describe("VerifyTotpChallenge", () => {
       expect(result.error).toBeInstanceOf(AccountLockedError);
     }
   });
+
+  describe("Rate limiting (Issue 296 / #310)", () => {
+    it("consults RateLimiter by account, throws RateLimitExceededError and records audit event on limit exceeded", async () => {
+      const { fakeRepo, fakeAlgo } = setup();
+      const userId = createId<"UserId">();
+      const method = MfaMethod.createPendingTotp(userId, { value: "SECRET" }).activate();
+      await fakeRepo.save(method);
+
+      const auditCalls: Array<{ action: string; actorId: string }> = [];
+      const auditLogger = {
+        record: async (action: string, actorId: string) => {
+          await Promise.resolve();
+          auditCalls.push({ action, actorId });
+        },
+      };
+
+      const rateLimiter = {
+        check: async () => {
+          await Promise.resolve();
+          return {
+            allowed: false,
+            remaining: 0,
+            resetAt: Date.now() + 60_000,
+            limit: 5,
+          };
+        },
+        recordFailure: async () => {
+          await Promise.resolve();
+        },
+        reset: async () => {
+          await Promise.resolve();
+        },
+      };
+
+      const limitedUseCase = new VerifyTotpChallenge(fakeRepo, fakeAlgo, rateLimiter, auditLogger);
+
+      await expect(
+        limitedUseCase.execute({
+          methodId: method.id,
+          code: "VALID1",
+        }),
+      ).rejects.toThrow(`Rate limit exceeded for mfa on ${userId}`);
+
+      expect(auditCalls).toHaveLength(1);
+      expect(auditCalls[0]?.action).toBe("mfa.rate_limit_exceeded");
+      expect(auditCalls[0]?.actorId).toBe(userId);
+    });
+
+    it("records failure on invalid code and resets on success", async () => {
+      const { fakeRepo, fakeAlgo } = setup();
+      const userId = createId<"UserId">();
+      const method = MfaMethod.createPendingTotp(userId, { value: "SECRET" }).activate();
+      await fakeRepo.save(method);
+
+      const calls: string[] = [];
+      const rateLimiter = {
+        check: async () => {
+          await Promise.resolve();
+          calls.push("check");
+          return { allowed: true, remaining: 4, resetAt: Date.now() + 60_000, limit: 5 };
+        },
+        recordFailure: async () => {
+          await Promise.resolve();
+          calls.push("recordFailure");
+        },
+        reset: async () => {
+          await Promise.resolve();
+          calls.push("reset");
+        },
+      };
+
+      const limitedUseCase = new VerifyTotpChallenge(fakeRepo, fakeAlgo, rateLimiter);
+
+      // Invalid code
+      await limitedUseCase.execute({
+        methodId: method.id,
+        code: "WRONG1",
+      });
+      expect(calls).toEqual(["check", "recordFailure"]);
+
+      // Valid code
+      calls.length = 0;
+      await limitedUseCase.execute({
+        methodId: method.id,
+        code: "VALID1",
+      });
+      expect(calls).toEqual(["check", "reset"]);
+    });
+  });
 });

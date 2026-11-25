@@ -1,0 +1,49 @@
+# GitHub Environment Protection Rule Specification — production
+#
+# GitHub Environments are configured in Repository Settings -> Environments
+# (or via the GitHub Environments REST API / Terraform). This file is the
+# version-controlled source of truth for the `production` environment referenced
+# by `.github/workflows/deploy.yml`, so protection rules are reviewed alongside
+# workflow changes rather than living only in click-ops settings.
+
+name: production
+
+protection_rules:
+  # Explicit human approval gate: every production deployment pauses until at
+  # least one designated reviewer approves it in the GitHub Actions UI.
+  required_reviewers:
+    teams:
+      - Kyvera-Labs/maintainers
+    prevent_self_review: true
+
+  # Deliberately 0: a fixed wait timer delays urgent security patches without
+  # verifying anything. Human review is the intentional gate, not a clock.
+  wait_timer: 0
+
+  # Only releases from the protected `main` branch or semver release tags may
+  # target production, preventing feature branches from requesting promotion.
+  deployment_branch_policy:
+    protected_branches: false
+    custom_branch_policies: true
+    allowed_patterns:
+      - "main"
+      - "v*.*.*"
+
+variables:
+  PRODUCTION_URL:
+    description: "Base HTTPS URL of the production Verixa API (used for post-deploy /health and /version smoke tests)"
+    required: true
+  PRODUCTION_LAST_KNOWN_GOOD_TAG:
+    description: "Immutable image tag of the last verified production release (fallback target for automatic rollback)"
+    required: false
+
+secrets:
+  PRODUCTION_DEPLOY_WEBHOOK_URL:
+    description: "Deployment orchestrator webhook endpoint that rolls out the verified image tag to production"
+    required: true
+  PRODUCTION_ROLLBACK_WEBHOOK_URL:
+    description: "Deployment orchestrator webhook endpoint that restores PRODUCTION_LAST_KNOWN_GOOD_TAG on smoke-test failure"
+    required: true
+  PRODUCTION_DEPLOY_TOKEN:
+    description: "Scoped bearer token authenticating deployment and rollback requests to the production orchestrator"
+    required: true

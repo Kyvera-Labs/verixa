@@ -18,6 +18,7 @@ export default tseslint.config(
       "**/coverage/**",
       "**/node_modules/**",
       "**/*.config.*",
+      "vitest.workspace.*",
       "planning/**",
       "scripts/**",
       // Same reason as scripts/**, and the same trade-off. This one is not even
@@ -27,6 +28,11 @@ export default tseslint.config(
       // generate-sbom.ts is TypeScript and *is* covered, via infra/ci/tsconfig.json
       // (typechecked by `pnpm typecheck:ci`).
       "infra/ci/**/*.mjs",
+      // Standalone compose backup/restore CLIs: same reason as scripts/** and
+      // infra/ci/**/*.mjs — they are run with plain `node`, outside any
+      // workspace tsconfig, so project-service linting has no project to use.
+      "infra/docker/scripts/**/*.mjs",
+      "tests/**/*.mjs",
       // Not built: written against a `webauthn_credentials` table that was
       // never migrated. See the header comment on
       // prisma-webauthn-credential-repository.ts.
