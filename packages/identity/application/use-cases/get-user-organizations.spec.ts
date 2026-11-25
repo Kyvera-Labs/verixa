@@ -70,3 +70,32 @@ describe("GetUserOrganizations", () => {
     expect(Result.isOk(result) && result.value).toHaveLength(2);
   });
 });
+
+/**
+ * Added in Issue 417: kills the mutants at get-user-organizations.ts:26 that
+ * the mutation-testing spike found surviving (the `status === "active"`
+ * filter replaced by `true`, or removed). Every existing test used only
+ * active memberships, so dropping the filter changed nothing they checked.
+ */
+describe("GetUserOrganizations: revoked memberships", () => {
+  it("does not list an organization the user's membership was revoked from", async () => {
+    const orgRepo = new InMemoryOrganizationRepository();
+    const membershipRepo = new InMemoryOrganizationMembershipRepository();
+    const kept = unwrap(Organization.create({ name: "Kept", slug: "kept", ownerId: USER_ID }));
+    const left = unwrap(Organization.create({ name: "Left", slug: "left", ownerId: USER_ID }));
+    await orgRepo.save(kept);
+    await orgRepo.save(left);
+    await membershipRepo.save(
+      unwrap(OrganizationMembership.create({ userId: USER_ID, organizationId: kept.id })),
+    );
+    await membershipRepo.save(
+      unwrap(OrganizationMembership.create({ userId: USER_ID, organizationId: left.id })).revoke(),
+    );
+
+    const result = await new GetUserOrganizations(membershipRepo, orgRepo).execute({
+      userId: USER_ID,
+    });
+
+    expect(Result.isOk(result) && result.value.map((o) => o.id)).toEqual([kept.id]);
+  });
+});

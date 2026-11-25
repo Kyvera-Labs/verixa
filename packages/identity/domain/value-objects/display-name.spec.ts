@@ -44,3 +44,20 @@ describe("DisplayName", () => {
     expect(Result.isOk(a) && Result.isOk(b) && a.value.equals(b.value)).toBe(true);
   });
 });
+
+/** Added in Issue 417: kills mutants the mutation-testing spike found surviving in display-name.ts. */
+describe("DisplayName: limits at the edges", () => {
+  it("accepts exactly the minimum and the maximum length", () => {
+    // Kills :21 (`<` -> `<=`) and :27 (`>` -> `>=`).
+    expect(Result.isOk(DisplayName.create("A"))).toBe(true);
+    expect(Result.isOk(DisplayName.create("A".repeat(64)))).toBe(true);
+  });
+
+  it("does not consider two different names equal", () => {
+    // Kills :39 (`===` -> `true`).
+    const a = DisplayName.create("Alice");
+    const b = DisplayName.create("Bob");
+    if (!Result.isOk(a) || !Result.isOk(b)) throw new Error("fixture setup failed");
+    expect(a.value.equals(b.value)).toBe(false);
+  });
+});
