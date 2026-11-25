@@ -36,6 +36,9 @@ export type {
   PolicyDecisionPoint,
   PolicyEvaluation,
 } from "./application/ports/policy-decision-point.js";
+export type { OrganizationPolicy, OrgPolicySource } from "./application/ports/org-policy-source.js";
+export type { PolicyEvaluationPort } from "./application/ports/policy-evaluation-port.js";
+export { PolicyEvaluationBridge } from "./application/services/policy-evaluation-bridge.js";
 export type {
   RoleCheckRequest,
   RoleDecision,

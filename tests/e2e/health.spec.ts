@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { startE2eEnvironment, type E2eEnvironment } from "./setup.js";
 
+// #region e2e-journey
 describe("API process smoke test", () => {
   let environment: E2eEnvironment;
 
@@ -23,3 +24,4 @@ describe("API process smoke test", () => {
     expect(await version.json()).toEqual({ version: "e2e-smoke" });
   });
 });
+// #endregion e2e-journey
