@@ -199,3 +199,138 @@ docker compose -f infra/docker/docker-compose.observability.yml up
 
 - **Manual Grafana UI state with periodic JSON exports**: rejected because ad-hoc edits in the UI diverge from git and break reproducibility.
 - **Jsonnet / Grafonnet**: rejected for now to avoid introducing a separate compiler toolchain (`jsonnet`, `jb`) for contributors; plain Grafana JSON is directly diffable, validated in CI by `tests/ci/observability-dashboards.spec.ts`, and requires zero extra local dependencies.
+
+## 6. Pillars Cross-Linking: Correlation ID & Trace ID Linkage
+
+Located at `packages/observability/infrastructure/request-context.ts` and `apps/api/src/plugins/request-context.ts` (Issue 355 / #467).
+
+### The Three Pillars Disconnection Problem
+
+Historically, logging, metrics, and tracing operate as isolated silos:
+
+1. Logs show what happened locally in human-readable messages.
+2. Metrics show high-level aggregates (e.g. 5xx rate spiked to 12%).
+3. Distributed traces show cross-network timings between microservices.
+
+Without an unambiguous linkage identifier, triaging an incident is painfully slow: an operator sees a 500 error in Prometheus, finds a user's `X-Request-Id` in customer support, but cannot find the matching distributed trace in Jaeger/Tempo or the matching database log line.
+
+### Unified Linkage Architecture
+
+Verixa solves this by binding the OpenTelemetry `traceId` and the HTTP correlation `requestId` together in an asynchronous context (`AsyncLocalStorage`):
+
+```
+HTTP Request (Inbound headers: X-Request-Id, traceparent, X-Trace-Id)
+                       │
+                       ▼
+             [request-context plugin]
+  ┌──────────────────────────────────────────────────┐
+  │ 1. Extract/generate correlation ID (UUIDv4)      │
+  │ 2. Extract/inherit W3C traceparent or OTel span  │
+  │ 3. Store in AsyncLocalStorage RequestContext     │
+  └────────────────────┬─────────────────────────────┘
+                       │
+        ┌──────────────┴──────────────┐
+        ▼                             ▼
+┌────────────────┐            ┌────────────────┐
+│ Structured Log │            │ Error Response │
+│ Mixin Injection│            │ & Headers Echo │
+└───────┬────────┘            └───────┬────────┘
+        │                             │
+        ▼                             ▼
+  {"level": 50,                 HTTP 500 Internal Error
+   "msg": "DB fail",            Headers:
+   "req": {"id": "corr-1"},       X-Request-Id: corr-1
+   "trace": {"id": "trace-1"}}    X-Trace-Id: trace-1
+                                Body:
+                                {"error": {
+                                   "requestId": "corr-1",
+                                   "traceId": "trace-1"
+                                }}
+```
+
+### Context Propagation via `AsyncLocalStorage`
+
+Rather than threading `requestId` and `traceId` through every use case, entity, and domain service signature, `runWithRequestContext` stores request metadata in Node's native `AsyncLocalStorage`.
+
+```typescript
+import { runWithRequestContext, getCorrelationId, getActiveTraceId } from "@verixa/observability";
+
+await runWithRequestContext(
+  { correlationId: "req-123", traceId: "4bf92f3577b34da6a3ce929d0e0e4736" },
+  async () => {
+    // Accessible anywhere in the call stack across async boundaries:
+    const corrId = getCorrelationId(); // "req-123"
+    const traceId = getActiveTraceId(); // "4bf92f3577b34da6a3ce929d0e0e4736"
+  },
+);
+```
+
+### Automatic Pino Mixin Injection
+
+`createContextualLogger` configures Pino with a dynamic `mixin` function. Whenever any subsystem calls `logger.info("message")`, the logger inspects `getRequestContext()` and injects:
+
+- `req.id`: Correlation ID (`requestId`).
+- `trace.id`: OpenTelemetry trace identifier (`traceId`).
+- `actor.id`: Authenticated principal ID if authenticated.
+
+> **Design Decision & Rejected Alternative:** We rejected explicitly passing the logger as a parameter into every domain function or attaching IDs manually at every `logger.info` invocation. Manual attachment is error-prone, violates domain cleanliness, and invariably leads to unlinked log lines during unexpected exceptions.
+
+---
+
+## 7. Health Check System & Dependency Probes
+
+Located at `packages/observability/application/health-check-registry.ts` and `apps/api/src/routes/health.ts` (Issue 358 / #470).
+
+### Liveness vs. Readiness Probes
+
+Container orchestrators (Kubernetes, AWS ECS, Nomad) require distinct signals to manage pod lifecycles:
+
+| Probe         | Endpoint            | Behaviour                                                                                | Orchestrator Action on Failure                                      |
+| :------------ | :------------------ | :--------------------------------------------------------------------------------------- | :------------------------------------------------------------------ |
+| **Liveness**  | `GET /health/live`  | Process is up, event loop responsive, no deadlocks. Does NOT ping external dependencies. | Kill container and restart it.                                      |
+| **Readiness** | `GET /health/ready` | Verifies critical dependencies (PostgreSQL via `SELECT 1`, Redis via `PING`).            | Remove pod from service load balancer traffic pool; do NOT restart. |
+
+> **Critical Operational Warning:** Never check external databases or caches inside the **liveness** endpoint (`/health/live`). If a database experiences a transient outage or restart, checking it in liveness causes every single API pod to restart simultaneously, triggering a catastrophic crash loop and preventing graceful recovery.
+
+### Health Check Registry & Timeouts
+
+The `HealthCheckRegistry` manages registered dependency checks with strict per-check timeout bounding:
+
+```typescript
+import {
+  HealthCheckRegistry,
+  createPostgresHealthCheck,
+  createRedisHealthCheck,
+} from "@verixa/observability";
+
+const registry = new HealthCheckRegistry({ defaultTimeoutMs: 3000 });
+
+registry.register("postgres", createPostgresHealthCheck(prismaClient));
+registry.register("redis", createRedisHealthCheck(redisClient));
+
+const report = await registry.check();
+// report.status === "healthy" | "degraded"
+```
+
+- When all dependencies succeed: HTTP 200 OK.
+- When any dependency fails or exceeds the timeout (e.g. 3000ms): HTTP 503 Service Unavailable with details specifying the degraded service and error message.
+
+---
+
+## 8. Composition Root Wiring & Environment Tiers
+
+Located at `apps/api/src/composition/observability.ts` and `apps/api/src/composition-root.ts` (Issue 360 / #472).
+
+Cross-cutting infrastructure must be instantiated once at the composition root and injected into application services.
+
+### Environment Matrix
+
+| Component         | Production / Staging                           | Test (`NODE_ENV === 'test'`)              |
+| :---------------- | :--------------------------------------------- | :---------------------------------------- |
+| **Logger**        | Pino structured JSON output with context mixin | Pino silent or minimal logger             |
+| **Metrics**       | `PrometheusMetricsRecorder`                    | `NoopMetricsRecorder` (in-memory capture) |
+| **Tracing**       | Not started yet (see section 5)                | Not started                               |
+| **Health Checks** | Live Prisma (`SELECT 1`) & Redis (`PING`)      | Memory stub health checks                 |
+| **`/metrics`**    | Served only when `METRICS_ENABLED=true`        | Not served                                |
+
+For a step-by-step tutorial on adding observability to a new service following Verixa conventions, see [Tutorial: Adding Observability to a Service](docs/guides/tutorials/adding-observability-to-a-service.md).
