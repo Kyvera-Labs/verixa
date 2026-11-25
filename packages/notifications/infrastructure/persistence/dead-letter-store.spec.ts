@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { NotificationMessage } from "../../application/ports/notification-sender.js";
+
 import { InMemoryDeadLetterStore } from "./dead-letter-store.js";
 
 const notification: NotificationMessage = {

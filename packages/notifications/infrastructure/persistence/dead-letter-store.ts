@@ -7,20 +7,21 @@ import type {
 export class InMemoryDeadLetterStore implements DeadLetterStore {
   private readonly entries = new Map<string, DeadLetterNotification>();
 
-  async save(entry: DeadLetterNotification): Promise<void> {
+  save(entry: DeadLetterNotification): Promise<void> {
     this.entries.set(entry.notification.id, freezeEntry(entry));
+    return Promise.resolve();
   }
 
-  async find(notificationId: string): Promise<DeadLetterNotification | undefined> {
-    return this.entries.get(notificationId);
+  find(notificationId: string): Promise<DeadLetterNotification | undefined> {
+    return Promise.resolve(this.entries.get(notificationId));
   }
 
-  async list(): Promise<readonly DeadLetterNotification[]> {
-    return [...this.entries.values()];
+  list(): Promise<readonly DeadLetterNotification[]> {
+    return Promise.resolve([...this.entries.values()]);
   }
 
-  async remove(notificationId: string): Promise<boolean> {
-    return this.entries.delete(notificationId);
+  remove(notificationId: string): Promise<boolean> {
+    return Promise.resolve(this.entries.delete(notificationId));
   }
 }
 

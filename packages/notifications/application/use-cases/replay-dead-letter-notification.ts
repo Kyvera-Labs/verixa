@@ -19,7 +19,9 @@ export class ReplayDeadLetterNotification {
   async execute(notificationId: string): Promise<ReplayDeadLetterResult> {
     const entry = await this.deadLetters.find(notificationId);
     if (entry === undefined) {
-      return Result.err(new NotFoundError(`No dead-letter notification exists for "${notificationId}".`));
+      return Result.err(
+        new NotFoundError(`No dead-letter notification exists for "${notificationId}".`),
+      );
     }
 
     await this.queue.enqueue(entry.notification);
