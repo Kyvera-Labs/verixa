@@ -43,8 +43,7 @@ services:
       sh -c 'if [ -f /data/dump.rdb ] && { [ ! -d /data/appendonlydir ] || [ ! -f /data/appendonlydir/appendonly.aof.manifest ]; }; then
                mkdir -p /data/appendonlydir &&
                cp /data/dump.rdb /data/appendonlydir/appendonly.aof.1.base.rdb &&
-               printf "file appendonly.aof.1.base.rdb seq 1 type b\n" > /data/appendonlydir/appendonly.aof.manifest &&
-               chmod -R 777 /data/appendonlydir 2>/dev/null || true;
+               printf "file appendonly.aof.1.base.rdb seq 1 type b\n" > /data/appendonlydir/appendonly.aof.manifest || true;
                chown -R redis:redis /data/appendonlydir 2>/dev/null || true;
                rm -f /data/dump.rdb;
              fi;
