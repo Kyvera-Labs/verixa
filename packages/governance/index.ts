@@ -83,6 +83,14 @@ export type {
 export { InMemoryRetentionActionLog } from "./infrastructure/in-memory-retention-action-log.js";
 
 export {
+  Policy,
+  PolicyVersion,
+  type PolicyId,
+  type PolicyStatus,
+  type Ruleset,
+} from "./domain/policy.js";
+
+export {
   OrganizationMembership,
   type OrganizationId,
   type OrganizationMembershipId,
@@ -95,3 +103,12 @@ export {
   RemoveMember,
   type MembershipRepository,
 } from "./application/use-cases/manage-membership.js";
+
+export {
+  PolicyToAbacRuleTranslator,
+  PolicyTranslationError,
+} from "./application/policy-to-abac-translator.js";
+export type {
+  GovernancePolicy,
+  TranslatedPolicy,
+} from "./application/policy-to-abac-translator.js";

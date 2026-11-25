@@ -40,7 +40,9 @@
     "typecheck:ci": "tsc -p infra/ci/tsconfig.json --noEmit",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
-    "docs:preview": "vitepress preview docs"
+    "docs:preview": "vitepress preview docs",
+    "release:dry-run": "semantic-release --dry-run --no-ci",
+    "typecheck:ci": "tsc -p infra/ci/tsconfig.json --noEmit"
   },
   "lint-staged": {
     "*.{ts,tsx}": [
@@ -55,10 +57,14 @@
     "@commitlint/config-conventional": "^21.2.4",
     "@cyclonedx/cyclonedx-library": "^10.5.1",
     "@eslint/js": "^9.17.0",
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/github": "^11.0.6",
+    "@semantic-release/release-notes-generator": "^14.1.1",
     "@types/node": "^22.10.0",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
     "ajv-formats-draft2019": "^1.6.1",
+    "conventional-changelog-conventionalcommits": "^8.0.0",
     "eslint": "^9.17.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-import-resolver-typescript": "^4.4.5",
@@ -67,6 +73,7 @@
     "husky": "^9.1.7",
     "lint-staged": "^17.6.1",
     "prettier": "^3.10.1",
+    "semantic-release": "^24.2.9",
     "tsx": "^4.23.15",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.73.0",
