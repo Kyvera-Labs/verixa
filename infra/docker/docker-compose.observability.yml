@@ -1,0 +1,52 @@
+# Local observability stack: Prometheus + Grafana with provisioned datasources
+# and version-controlled dashboards-as-code (Issue 359 / #471).
+#
+# Run alongside the base development stack:
+#   docker compose -f docker-compose.yml -f infra/docker/docker-compose.observability.yml up
+# Or standalone to inspect dashboard provisioning:
+#   docker compose -f infra/docker/docker-compose.observability.yml up
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    ports:
+      - "9090:9090"
+    volumes:
+      - ../observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - verixa-prometheus-data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/http-golden-signals.json
+    volumes:
+      - ../observability/grafana-provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ../observability/grafana-provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ../observability/dashboards:/var/lib/grafana/dashboards:ro
+      - verixa-grafana-data:/var/lib/grafana
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  verixa-prometheus-data:
+  verixa-grafana-data:

@@ -1,0 +1,147 @@
+name: Test & Coverage
+
+# Dedicated test and coverage workflow (Issue 363 / #475).
+#
+# Separates unit-level tests with coverage collection from Testcontainers-backed
+# integration tests so that:
+# 1. Per-package coverage gates (Issue 037 and its repeats) are enforced and
+#    surfaced directly on pull requests via check annotations and summaries.
+# 2. Ephemeral real dependencies (Postgres, Redis) started via Testcontainers
+#    catch integration bugs that mocked unit tests structurally cannot.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  unit-tests:
+    name: Unit tests & coverage gates
+    runs-on: ubuntu-latest
+    # Same services as coverage.yml: the coverage baseline is measured with the
+    # database and Redis suites running, so without them those suites skip and
+    # the ratchet reports a false regression.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: verixa
+          POSTGRES_PASSWORD: verixa
+          POSTGRES_DB: verixa_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U verixa -d verixa_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      TEST_DATABASE_URL: postgres://verixa:verixa@localhost:5432/verixa_test
+      DATABASE_URL: postgres://verixa:verixa@localhost:5432/verixa_test
+      TEST_REDIS_URL: redis://localhost:6379
+      REQUIRE_DATABASE_TESTS: "1"
+      REQUIRE_REDIS_TESTS: "1"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Build workspace packages
+        run: pnpm build
+
+      - name: Re-link workspace packages
+        run: pnpm install --frozen-lockfile
+
+      # Runs per-package Vitest suites with v8 coverage (enforcing each
+      # package's vitest.config.ts thresholds) and merges results into
+      # coverage/coverage-summary.json and coverage/lcov.info.
+      - name: Apply migrations to the test database
+        run: pnpm db:migrate:deploy
+
+      - name: Run unit tests and collect coverage
+        run: pnpm test:workspace:coverage
+
+      # Enforces the workspace-wide coverage ratchet so no package can silently
+      # regress below the checked-in baseline in infra/ci/coverage-baseline.json.
+      - name: Enforce coverage ratchet gate
+        run: pnpm coverage:ratchet --output-markdown coverage/ratchet-summary.md
+
+      # Publishes coverage metrics as a PR check annotation, step summary, and
+      # sticky PR comment even if the ratchet gate failed, so the author sees
+      # which package regressed without digging through raw logs.
+      - name: Publish coverage report
+        if: always()
+        uses: ./.github/actions/coverage-report
+        with:
+          summary-path: coverage/coverage-summary.json
+          ratchet-markdown-path: coverage/ratchet-summary.md
+
+      - name: Upload coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: test-coverage-report
+          path: coverage/
+          retention-days: 14
+
+  integration-tests:
+    name: Integration tests (Testcontainers)
+    runs-on: ubuntu-latest
+    env:
+      # Deliberately omits TEST_DATABASE_URL so the database test harness
+      # (Issue 047) provisions an ephemeral Postgres container via
+      # Testcontainers. REQUIRE_DATABASE_TESTS=1 turns a broken Docker/harness
+      # setup into a hard failure instead of a silent skip.
+      REQUIRE_DATABASE_TESTS: "1"
+      DATABASE_URL: postgres://verixa:verixa@localhost:5432/verixa_placeholder
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Build workspace packages
+        run: pnpm build
+
+      - name: Re-link workspace packages
+        run: pnpm install --frozen-lockfile
+
+      - name: Run identity integration tests (Testcontainers)
+        run: pnpm --filter @verixa/identity run test
+
+      - name: Run authorization integration tests (Testcontainers)
+        run: pnpm --filter @verixa/authorization run test

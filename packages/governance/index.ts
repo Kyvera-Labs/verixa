@@ -83,6 +83,14 @@ export type {
 export { InMemoryRetentionActionLog } from "./infrastructure/in-memory-retention-action-log.js";
 
 export {
+  Policy,
+  PolicyVersion,
+  type PolicyId,
+  type PolicyStatus,
+  type Ruleset,
+} from "./domain/policy.js";
+
+export {
   OrganizationMembership,
   type OrganizationId,
   type OrganizationMembershipId,

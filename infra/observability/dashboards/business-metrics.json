@@ -1,0 +1,88 @@
+{
+  "uid": "verixa-business-metrics",
+  "title": "Verixa - Business & Domain Metrics",
+  "description": "Domain-level counters and gauges for identity, authentication, sessions, verification, audit logging, and readiness health checks.",
+  "tags": ["verixa", "business-metrics", "domain", "observability"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "editable": false,
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "User Registrations & Logins (per minute)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(verixa_identity_registrations_total[5m])) * 60",
+          "legendFormat": "registrations / min"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (outcome) (rate(verixa_auth_logins_total[5m])) * 60",
+          "legendFormat": "logins ({{outcome}}) / min"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Active Sessions & Token Revocations",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "verixa_sessions_active_total",
+          "legendFormat": "active sessions"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(verixa_sessions_revocations_total[5m])) * 60",
+          "legendFormat": "revocations / min"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Verification Attempts by Outcome",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (outcome) (rate(verixa_verification_attempts_total[5m])) * 60",
+          "legendFormat": "{{outcome}} / min"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Audit Log Events & Readiness Dependencies",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(verixa_audit_events_written_total[5m])) * 60",
+          "legendFormat": "audit events / min"
+        },
+        {
+          "refId": "B",
+          "expr": "verixa_health_dependency_up",
+          "legendFormat": "dependency {{dependency}}"
+        }
+      ]
+    }
+  ]
+}
