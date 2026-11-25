@@ -195,21 +195,19 @@ crashing at 03:00.
 `.github/workflows/container-scan.yml` builds the same Dockerfile and scans the
 result with Trivy:
 
-| Step                     | Scope                                            | Fails the job? |
-| ------------------------ | ------------------------------------------------ | -------------- |
-| OS packages              | `HIGH,CRITICAL`, `--ignore-unfixed`, exit 1      | **yes**        |
-| Application dependencies | `HIGH,CRITICAL`, JSON artifact, 30-day retention | no             |
-| Size and layer report    | `docker images`, `docker history`                | no             |
+| Step                     | Scope                                       | Fails the job? |
+| ------------------------ | ------------------------------------------- | -------------- |
+| OS packages              | `HIGH,CRITICAL`, `--ignore-unfixed`, exit 1 | **yes**        |
+| Application dependencies | `HIGH,CRITICAL`, `--ignore-unfixed`, exit 1 | **yes**        |
+| Scan reports             | OS and application JSON, 30-day retention   | no             |
+| Size and layer report    | `docker images`, `docker history`           | no             |
 
 Design decisions, each of which somebody should be able to disagree with:
 
-- **Only OS packages block.** That is the acceptance criterion, and it is the
-  one class the application cannot fix for itself: an Alpine `libcrypto`
-  advisory means the base image moves, and no source file here is involved.
-  Dependency advisories are Issues 207 and 208's territory (`pnpm audit` in CI,
-  lockfile integrity, Dependabot). A second blocking gate on the same
-  advisories would be red most of the time, and a check that is always failing
-  is not a check.
+- **Both OS and bundled application libraries block.** Scanning the final
+  artifact catches base-image packages and the dependency tree actually copied
+  into the runtime bundle. `pnpm audit` remains useful for source-level
+  remediation but cannot see OS packages.
 - **`--ignore-unfixed`.** For an advisory with no released patch there is no
   action available, so failing the build trains everyone to ignore the failure.
   When upstream ships a fix, the advisory stops being ignored and the gate
@@ -232,10 +230,11 @@ Design decisions, each of which somebody should be able to disagree with:
   not publish one yet, and scanning a registry tag would not be scanning the
   Dockerfile under review.
 
-`.trivyignore` at the repository root is intentionally empty. Adding to it is a
-claim that a vulnerability does not need fixing, and the file states the bar:
-advisory id, why the code path is unreachable here, and what would change that.
-The workflow's failure step prints the same remediation path.
+`.trivyignore` at the repository root is intentionally empty. A waiver requires
+the identifier there and a matching entry in `infra/ci/trivyignore.yaml` with a
+specific justification and future expiry. `infra/ci/check-trivy-waivers.mjs`
+rejects missing, duplicate, expired, or mismatched entries before either scan.
+The same scan gate runs in `ci.yml` immediately after its image build.
 
 ## Where the image size number comes from
 

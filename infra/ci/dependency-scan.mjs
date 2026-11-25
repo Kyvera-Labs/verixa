@@ -25,7 +25,16 @@
  *   node infra/ci/dependency-scan.mjs \
  *     --audit dependency-audit.json \
  *     --exceptions infra/ci/security-exceptions.json \
+ *     [--baseline base-audit.json] \
  *     [--today 2026-10-17]
+ *
+ * `--baseline` is the audit report of the branch a pull request targets. A
+ * finding that is also present there was not introduced by the pull request,
+ * so it is reported but does not fail the gate. Without this, an advisory
+ * published against a dependency already on `main` failed every pull request
+ * that touched the lockfile until someone fixed `main`, however unrelated the
+ * change. Pre-existing findings stay visible here and still fail the nightly
+ * scan, which runs without a baseline, so they cannot be forgotten.
  *
  * Exit codes: 0 pass, 1 unexcepted or expired high/critical findings, 2 the
  * inputs are malformed. The split is deliberate: a misconfigured exceptions
@@ -45,12 +54,18 @@ const CVE_SHAPE = /CVE-\d{4}-\d{4,}/gi;
 function usage(message) {
   return new Error(
     `${message}\nUsage: node infra/ci/dependency-scan.mjs ` +
-      "--audit <audit.json> [--exceptions <exceptions.json>] [--today YYYY-MM-DD]",
+      "--audit <audit.json> [--exceptions <exceptions.json>] [--baseline <audit.json>] " +
+      "[--today YYYY-MM-DD]",
   );
 }
 
 function parseArguments(argv) {
-  const options = { audit: undefined, exceptions: undefined, today: undefined };
+  const options = {
+    audit: undefined,
+    exceptions: undefined,
+    baseline: undefined,
+    today: undefined,
+  };
 
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
@@ -66,6 +81,9 @@ function parseArguments(argv) {
         break;
       case "--exceptions":
         options.exceptions = value;
+        break;
+      case "--baseline":
+        options.baseline = value;
         break;
       case "--today":
         options.today = value;
@@ -310,6 +328,26 @@ function exceptionFor(finding, exceptions) {
   );
 }
 
+/**
+ * Whether the base branch already carries this finding.
+ *
+ * Same package and at least one shared advisory identifier. A finding with no
+ * identifier at all falls back to package and vulnerable range, which is the
+ * most specific thing the report says about it. Matching on the package alone
+ * would let a pull request bring in a *new* advisory against a package that
+ * already had an old one.
+ */
+function presentInBaseline(finding, baseline) {
+  const name = finding.package.toLowerCase();
+  const ids = new Set(finding.identifiers.map((identifier) => identifier.toUpperCase()));
+
+  return baseline.some((base) => {
+    if (base.package.toLowerCase() !== name) return false;
+    if (ids.size === 0 && base.identifiers.length === 0) return base.range === finding.range;
+    return base.identifiers.some((identifier) => ids.has(identifier.toUpperCase()));
+  });
+}
+
 function describeFinding(finding) {
   const identifiers = finding.identifiers.length > 0 ? finding.identifiers.join(", ") : "no id";
   const range = finding.range === "" ? "" : ` (${finding.range})`;
@@ -323,10 +361,15 @@ function main(argv) {
   const report = readJson(options.audit, "The audit report");
   const findings = parseAuditReport(report);
   const exceptions = loadExceptions(options.exceptions, today);
+  const baseline =
+    options.baseline === undefined
+      ? undefined
+      : parseAuditReport(readJson(options.baseline, "The baseline audit report"));
 
   const serious = findings.filter((finding) => FAILING_SEVERITIES.has(finding.severity));
   const failures = [];
   const excepted = [];
+  const preexisting = [];
 
   for (const finding of serious) {
     const exception = exceptionFor(finding, exceptions);
@@ -339,10 +382,28 @@ function main(argv) {
       continue;
     }
 
+    if (baseline !== undefined && presentInBaseline(finding, baseline)) {
+      preexisting.push(finding);
+      continue;
+    }
+
     failures.push({ finding, exception });
   }
 
+  if (preexisting.length > 0) {
+    const lines = [
+      `dependency scan: ${preexisting.length} high/critical finding(s) are already present ` +
+        "on the base branch, so this change did not introduce them:",
+      ...preexisting.map((finding) => `  - ${describeFinding(finding)}`),
+      "They still fail the nightly scan; fix them on the base branch.",
+    ];
+    process.stdout.write(`${lines.join("\n")}\n`);
+  }
+
   if (failures.length === 0) {
+    if (preexisting.length > 0) {
+      return 0;
+    }
     if (serious.length === 0) {
       process.stdout.write(
         "dependency scan: no high or critical advisories in the audited dependencies.\n",
