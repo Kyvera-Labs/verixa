@@ -196,6 +196,82 @@ describe("dependency-scan gate", () => {
   });
 });
 
+let baselineCounter = 0;
+
+interface FixtureReport {
+  vulnerabilities: Record<string, { via?: unknown[] }>;
+}
+
+/**
+ * Writes a base-branch audit report: the vulnerable fixture, keeping only the
+ * named packages, each optionally with its advisory list replaced.
+ */
+function baselineFile(keep: Record<string, unknown[] | undefined>): string {
+  const report = JSON.parse(
+    readFileSync(dependencyScanFixture("vulnerable-audit.json"), "utf8"),
+  ) as FixtureReport;
+  report.vulnerabilities = Object.fromEntries(
+    Object.entries(report.vulnerabilities)
+      .filter(([name]) => name in keep)
+      .map(([name, entry]) => [
+        name,
+        keep[name] === undefined ? entry : { ...entry, via: keep[name] },
+      ]),
+  );
+  baselineCounter += 1;
+  const path = join(scratch, `baseline-${baselineCounter}.json`);
+  writeFileSync(path, JSON.stringify(report, null, 2), "utf8");
+  return path;
+}
+
+function scanAgainst(baselinePath: string) {
+  return runDependencyScan([
+    "--audit",
+    dependencyScanFixture("vulnerable-audit.json"),
+    "--baseline",
+    baselinePath,
+    "--today",
+    TODAY,
+  ]);
+}
+
+describe("dependency-scan baseline", () => {
+  it("passes when every serious finding is already on the base branch, and still reports them", () => {
+    const result = scanAgainst(baselineFile({ minimist: undefined, lodash: undefined }));
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("already present on the base branch");
+    expect(result.stdout).toContain("minimist");
+    expect(result.stdout).toContain("lodash");
+  });
+
+  it("fails only on the findings the change introduces", () => {
+    const result = scanAgainst(baselineFile({ minimist: undefined }));
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("lodash");
+    expect(result.stderr).not.toContain("minimist");
+    expect(result.stdout).toContain("minimist");
+  });
+
+  it("does not let an old advisory on a package hide a new advisory on it", () => {
+    // Same package on the base branch, but under a different advisory.
+    const result = scanAgainst(
+      baselineFile({ minimist: [{ url: "https://github.com/advisories/GHSA-aaaa-bbbb-cccc" }] }),
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("minimist");
+  });
+
+  it("exits 2 when the baseline is not an audit report", () => {
+    const path = join(scratch, "not-a-baseline.json");
+    writeFileSync(path, JSON.stringify({ hello: "world" }), "utf8");
+
+    expect(scanAgainst(path).exitCode).toBe(2);
+  });
+});
+
 describe("dependency-scan fixtures and workflow", () => {
   it("pins intentionally vulnerable production dependencies", () => {
     const manifest = JSON.parse(readFileSync(dependencyScanFixture("package.json"), "utf8")) as {

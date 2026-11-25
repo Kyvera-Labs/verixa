@@ -7,21 +7,28 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
+    "test:e2e": "vitest run --config e2e/vitest.config.ts",
     "test:load": "vitest run --config vitest.load.config.ts",
     "test:coverage": "vitest run --coverage",
     "lint": "eslint ."
   },
   "devDependencies": {
+    "@testcontainers/postgresql": "^12.1.0",
     "@types/node": "^22.10.0",
     "@types/supertest": "^6.0.2",
     "@verixa/api": "workspace:*",
     "@verixa/audit": "workspace:*",
+    "@verixa/config": "workspace:*",
+    "@verixa/authorization": "workspace:*",
     "@verixa/credentials": "workspace:*",
     "@verixa/database": "workspace:*",
     "@verixa/identity": "workspace:*",
+    "@verixa/sessions": "workspace:*",
     "@verixa/shared-kernel": "workspace:*",
+    "@verixa/testing-kit": "workspace:*",
     "@vitest/coverage-v8": "^3.2.6",
     "supertest": "^7.0.0",
+    "testcontainers": "^12.2.0",
     "typescript": "^5.7.2",
     "vitest": "^3.2.6"
   }

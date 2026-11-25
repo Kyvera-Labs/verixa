@@ -11,6 +11,13 @@ contribution guidelines before the project opens up.
 See the [README quickstart](README.md#quickstart) for prerequisites and the
 core `pnpm` commands (`build`, `typecheck`, `test`, `lint`, `format`).
 
+## Unit tests
+
+Follow the [unit test conventions](docs/guides/testing/unit-test-conventions.md)
+for test naming, setup, fixtures, mocks, and time-dependent behavior. Consistent
+tests are easier to review and make failures point to the behavior that broke,
+rather than to incidental implementation details.
+
 ## Editor setup
 
 Opening the repo in VS Code prompts you to install the recommended

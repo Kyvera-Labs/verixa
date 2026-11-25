@@ -152,6 +152,157 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /admin/organizations/{orgId}/compliance-cases:
+    parameters:
+      - $ref: "#/components/parameters/ComplianceOrgId"
+    post:
+      tags: [Governance]
+      summary: Open a compliance case
+      description: >-
+        Opens a case in the initial state of the chosen workflow. Requires
+        `compliance-cases:write` in the organization.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ComplianceCaseCreate"
+      responses:
+        "201":
+          description: Case opened
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplianceCase"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/ComplianceForbidden"
+    get:
+      tags: [Governance]
+      summary: List compliance cases
+      description: >-
+        Lists the organization's cases, oldest first, optionally filtered. All
+        supplied filters must match. Requires `compliance-cases:read`.
+      parameters:
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: type
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/ComplianceWorkflowType"
+        - name: assignee
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Matching cases
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ComplianceCase"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/ComplianceForbidden"
+  /admin/organizations/{orgId}/compliance-cases/{caseId}:
+    parameters:
+      - $ref: "#/components/parameters/ComplianceOrgId"
+      - $ref: "#/components/parameters/ComplianceCaseId"
+    get:
+      tags: [Governance]
+      summary: Get a compliance case with its state history and approvals
+      description: Requires `compliance-cases:read`.
+      responses:
+        "200":
+          description: The case
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplianceCase"
+        "403":
+          $ref: "#/components/responses/ComplianceForbidden"
+        "404":
+          $ref: "#/components/responses/ComplianceNotFound"
+  /admin/organizations/{orgId}/compliance-cases/{caseId}/transitions:
+    parameters:
+      - $ref: "#/components/parameters/ComplianceOrgId"
+      - $ref: "#/components/parameters/ComplianceCaseId"
+    post:
+      tags: [Governance]
+      summary: Apply a workflow event to a case
+      description: >-
+        The client names an event; the server transition table decides the
+        destination state. A client-supplied target state is never accepted.
+        Responds 409 when the event is not legal from the current state, or
+        when it is a gated transition and the approval chain is not satisfied
+        (or was rejected). Requires `compliance-cases:write`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ComplianceCaseTransition"
+      responses:
+        "200":
+          description: Case after the transition
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplianceCase"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/ComplianceForbidden"
+        "404":
+          $ref: "#/components/responses/ComplianceNotFound"
+        "409":
+          $ref: "#/components/responses/ComplianceConflict"
+  /admin/organizations/{orgId}/compliance-cases/{caseId}/approvals:
+    parameters:
+      - $ref: "#/components/parameters/ComplianceOrgId"
+      - $ref: "#/components/parameters/ComplianceCaseId"
+    post:
+      tags: [Governance]
+      summary: Record an approval or rejection
+      description: >-
+        Fills one approval slot. Requires `compliance-cases:approve` and, for
+        the requested role, `compliance-cases:approve:<role>`. A role the
+        caller may not use is answered with the same 403 as any other denial.
+        One person can record only one decision per case.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ComplianceCaseApproval"
+      responses:
+        "200":
+          description: Case after the decision was recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComplianceCase"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/ComplianceForbidden"
+        "404":
+          $ref: "#/components/responses/ComplianceNotFound"
+        "409":
+          $ref: "#/components/responses/ComplianceConflict"
 components:
   securitySchemes:
     bearerAuth:
@@ -165,6 +316,119 @@ components:
       name: X-API-Key
       description: Machine credential; never place it in a URL.
   schemas:
+    ComplianceWorkflowType:
+      type: string
+      enum: [verification-review, data-subject-request]
+    ComplianceCaseCreate:
+      type: object
+      required: [workflowType, title]
+      properties:
+        workflowType:
+          $ref: "#/components/schemas/ComplianceWorkflowType"
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        assigneeId:
+          type: [string, "null"]
+    ComplianceCaseTransition:
+      type: object
+      required: [event]
+      properties:
+        event:
+          type: string
+          description: Workflow event name, for example `begin_review`. Not a state.
+        assigneeId:
+          type: [string, "null"]
+          description: Optionally hands the case over as part of the move.
+    ComplianceCaseApproval:
+      type: object
+      required: [role, decision]
+      properties:
+        role:
+          type: string
+        decision:
+          type: string
+          enum: [approved, rejected]
+        comment:
+          type: string
+          maxLength: 1000
+    ComplianceCase:
+      type: object
+      required:
+        - id
+        - organizationId
+        - workflowType
+        - title
+        - state
+        - assigneeId
+        - availableEvents
+        - approvals
+        - history
+        - version
+        - createdAt
+        - updatedAt
+      properties:
+        id: { type: string }
+        organizationId: { type: string }
+        workflowType:
+          $ref: "#/components/schemas/ComplianceWorkflowType"
+        title: { type: string }
+        state: { type: string }
+        assigneeId: { type: [string, "null"] }
+        availableEvents:
+          type: array
+          items: { type: string }
+        approvals:
+          type: object
+          required: [requiredRoles, pendingRoles, satisfied, rejected, records]
+          properties:
+            requiredRoles:
+              type: array
+              items: { type: string }
+            pendingRoles:
+              type: array
+              items: { type: string }
+            satisfied: { type: boolean }
+            rejected: { type: boolean }
+            records:
+              type: array
+              items:
+                type: object
+                required: [role, approverId, decision, decidedAt]
+                properties:
+                  role: { type: string }
+                  approverId: { type: string }
+                  decision:
+                    type: string
+                    enum: [approved, rejected]
+                  decidedAt: { type: string, format: date-time }
+                  comment: { type: string }
+        history:
+          type: array
+          description: Append-only state history, oldest first.
+          items:
+            type: object
+            required: [fromState, toState, event, actorId, occurredAt]
+            properties:
+              fromState: { type: [string, "null"] }
+              toState: { type: string }
+              event: { type: string }
+              actorId: { type: string }
+              occurredAt: { type: string, format: date-time }
+        version: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ComplianceError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
     ErrorResponse:
       type: object
       additionalProperties: false
@@ -205,6 +469,18 @@ components:
           type: string
           const: ok
   parameters:
+    ComplianceOrgId:
+      name: orgId
+      in: path
+      required: true
+      schema:
+        type: string
+    ComplianceCaseId:
+      name: caseId
+      in: path
+      required: true
+      schema:
+        type: string
     RequestId:
       name: requestId
       in: path
@@ -214,6 +490,24 @@ components:
         type: string
         minLength: 1
   responses:
+    ComplianceForbidden:
+      description: Not authenticated, or lacking the required permission. The body never names the permission.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ComplianceError"
+    ComplianceNotFound:
+      description: No such case in this organization.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ComplianceError"
+    ComplianceConflict:
+      description: Illegal transition, approval gate not satisfied, or duplicate approval.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ComplianceError"
     BadRequest:
       description: The request shape or value is invalid.
       content:

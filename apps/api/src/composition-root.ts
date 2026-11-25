@@ -30,6 +30,15 @@ import {
 } from "@verixa/credentials";
 import { PrismaClient } from "@verixa/database";
 import {
+  GetComplianceCase,
+  InMemoryComplianceCaseRepository,
+  ListComplianceCases,
+  OpenComplianceCase,
+  RecordComplianceApproval,
+  TransitionComplianceCase,
+  type PermissionCheck,
+} from "@verixa/governance";
+import {
   CreateOrganization,
   GetOrganization,
   GetOrganizationUsers,
@@ -59,11 +68,23 @@ import {
   WebAuthnAttestationVerifier,
 } from "@verixa/mfa";
 import {
+  InMemoryRevocationList,
+  InMemorySessionAuditLogger,
+  IssueSession,
+  JwtTokenSigner,
+  Logout,
+  PrismaSessionRepository,
+  RefreshAccessToken,
+  SessionExpiryPolicy,
+  SigningKeyProvider,
+} from "@verixa/sessions";
+import {
   BruteForcePolicy,
   InMemoryBruteForceAttemptStore,
   InMemoryEventPublisher,
   NoopRateLimiter,
   type DomainEventPublisher,
+  type RateLimiter,
 } from "@verixa/shared-kernel";
 import {
   LocalTransactionSigner,
@@ -72,6 +93,7 @@ import {
   type TransactionSigner,
 } from "@verixa/stellar-anchor";
 
+import { createCredentialRateLimiter } from "./composition/rate-limiting.js";
 import { registerAuditSubscribers } from "./composition/register-audit-subscribers.js";
 
 /**
@@ -265,6 +287,22 @@ export interface MfaUseCases {
   readonly verifyWebAuthnAssertion: VerifyWebAuthnAssertion;
 }
 
+/** Session authentication use cases. */
+export interface SessionUseCases {
+  readonly issueSession: IssueSession;
+  readonly refreshAccessToken: RefreshAccessToken;
+  readonly logout: Logout;
+}
+
+export interface GovernanceUseCases {
+  readonly openCase: OpenComplianceCase;
+  readonly getCase: GetComplianceCase;
+  readonly listCases: ListComplianceCases;
+  readonly transitionCase: TransitionComplianceCase;
+  readonly recordApproval: RecordComplianceApproval;
+  readonly permissions: PermissionCheck;
+}
+
 export interface Container {
   readonly prisma: PrismaClient;
   readonly eventPublisher: DomainEventPublisher;
@@ -272,6 +310,10 @@ export interface Container {
   readonly credentials: CredentialUseCases;
   readonly audit: AuditUseCases;
   readonly authorization: AuthorizationRepository;
+  readonly sessions?: SessionUseCases;
+  readonly rateLimiter?: RateLimiter;
+  /** Compliance case management (Issue 314). Absent in partial test containers. */
+  readonly governance?: GovernanceUseCases;
   /**
    * Drains any queued audit writes, then releases the database connection.
    * Call on shutdown.
@@ -299,6 +341,34 @@ export interface ContainerOverrides {
   readonly auditEventReader?: AuditEventReader | undefined;
   readonly queryAuditEvents?: QueryAuditEvents | undefined;
   readonly exportAuditEvents?: ExportAuditEvents | undefined;
+  readonly rateLimiter?: RateLimiter | undefined;
+}
+
+/**
+ * Wires compliance case management.
+ *
+ * Cases live in process memory for now (see `InMemoryComplianceCaseRepository`);
+ * swapping in a database adapter changes only the repository constructed here.
+ * Approver eligibility is answered by the RBAC store: signing off as role `R`
+ * requires the `compliance-cases:approve:R` permission in the organization.
+ */
+export function buildGovernance(authorization: AuthorizationRepository): GovernanceUseCases {
+  const repository = new InMemoryComplianceCaseRepository();
+  const publisher = new InMemoryEventPublisher();
+  return {
+    openCase: new OpenComplianceCase(repository, publisher),
+    getCase: new GetComplianceCase(repository),
+    listCases: new ListComplianceCases(repository),
+    transitionCase: new TransitionComplianceCase(repository, publisher),
+    recordApproval: new RecordComplianceApproval(repository, publisher, {
+      canApproveAs: (userId, organizationId, role) =>
+        authorization.hasPermission(userId, organizationId, `compliance-cases:approve:${role}`),
+    }),
+    permissions: {
+      hasPermission: (userId, organizationId, permission) =>
+        authorization.hasPermission(userId, organizationId, permission),
+    },
+  };
 }
 
 /**
@@ -348,7 +418,9 @@ export function buildContainer(
   // arrives — only a new adapter and a new wire in composition root.
   const credentialNotifier = new NullCredentialNotifier();
   const sessionRevoker = new NoSessionsRevoker();
-  const rateLimiter = new NoopRateLimiter();
+  const rateLimiter: RateLimiter =
+    overrides.rateLimiter ??
+    (process.env["NODE_ENV"] === "test" ? new NoopRateLimiter() : createCredentialRateLimiter());
   // Counts failures the per-credential lockout cannot see (unknown addresses,
   // password spraying). In-memory and per process until Phase 15's durable store.
   const bruteForceAttempts = new BruteForcePolicy(new InMemoryBruteForceAttemptStore());
@@ -451,6 +523,7 @@ export function buildContainer(
   return {
     prisma,
     eventPublisher,
+    rateLimiter,
     identity: {
       registerUser: new RegisterUser(users),
       updateUserProfile: new UpdateUserProfile(users),
@@ -529,6 +602,36 @@ export function buildContainer(
           : undefined),
     },
     authorization,
+    governance: buildGovernance(authorization),
+    sessions: {
+      issueSession: new IssueSession(
+        new PrismaSessionRepository(prisma),
+        new JwtTokenSigner(
+          new SigningKeyProvider({
+            secret:
+              process.env["SESSION_ACCESS_TOKEN_SECRET"] ??
+              "verixa-development-secret-key-at-least-32-chars-long",
+          }),
+        ),
+        SessionExpiryPolicy.default(),
+        new InMemoryRevocationList(),
+        new InMemorySessionAuditLogger(),
+      ),
+      refreshAccessToken: new RefreshAccessToken(
+        new PrismaSessionRepository(prisma),
+        new JwtTokenSigner(
+          new SigningKeyProvider({
+            secret:
+              process.env["SESSION_ACCESS_TOKEN_SECRET"] ??
+              "verixa-development-secret-key-at-least-32-chars-long",
+          }),
+        ),
+        new InMemoryRevocationList(),
+        SessionExpiryPolicy.default(),
+        rateLimiter,
+      ),
+      logout: new Logout(new PrismaSessionRepository(prisma), new InMemoryRevocationList()),
+    },
     mfa: {
       registerWebAuthnCredential,
       verifyWebAuthnAssertion,

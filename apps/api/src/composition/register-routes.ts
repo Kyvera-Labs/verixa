@@ -1,4 +1,5 @@
 import { registerAdminAuthorizationRoutes } from "@verixa/authorization";
+import { registerComplianceCaseRoutes } from "@verixa/governance";
 import type { RouteRegistration } from "@verixa/shared-kernel";
 import type {
   FastifyBaseLogger,
@@ -46,6 +47,16 @@ export function registerContextRoutes<TLogger extends FastifyBaseLogger>(
         registerAdminAuthorizationRoutes(scope, container.authorization);
       },
     },
+    ...(container.governance === undefined
+      ? []
+      : [
+          {
+            prefix: "/admin",
+            plugin: ((scope) => {
+              registerComplianceCaseRoutes(scope, container.governance!);
+            }) as FastifyPluginCallback,
+          },
+        ]),
     {
       prefix: "/verification",
       plugin: (scope) => {

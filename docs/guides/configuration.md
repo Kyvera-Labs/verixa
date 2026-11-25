@@ -50,8 +50,11 @@ symptoms.
 | `HOST`      | no       | `0.0.0.0`     | interface the server binds to             |
 | `LOG_LEVEL` | no       | `info`        | consumed by the logger added in Issue 008 |
 
-See `.env.example` at the repo root for a copyable starting point (`cp
-.env.example .env`). `.env` itself is git-ignored — never commit real secrets.
+See `docs/guides/deployment.md` for the complete environment configuration matrix
+and the per-environment templates (`.env.example` for local development,
+`.env.test.example` for testing, `.env.staging.example` for staging, and
+`.env.production.example` for production). Copy `.env.example` to `.env` for local
+development. `.env` itself is git-ignored — never commit real secrets.
 
 ## Errors
 
