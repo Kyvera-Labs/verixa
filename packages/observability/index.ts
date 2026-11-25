@@ -17,3 +17,25 @@ export type {
   SpanStatusCode,
   TraceSampler,
 } from "./infrastructure/otel-bootstrap.js";
+
+export type {
+  MetricLabelValue,
+  MetricLabels,
+  MetricsRecorder,
+} from "./application/ports/metrics.js";
+
+export {
+  NoopMetricsRecorder,
+  type NoopMetricsRecorderOptions,
+  type RecordedMetricCall,
+} from "./infrastructure/noop-metrics-recorder.js";
+
+export {
+  CardinalityGuardError,
+  DEFAULT_LATENCY_BUCKETS,
+  InvalidMetricNameError,
+  PrometheusMetricsRecorder,
+  getSharedRegistry,
+  resetSharedRegistry,
+  type PrometheusMetricsRecorderOptions,
+} from "./infrastructure/prometheus-metrics-recorder.js";

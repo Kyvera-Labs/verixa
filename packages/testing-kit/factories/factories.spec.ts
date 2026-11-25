@@ -145,6 +145,16 @@ describe("testing-kit factories (Object Mother pattern)", () => {
       expect(inv.invitedByUserId).toBe("usr_inviter");
       expect(inv.email.value).toBe("invited@example.com");
     });
+
+    it("derives expiry from the supplied creation time, not the wall clock", () => {
+      const now = new Date("2020-01-01T00:00:00.000Z");
+
+      const inv = makeInvitation({ now, ttlMs: 60_000 });
+
+      expect(inv.createdAt).toEqual(now);
+      expect(inv.isExpired(new Date(now.getTime() + 59_999))).toBe(false);
+      expect(inv.isExpired(new Date(now.getTime() + 60_000))).toBe(true);
+    });
   });
 
   describe("makeSession", () => {

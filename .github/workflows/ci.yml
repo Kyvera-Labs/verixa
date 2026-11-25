@@ -767,6 +767,50 @@ jobs:
         if: always()
         run: docker rm -f verixa-api-drill || true
 
+  # Docs-as-code (Issue 422): the VitePress site under docs/ is built on every
+  # push, so a broken docs link fails CI the same way a broken import does.
+  #
+  # `ignoreDeadLinks` is off in docs/.vitepress/config.ts, so a link to a page
+  # that doesn't exist fails the build. That's what makes this a check rather
+  # than a formality: without it, renaming a doc would quietly break every page
+  # linking to it, and the docs would drift from the code in exactly the way
+  # docs-as-code exists to prevent. Tutorials also import code regions from
+  # real test files (`<<< @/...#region`), so a renamed region fails here too.
+  #
+  # Needs no workspace build or database: the site reads Markdown and source
+  # files, never compiled output. The static site is uploaded so a reviewer
+  # can open the rendered docs for a PR without running anything locally.
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The site config is TypeScript but belongs to no workspace package, so
+      # `pnpm typecheck` (recursive over packages) never sees it.
+      - name: Typecheck the docs site config
+        run: pnpm exec tsc -p docs/.vitepress/tsconfig.json
+
+      - name: Build the docs site
+        run: pnpm docs:build
+
+      - name: Upload the built docs site
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: docs-site-${{ github.run_number }}
+          path: docs/.vitepress/dist/
+          retention-days: 14
+
   # Issue 385 / #497. The `docker` job builds the image; this job proves the
   # *overlay* actually produces a production topology when combined with the
   # dev file. Resolving the config first catches merge mistakes (a surviving
@@ -814,6 +858,39 @@ jobs:
       - name: Stop the stack
         if: always()
         run: docker compose -f docker-compose.yml -f docker-compose.prod.yml down --volumes || true
+
+  # README quickstart smoke test (Issue 421). Runs the quickstart a newcomer
+  # follows (install, Postgres from docker-compose.yml, migrations, `pnpm dev`)
+  # and then one real auth flow, register then log in, failing on any non-2xx.
+  #
+  # The steps live in scripts/quickstart-smoke.sh, not inline here, so a person
+  # can run exactly what CI runs; the script also fails if README.md stops
+  # showing any command it runs, which is what keeps the two from drifting. A
+  # README whose first command is broken costs every first-time visitor, and
+  # nothing else in this pipeline would notice: the `ci` job uses a service
+  # container and builds before it tests, which is not what the README says.
+  #
+  # Deliberately no `pnpm build` beforehand. Starting from a fresh checkout is
+  # the point.
+  quickstart:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Run the README quickstart and one auth flow
+        run: bash scripts/quickstart-smoke.sh
+
+      - name: Stop the compose stack
+        if: always()
+        run: docker compose down -v
 
   # Issue 386 / #498. This is a restore drill, not a file-existence check:
   # seed data, back it up, recreate the containers without their volumes to

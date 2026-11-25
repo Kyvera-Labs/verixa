@@ -4,5 +4,5 @@
     "outDir": "dist",
     "rootDir": "."
   },
-  "include": ["index.ts", "infrastructure/**/*"]
+  "include": ["index.ts", "index.spec.ts", "application/**/*", "infrastructure/**/*"]
 }
