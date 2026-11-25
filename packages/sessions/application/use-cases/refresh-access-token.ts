@@ -1,4 +1,9 @@
-import { AuthenticationError, Result } from "@verixa/shared-kernel";
+import {
+  AuthenticationError,
+  RateLimitExceededError,
+  Result,
+  type RateLimiter,
+} from "@verixa/shared-kernel";
 
 import { RefreshToken } from "../../domain/entities/refresh-token.js";
 import type { SessionExpiryPolicy } from "../../domain/value-objects/session-expiry-policy.js";
@@ -8,6 +13,7 @@ import type { TokenSigner } from "../ports/token-signer.js";
 
 export interface RefreshAccessTokenCommand {
   readonly refreshToken: string;
+  readonly identifier?: string;
 }
 
 export interface RefreshedAccessToken {
@@ -28,6 +34,9 @@ export type RefreshAccessTokenError = AuthenticationError;
  * with it, which is information that only helps whoever isn't supposed to
  * have it. See `AuthenticationError` and `docs/security/authentication-flows.md`.
  *
+ * Consults the {@link RateLimiter} port before validating the token to prevent
+ * rapid-fire token enumeration or replay guessing attacks.
+ *
  * ## Reuse detection
  *
  * Rotation marks the presented token {@link RefreshToken.markUsed}. If this
@@ -44,25 +53,45 @@ export class RefreshAccessToken {
     private readonly tokenSigner: TokenSigner,
     private readonly revocationList: RevocationList,
     private readonly expiryPolicy: SessionExpiryPolicy,
+    private readonly rateLimiter?: RateLimiter,
   ) {}
 
   async execute(
     command: RefreshAccessTokenCommand,
   ): Promise<Result<RefreshedAccessToken, RefreshAccessTokenError>> {
     const tokenHash = RefreshToken.hashToken(command.refreshToken);
+    const identifier = command.identifier ?? tokenHash;
+
+    if (this.rateLimiter) {
+      const limitResult = await this.rateLimiter.check({
+        action: "refresh-token",
+        identifier,
+      });
+      if (!limitResult.allowed) {
+        throw new RateLimitExceededError(
+          { action: "refresh-token", identifier },
+          limitResult.resetAt,
+          limitResult.limit,
+        );
+      }
+    }
+
     const presented = await this.sessionRepository.findRefreshTokenByHash(tokenHash);
     if (presented === undefined) {
+      await this.rateLimiter?.recordFailure({ action: "refresh-token", identifier });
       return Result.err(new AuthenticationError());
     }
 
     const session = await this.sessionRepository.findById(presented.sessionId);
     if (session === undefined) {
+      await this.rateLimiter?.recordFailure({ action: "refresh-token", identifier });
       return Result.err(new AuthenticationError());
     }
 
     const now = new Date();
 
     if (presented.isUsed) {
+      await this.rateLimiter?.recordFailure({ action: "refresh-token", identifier });
       const revokedSession = session.revokeDueToRefreshTokenReuse(presented.id, now);
       await this.sessionRepository.save(revokedSession);
       await this.revocationList.revoke(revokedSession.id, this.accessTokenExpiryFrom(now));
@@ -70,6 +99,7 @@ export class RefreshAccessToken {
     }
 
     if (!presented.isRedeemable(now) || !session.isActive(this.expiryPolicy, now)) {
+      await this.rateLimiter?.recordFailure({ action: "refresh-token", identifier });
       return Result.err(new AuthenticationError());
     }
 
@@ -89,6 +119,8 @@ export class RefreshAccessToken {
       { sessionId: touchedSession.id, userId: touchedSession.userId },
       Math.floor(this.expiryPolicy.accessTokenTtlMs / 1000),
     );
+
+    await this.rateLimiter?.reset({ action: "refresh-token", identifier });
 
     return Result.ok({ accessToken, refreshToken: rawNextToken });
   }

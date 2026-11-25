@@ -11,15 +11,7 @@ import type { Redis } from "ioredis";
 
 import { sendApiError } from "../http/error-response.js";
 
-declare module "fastify" {
-  interface FastifyContextConfig {
-    rateLimit?: {
-      max?: number;
-      timeWindowMs?: number;
-      identifier?: (req: FastifyRequest) => string;
-    };
-  }
-}
+import { applyRateLimitHeaders } from "./rate-limit-headers.js";
 
 export interface RateLimitPluginOptions {
   redisClient?: Redis;
@@ -131,12 +123,14 @@ export function registerRateLimit<TLogger extends FastifyBaseLogger = FastifyBas
 
     const result = await store.consume(key, max, windowMs);
 
-    reply.header("X-RateLimit-Limit", max.toString());
-    reply.header("X-RateLimit-Remaining", result.remaining.toString());
-    reply.header("X-RateLimit-Reset", Math.ceil(result.resetAt / 1000).toString());
+    applyRateLimitHeaders(reply, {
+      allowed: result.allowed,
+      limit: max,
+      remaining: result.remaining,
+      resetAt: result.resetAt,
+    });
 
     if (!result.allowed) {
-      reply.header("Retry-After", result.retryAfterSeconds.toString());
       sendApiError(reply, "RATE_LIMITED", "Rate limit exceeded. Please retry later.");
       return reply;
     }

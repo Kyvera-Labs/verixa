@@ -148,4 +148,84 @@ describe("RefreshAccessToken", () => {
 
     expect(Result.isErr(result)).toBe(true);
   });
+
+  describe("Rate limiting (Issue 295 / #309)", () => {
+    it("throws RateLimitExceededError when limiter denies request without consulting store", async () => {
+      const recorded: string[] = [];
+      const rateLimiter = {
+        check: async () => {
+          await Promise.resolve();
+          recorded.push("check");
+          return { allowed: false, remaining: 0, resetAt: Date.now() + 60_000, limit: 5 };
+        },
+        recordFailure: async () => {
+          await Promise.resolve();
+          recorded.push("recordFailure");
+        },
+        reset: async () => {
+          await Promise.resolve();
+          recorded.push("reset");
+        },
+      };
+
+      const limitedRefresh = new RefreshAccessToken(
+        repository,
+        signer,
+        revocationList,
+        policy,
+        rateLimiter,
+      );
+
+      await expect(
+        limitedRefresh.execute({ refreshToken: "non-existent-token", identifier: "client-ip" }),
+      ).rejects.toThrow("Rate limit exceeded for refresh-token on client-ip");
+
+      expect(recorded).toEqual(["check"]);
+    });
+
+    it("records failure on invalid token and resets counter on success", async () => {
+      const recorded: string[] = [];
+      const rateLimiter = {
+        check: async () => {
+          await Promise.resolve();
+          recorded.push("check");
+          return { allowed: true, remaining: 4, resetAt: Date.now() + 60_000, limit: 5 };
+        },
+        recordFailure: async () => {
+          await Promise.resolve();
+          recorded.push("recordFailure");
+        },
+        reset: async () => {
+          await Promise.resolve();
+          recorded.push("reset");
+        },
+      };
+
+      const limitedRefresh = new RefreshAccessToken(
+        repository,
+        signer,
+        revocationList,
+        policy,
+        rateLimiter,
+      );
+
+      // Failure path: invalid token
+      const failResult = await limitedRefresh.execute({
+        refreshToken: "invalid-token",
+        identifier: "client-ip",
+      });
+      expect(Result.isErr(failResult)).toBe(true);
+      expect(recorded).toEqual(["check", "recordFailure"]);
+
+      // Success path: valid token
+      const { refreshToken } = await issue();
+      recorded.length = 0;
+      const okResult = await limitedRefresh.execute({
+        refreshToken,
+        identifier: "client-ip",
+      });
+      expect(Result.isOk(okResult)).toBe(true);
+      expect(recorded).toEqual(["check", "reset"]);
+    });
+  });
 });

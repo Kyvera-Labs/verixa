@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@verixa/database";
+import { createId } from "@verixa/shared-kernel";
 
 import type { RoleRepository } from "../../application/ports/role-repository.js";
 import { Role, type RoleId } from "../../domain/entities/role.js";
@@ -83,6 +84,18 @@ export class PrismaRoleRepository implements RoleRepository {
             updatedAt: role.updatedAt,
           },
         });
+
+        for (const key of keys) {
+          await tx.permission.upsert({
+            where: { key },
+            create: {
+              id: createId<"PermissionId">(),
+              key,
+              createdAt: new Date(),
+            },
+            update: {},
+          });
+        }
 
         const known =
           keys.length === 0

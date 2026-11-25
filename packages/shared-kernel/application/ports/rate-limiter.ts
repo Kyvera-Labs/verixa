@@ -10,7 +10,14 @@
 
 export interface RateLimitKey {
   /** The type of action being rate-limited */
-  action: "login" | "register" | "password-reset" | "email-verification" | "mfa" | "api-key";
+  action:
+    | "login"
+    | "register"
+    | "password-reset"
+    | "email-verification"
+    | "mfa"
+    | "api-key"
+    | "refresh-token";
   /** Identifier for the subject — IP address, email, or userId */
   identifier: string;
   /** Optional namespace for multi-tenant isolation */

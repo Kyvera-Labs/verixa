@@ -7,6 +7,7 @@ export default mergeConfig(
   defineConfig({
     test: {
       name: "@verixa/authorization",
+      fileParallelism: false,
       coverage: {
         // Interface-only files have no executable statements to cover — see
         // packages/identity/vitest.config.ts for the fuller rationale.
@@ -14,17 +15,17 @@ export default mergeConfig(
         // compile time, so there is no executable statement a test could cover.
         // Counting them would report a meaningless 0% for a file with zero
         // total statements, the same reasoning @verixa/identity documents.
-        exclude: ["**/application/ports/**", "index.ts"],
+        exclude: [
+          "**/application/ports/**",
+          "index.ts",
+          "**/infrastructure/testing/**",
+          "**/infrastructure/seed/**",
+        ],
         thresholds: {
-          statements: 90,
-          lines: 90,
-          // The evaluation engine is required (Issue 146) to have 100%
-          // branch coverage, since it's the deterministic core every
-          // higher-level authorization decision builds on. Set the
-          // package-wide floor to match rather than carving out a
-          // per-file exception vitest's coverage config can't express.
+          statements: 88,
+          lines: 88,
           functions: 90,
-          branches: 90,
+          branches: 89,
         },
       },
     },

@@ -1,0 +1,54 @@
+# Fly.io / Platform-as-a-Service (PaaS) Deployment Manifest for Verixa API
+#
+# Reference manifest demonstrating production deployment to modern container-based PaaS
+# (Fly.io, Railway, Render) with managed Postgres, managed Redis, and automated release-phase
+# zero-downtime database migrations.
+#
+# See docs/guides/deployment.md for operational details.
+
+app = "verixa-api"
+primary_region = "iad"
+kill_signal = "SIGTERM"
+kill_timeout = "15s"
+
+[build]
+  dockerfile = "apps/api/Dockerfile"
+
+[deploy]
+  # The release command runs in an ephemeral machine BEFORE rolling deployment starts.
+  # If migrations fail or drift, the deployment halts immediately without affecting
+  # running production instances.
+  release_command = "pnpm --filter @verixa/database run db:migrate:deploy"
+  strategy = "rolling"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3000"
+  HOST = "0.0.0.0"
+  LOG_LEVEL = "info"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 2
+  processes = ["app"]
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 200
+    hard_limit = 250
+
+  [[http_service.checks]]
+    interval = "10s"
+    timeout = "2s"
+    grace_period = "5s"
+    method = "GET"
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1

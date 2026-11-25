@@ -1,6 +1,14 @@
-import { AccountLockedError, Result, ValidationError, asId } from "@verixa/shared-kernel";
+import {
+  AccountLockedError,
+  RateLimitExceededError,
+  Result,
+  ValidationError,
+  asId,
+  type RateLimiter,
+} from "@verixa/shared-kernel";
 
 import type { TotpAlgorithm } from "../../domain/services/totp-algorithm.js";
+import type { AuditLogger } from "../ports/audit-logger.js";
 import type { MfaMethodRepository } from "../ports/mfa-method-repository.js";
 
 export interface VerifyTotpChallengeCommand {
@@ -21,6 +29,8 @@ export class VerifyTotpChallenge {
   constructor(
     private readonly mfaMethodRepository: MfaMethodRepository,
     private readonly totpAlgorithm: TotpAlgorithm,
+    private readonly rateLimiter?: RateLimiter,
+    private readonly auditLogger?: AuditLogger,
   ) {}
 
   async execute(
@@ -46,6 +56,25 @@ export class VerifyTotpChallenge {
       return Result.err(new AccountLockedError("Authentication attempts are rate-limited."));
     }
 
+    if (this.rateLimiter) {
+      const limitResult = await this.rateLimiter.check({
+        action: "mfa",
+        identifier: method.userId,
+      });
+      if (!limitResult.allowed) {
+        if (this.auditLogger) {
+          await this.auditLogger.record("mfa.rate_limit_exceeded", method.userId, {
+            methodId: method.id,
+          });
+        }
+        throw new RateLimitExceededError(
+          { action: "mfa", identifier: method.userId },
+          limitResult.resetAt,
+          limitResult.limit,
+        );
+      }
+    }
+
     if (!method.secret) {
       return Result.err(new Error("MFA method is missing its secret."));
     }
@@ -54,6 +83,7 @@ export class VerifyTotpChallenge {
     const matchedStep = await this.totpAlgorithm.verify(method.secret, command.code, 1);
 
     if (matchedStep === null) {
+      await this.rateLimiter?.recordFailure({ action: "mfa", identifier: method.userId });
       const updatedMethod = method.recordFailedAttempt(now);
       await this.mfaMethodRepository.save(updatedMethod);
       return Result.err(new Error("Invalid TOTP code."));
@@ -63,9 +93,11 @@ export class VerifyTotpChallenge {
       // Record use updates lastUsedAt and enforces replay protection against the matchedStep
       const verifiedMethod = method.recordTotpUse(matchedStep, now);
       await this.mfaMethodRepository.save(verifiedMethod);
+      await this.rateLimiter?.reset({ action: "mfa", identifier: method.userId });
       return Result.ok(undefined);
     } catch {
       // Replay detected
+      await this.rateLimiter?.recordFailure({ action: "mfa", identifier: method.userId });
       const updatedMethod = method.recordFailedAttempt(now);
       await this.mfaMethodRepository.save(updatedMethod);
       return Result.err(new Error("Code has already been used."));
