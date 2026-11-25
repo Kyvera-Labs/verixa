@@ -37,6 +37,7 @@ export type AuditAction =
   | "user.login_succeeded"
   | "user.login_failed"
   | "user.locked_out"
+  | "user.email_verification_requested"
   | "user.password_reset_requested"
   | "user.password_reset_completed"
   // Reads of the audit log itself — see `domain/policies/audit-access-policy.ts`.
