@@ -1,43 +1,43 @@
 {
   "version": 1,
-  "updatedAt": "2026-11-25T04:04:31.884Z",
+  "updatedAt": "2026-11-25T07:18:40.934Z",
   "tolerance": 0.1,
   "aggregate": {
-    "lines": 87.11,
-    "statements": 87.11,
-    "functions": 93.44,
-    "branches": 88.25
+    "lines": 90.73,
+    "statements": 90.73,
+    "functions": 92.1,
+    "branches": 81.6
   },
   "packages": {
     "@verixa/api": {
-      "lines": 72.88,
-      "statements": 72.88,
-      "functions": 75.65,
-      "branches": 71.76
+      "lines": 68.76,
+      "statements": 68.76,
+      "functions": 67.86,
+      "branches": 58.74
     },
     "@verixa/audit": {
-      "lines": 93.93,
-      "statements": 93.93,
-      "functions": 93.33,
-      "branches": 93.62
+      "lines": 94.73,
+      "statements": 94.73,
+      "functions": 91.37,
+      "branches": 85.06
     },
     "@verixa/authorization": {
-      "lines": 88.49,
-      "statements": 88.49,
-      "functions": 98.13,
-      "branches": 89.95
+      "lines": 91.12,
+      "statements": 91.12,
+      "functions": 95.57,
+      "branches": 83.73
     },
     "@verixa/config": {
-      "lines": 95.11,
-      "statements": 95.11,
-      "functions": 86.96,
-      "branches": 92.62
+      "lines": 93.06,
+      "statements": 93.06,
+      "functions": 89.74,
+      "branches": 85.95
     },
     "@verixa/credentials": {
-      "lines": 92.57,
-      "statements": 92.57,
-      "functions": 95.6,
-      "branches": 92.54
+      "lines": 96.19,
+      "statements": 96.19,
+      "functions": 95.76,
+      "branches": 88.03
     },
     "@verixa/database": {
       "lines": 100,
@@ -46,76 +46,76 @@
       "branches": 100
     },
     "@verixa/identity": {
-      "lines": 93.28,
-      "statements": 93.28,
-      "functions": 96.77,
-      "branches": 90.97
+      "lines": 97.18,
+      "statements": 97.18,
+      "functions": 97.93,
+      "branches": 87.37
     },
     "@verixa/mfa": {
-      "lines": 93.5,
-      "statements": 93.5,
-      "functions": 92.94,
-      "branches": 90.76
+      "lines": 93.81,
+      "statements": 93.81,
+      "functions": 92.9,
+      "branches": 88.94
     },
     "@verixa/notifications": {
-      "lines": 98.39,
-      "statements": 98.39,
-      "functions": 96.77,
-      "branches": 91.74
+      "lines": 98.37,
+      "statements": 98.37,
+      "functions": 100,
+      "branches": 93.22
     },
     "@verixa/rate-limiting": {
-      "lines": 94.58,
-      "statements": 94.58,
-      "functions": 95.6,
-      "branches": 81.67
+      "lines": 93.39,
+      "statements": 93.39,
+      "functions": 95.29,
+      "branches": 83.62
     },
     "@verixa/sessions": {
-      "lines": 94.82,
-      "statements": 94.82,
-      "functions": 98.1,
-      "branches": 95.32
+      "lines": 94.68,
+      "statements": 94.68,
+      "functions": 96.27,
+      "branches": 91.1
     },
     "@verixa/shared-kernel": {
-      "lines": 95.82,
-      "statements": 95.82,
-      "functions": 95.92,
-      "branches": 99.01
+      "lines": 94.12,
+      "statements": 94.12,
+      "functions": 95,
+      "branches": 95.95
     },
     "@verixa/stellar-anchor": {
-      "lines": 68.24,
-      "statements": 68.24,
-      "functions": 87.3,
-      "branches": 89.88
+      "lines": 86.08,
+      "statements": 86.08,
+      "functions": 88.89,
+      "branches": 74.83
     },
     "@verixa/verification": {
-      "lines": 96.59,
-      "statements": 96.59,
-      "functions": 95.5,
-      "branches": 93.24
+      "lines": 96.06,
+      "statements": 96.06,
+      "functions": 95.45,
+      "branches": 90.5
     },
     "tests/integration": {
-      "lines": 31.11,
-      "statements": 31.11,
-      "functions": 83.33,
-      "branches": 66.04
+      "lines": 95.06,
+      "statements": 95.06,
+      "functions": 93.94,
+      "branches": 58.62
     },
     "@verixa/governance": {
-      "lines": 98.22,
-      "statements": 98.22,
-      "functions": 94.67,
-      "branches": 95.36
+      "lines": 97.41,
+      "statements": 97.41,
+      "functions": 95.56,
+      "branches": 93.57
     },
     "@verixa/observability": {
-      "lines": 84.62,
-      "statements": 84.62,
-      "functions": 77.78,
-      "branches": 72
+      "lines": 84.48,
+      "statements": 84.48,
+      "functions": 81.25,
+      "branches": 79.69
     },
     "@verixa/testing-kit": {
-      "lines": 93.66,
-      "statements": 93.66,
+      "lines": 97.37,
+      "statements": 97.37,
       "functions": 100,
-      "branches": 75.57
+      "branches": 81.63
     }
   }
 }
