@@ -1,0 +1,93 @@
+# GitHub Environment specification for ephemeral PR preview deployments
+# (Phase 19, Issue #489 / roadmap 377).
+#
+# Why this file exists:
+# GitHub Environments are configured in repository Settings -> Environments,
+# which is UI-managed state that cannot be reviewed in a pull request. Keeping
+# this declarative manifest in version control makes the isolation boundary
+# between `preview` and `production` auditable, reviewable, and enforceable by
+# `infra/ci/check-preview-isolation.mjs`.
+#
+# Production credentials MUST NEVER be stored in this environment.
+
+name: preview
+tier: non-production
+description: >-
+  Isolated, least-privilege environment for ephemeral per-PR preview
+  deployments. Strictly separated from production credentials, databases,
+  and caches.
+
+protection_rules:
+  # Fork-originated pull requests cannot access `preview` environment secrets
+  # by default (enforced both by GitHub's fork-PR secret restrictions on the
+  # `pull_request` trigger and by the explicit head-repo guard in
+  # `.github/workflows/preview-deploy.yml`).
+  allow_fork_pull_requests: false
+  # Maintainer approval is required before any external or manual deployment
+  # can access preview secrets.
+  required_reviewers:
+    enabled: true
+    team: maintainers
+  # Prevent `main` or release tags from ever deploying into the preview
+  # environment or vice versa.
+  deployment_branch_policy:
+    protected_branches: false
+    custom_branch_policies: true
+    allowed_patterns:
+      - "feat/*"
+      - "fix/*"
+      - "chore/*"
+      - "docs/*"
+      - "refactor/*"
+      - "ci/*"
+
+isolation:
+  # Every PR preview receives its own logical database/schema and Redis key
+  # namespace so concurrent previews cannot read or mutate each other's state.
+  database_isolation: per-pr-schema
+  redis_namespace_pattern: "preview:pr-<pr_number>:"
+  network_boundary: non-production-vpc
+
+secrets:
+  - name: PREVIEW_DATABASE_URL
+    scope: preview
+    tier: test
+    description: >-
+      Unprivileged test-tier Postgres connection string for preview PRs.
+      Must never point to a production database host or superuser role.
+  - name: PREVIEW_DATABASE_MIGRATION_URL
+    scope: preview
+    tier: test
+    description: >-
+      Test-tier Postgres migration connection string scoped exclusively to
+      ephemeral preview databases.
+  - name: PREVIEW_REDIS_URL
+    scope: preview
+    tier: test
+    description: >-
+      Non-production Redis connection string. Always paired with the per-PR
+      key prefix `preview:pr-<pr_number>:`.
+  - name: PREVIEW_SESSION_ACCESS_TOKEN_SECRET
+    scope: preview
+    tier: test
+    description: >-
+      Non-production session signing secret (>= 32 chars). Distinct from
+      staging and production signing keys so preview tokens are never valid
+      outside the preview tier.
+  - name: PREVIEW_API_KEY
+    scope: preview
+    tier: test
+    description: >-
+      Non-production test-tier API key (`vx_preview_*`) for preview smoke
+      checks. Never a live/production API key (`vx_live_*`).
+  - name: PREVIEW_DEPLOY_TOKEN
+    scope: preview
+    tier: test
+    description: >-
+      Least-privilege deployment token restricted to creating and tearing
+      down ephemeral preview instances only.
+
+variables:
+  PREVIEW_BASE_DOMAIN: preview.verixa.dev
+  PREVIEW_REDIS_NAMESPACE_PREFIX: preview
+  PREVIEW_ENVIRONMENT_TIER: preview

@@ -1,0 +1,112 @@
+name: Coverage
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  workspace-coverage:
+    runs-on: ubuntu-latest
+    services:
+      # Postgres service container for database-backed repository coverage
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: verixa
+          POSTGRES_PASSWORD: verixa
+          POSTGRES_DB: verixa_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U verixa -d verixa_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+      # Redis service container for token revocation list integration tests
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      TEST_DATABASE_URL: postgres://verixa:verixa@localhost:5432/verixa_test
+      DATABASE_URL: postgres://verixa:verixa@localhost:5432/verixa_test
+      TEST_REDIS_URL: redis://localhost:6379
+      REQUIRE_DATABASE_TESTS: "1"
+      REQUIRE_REDIS_TESTS: "1"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Build
+        run: pnpm build
+
+      - name: Re-link workspace packages
+        run: pnpm install --frozen-lockfile
+
+      # The Postgres service starts empty. Without the schema, every
+      # database-backed repository spec fails with a Prisma "table does not
+      # exist" error, and `pnpm -r` stops at the first failing package, so the
+      # coverage of every package after it is never collected. Same step as
+      # the `ci` job's.
+      - name: Apply migrations to the test database
+        run: pnpm db:migrate:deploy
+
+      # Runs per-package coverage and merges into unified LCOV, HTML dashboard, and summary JSON (Issue 412)
+      - name: Collect and merge workspace coverage
+        run: pnpm test:workspace:coverage
+
+      # Enforces that coverage does not drop below checked-in baseline (Issue 413)
+      - name: Enforce coverage ratchet gate
+        run: |
+          pnpm coverage:ratchet --output-markdown coverage/ratchet-summary.md
+          cat coverage/ratchet-summary.md >> $GITHUB_STEP_SUMMARY
+
+      # When running on main, record whether coverage improved enough to raise
+      # the checked-in baseline (Issue 413). This used to commit and push the
+      # new baseline straight to main, but main is a protected branch that
+      # only accepts pull requests with passing checks, so that push could
+      # only ever fail the job. The updated file rides along in the artifact
+      # below instead, for a maintainer to commit through a pull request.
+      - name: Compute the raised baseline on main
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          pnpm coverage:ratchet --update-baseline
+          if [[ -n $(git status --porcelain infra/ci/coverage-baseline.json) ]]; then
+            cp infra/ci/coverage-baseline.json coverage/coverage-baseline.updated.json
+            {
+              echo "### Coverage baseline can be raised"
+              echo
+              echo "Coverage improved past the checked-in baseline. Commit"
+              echo "\`coverage-baseline.updated.json\` from this run's"
+              echo "\`workspace-coverage-report\` artifact as"
+              echo "\`infra/ci/coverage-baseline.json\` in a pull request."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # Publishes merged coverage report for maintainer inspection
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: workspace-coverage-report
+          path: |
+            coverage/
+          retention-days: 14

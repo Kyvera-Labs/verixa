@@ -14,22 +14,9 @@ name: Container scan
 # as the whole story, instead of appearing as a mysterious red X on a pull
 # request that touched a README.
 #
-# ## Why the gate is OS packages only
-#
-# `--vuln-type os` is the acceptance criterion: high and critical
-# vulnerabilities in the operating-system packages of the final image break the
-# build. That is the narrowest thing the scan can enforce without turning into
-# noise, and it is the one class the application cannot fix for itself — an
-# Alpine `libcrypto` advisory means the base image has to move, and nothing in
-# this repository's source does.
-#
-# The npm dependency half is scanned and published as an artifact but does not
-# fail the job. Dependency advisories are Issue 207 and Issue 208's territory
-# (lockfile integrity, `pnpm audit` in CI, Dependabot), and a second blocking
-# gate on the same advisories would mean every pull request is red for as long
-# as any transitive package has an unfixed HIGH — which is most of the time. A
-# check that is always failing is not a check, it is background noise with an
-# emoji.
+# Both OS and bundled application dependencies block on fixed HIGH/CRITICAL
+# findings. Unfixed findings remain visible in archived reports; accepted risk
+# requires a validated, expiring waiver.
 #
 # ## `--ignore-unfixed`
 #
@@ -77,6 +64,22 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
+      # The waiver validator parses YAML with the workspace's `yaml` package,
+      # which this job otherwise never installs. Scripts are skipped: nothing
+      # here needs Prisma or the git hooks, only the module on disk.
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies for the waiver validator
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Validate documented vulnerability waivers
+        run: node infra/ci/check-trivy-waivers.mjs
+
       # The scan runs against the real artifact, so the real artifact is built
       # here. There is no published image to pull: this repository does not push
       # to a registry yet, and scanning a registry image would not be scanning
@@ -114,14 +117,14 @@ jobs:
           vuln-type: os
           ignore-unfixed: true
           exit-code: "1"
-          format: table
+          format: json
+          output: trivy-os.json
           hide-progress: true
 
       # -----------------------------------------------------------------------
-      # Advisory: reported, not enforced. See the header.
+      # Application libraries receive the same blocking threshold as OS packages.
       # -----------------------------------------------------------------------
-      - name: Scan application dependencies (report only)
-        continue-on-error: true
+      - name: Scan application dependencies (blocking on HIGH and CRITICAL)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: image
@@ -130,19 +133,21 @@ jobs:
           severity: HIGH,CRITICAL
           vuln-type: library
           ignore-unfixed: true
-          exit-code: "0"
+          exit-code: "1"
           format: json
           output: trivy-dependencies.json
 
-      - name: Publish the dependency report
+      - name: Publish scan reports
         # An artifact rather than a console dump: the JSON is what gets compared
         # week over week, and the 400-line table it would otherwise be is exactly
         # the reason nobody reads scan output.
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: trivy-dependencies-${{ github.run_number }}
-          path: trivy-dependencies.json
+          name: trivy-reports-${{ github.run_number }}
+          path: |
+            trivy-dependencies.json
+            trivy-os.json
           if-no-files-found: ignore
           retention-days: 30
 
@@ -158,7 +163,30 @@ jobs:
           echo "   pruned-contents assertions in the 'docker' job of ci.yml at the same time,"
           echo "   since a base image change can move both."
           echo ""
-          echo "If the risk genuinely does not apply to this image (a vulnerable binary that"
-          echo "nothing here executes), record it in .trivyignore at the repo root with the"
-          echo "advisory id and one line explaining why — that is the audit trail, not a"
-          echo "quiet --exit-code 0."
+          echo "For accepted risk, list the ID in .trivyignore and record a justification"
+          echo "and future expiry in infra/ci/trivyignore.yaml. The validator checks both."
+
+  gate-fixture:
+    name: Prove a vulnerable fixture fails the gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Scan deliberately obsolete fixture image
+        id: fixture-scan
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          scan-type: image
+          image-ref: alpine:3.4
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          vuln-type: os
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+          hide-progress: true
+
+      - name: Assert the gate rejected the fixture
+        if: steps.fixture-scan.outcome != 'failure'
+        run: |
+          echo "::error::The vulnerability gate unexpectedly accepted alpine:3.4"
+          exit 1

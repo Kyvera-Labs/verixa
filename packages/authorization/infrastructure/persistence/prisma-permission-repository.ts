@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@verixa/database";
-import { createId, Result } from "@verixa/shared-kernel";
+import { ConflictError, createId, Result } from "@verixa/shared-kernel";
 
 import type { PermissionRepository } from "../../application/ports/permission-repository.js";
 import { Permission } from "../../domain/value-objects/permission.js";
@@ -24,23 +24,31 @@ export class PrismaPermissionRepository implements PermissionRepository {
    */
   async save(permission: Permission): Promise<void> {
     try {
-      await this.prisma.permission.upsert({
+      const existing = await this.prisma.permission.findUnique({
         where: { key: permission.key },
-        create: {
+      });
+      if (existing !== null) {
+        throw new ConflictError(`Permission with key "${permission.key}" is already registered.`);
+      }
+      await this.prisma.permission.create({
+        data: {
           id: createId<"PermissionId">(),
           key: permission.key,
           createdAt: new Date(),
         },
-        update: {},
       });
     } catch (error) {
+      if (error instanceof ConflictError) {
+        throw error;
+      }
       return mapPrismaError(error, "Permission");
     }
   }
 
   async findByKey(key: string): Promise<Permission | undefined> {
+    const normalizedKey = key.trim().toLowerCase();
     try {
-      const row = await this.prisma.permission.findUnique({ where: { key } });
+      const row = await this.prisma.permission.findUnique({ where: { key: normalizedKey } });
       if (row === null) return undefined;
 
       const parsed = Permission.create(row.key);

@@ -1,3 +1,4 @@
+import { clearedSessionCookies, REFRESH_COOKIE_NAME, sessionCookies } from "@verixa/sessions";
 import { AccountLockedError, Result } from "@verixa/shared-kernel";
 import type {
   FastifyBaseLogger,
@@ -52,6 +53,26 @@ const loginBodyZodSchema = z.object({ email: z.string(), password: z.string() })
 
 type LoginBody = z.infer<typeof loginBodyZodSchema>;
 
+const verifyEmailBodyZodSchema = z.object({ token: z.string() }).strict();
+type VerifyEmailBody = z.infer<typeof verifyEmailBodyZodSchema>;
+
+const refreshBodyZodSchema = z.object({ refreshToken: z.string().optional() }).strict();
+type RefreshBody = z.infer<typeof refreshBodyZodSchema>;
+
+const logoutBodyZodSchema = z.object({ sessionId: z.string().optional() }).strict();
+type LogoutBody = z.infer<typeof logoutBodyZodSchema>;
+
+const forgotPasswordBodyZodSchema = z.object({ email: z.string() }).strict();
+type ForgotPasswordBody = z.infer<typeof forgotPasswordBodyZodSchema>;
+
+const resetPasswordBodyZodSchema = z
+  .object({
+    token: z.string(),
+    newPassword: z.string(),
+  })
+  .strict();
+type ResetPasswordBody = z.infer<typeof resetPasswordBodyZodSchema>;
+
 /**
  * Authentication routes.
  *
@@ -77,6 +98,19 @@ export function registerAuthRoutes<TLogger extends FastifyBaseLogger>(
 ): void {
   const registerBodySchema = registerZodSchema(app, "RegisterBody", registerBodyZodSchema);
   const loginBodySchema = registerZodSchema(app, "LoginBody", loginBodyZodSchema);
+  const verifyEmailBodySchema = registerZodSchema(app, "VerifyEmailBody", verifyEmailBodyZodSchema);
+  const refreshBodySchema = registerZodSchema(app, "RefreshBody", refreshBodyZodSchema);
+  const logoutBodySchema = registerZodSchema(app, "LogoutBody", logoutBodyZodSchema);
+  const forgotPasswordBodySchema = registerZodSchema(
+    app,
+    "ForgotPasswordBody",
+    forgotPasswordBodyZodSchema,
+  );
+  const resetPasswordBodySchema = registerZodSchema(
+    app,
+    "ResetPasswordBody",
+    resetPasswordBodyZodSchema,
+  );
 
   app.post<{ Body: RegisterBody }>(
     "/register",
@@ -136,35 +170,16 @@ export function registerAuthRoutes<TLogger extends FastifyBaseLogger>(
         });
 
         if (Result.isErr(result)) {
-          // The audit log records *which* failure, unlike the response.
-          //
-          // This is the payoff of `AccountLockedError` being a distinct type
-          // while rendering identically on the wire: the client learns
-          // nothing, and the operator can still distinguish a lockout from an
-          // ordinary bad password. Collapsing them would have made a
-          // credential-stuffing campaign indistinguishable from user error in
-          // the one place that needs to tell them apart.
           await container.audit.recordEvent.execute({
             action:
               result.error instanceof AccountLockedError ? "user.locked_out" : "user.login_failed",
             metadata: { email: request.body.email },
           });
 
-          // Routed through the same helper as every other domain error, so the
-          // 401 and its body shape come from the error itself. A hand-written
-          // `reply.status(401)` here would be a second place where the
-          // authentication response is defined, and the one that drifts.
           sendDomainError(reply, result.error);
           return;
         }
 
-        // `authenticateWithPassword` is constructed below without an
-        // `mfaChecker` (that wiring is a later issue), so `result.value` can
-        // only ever be the plain login shape at runtime -- the MFA-challenge
-        // and enrollment-required branches of the union are presently
-        // unreachable here. Narrowed explicitly anyway, rather than asserted
-        // past, so this route starts failing loudly instead of silently if a
-        // future change wires an `mfaChecker` in without updating it.
         if (result.value.status !== undefined) {
           reply.log.error(
             { status: result.value.status },
@@ -175,11 +190,6 @@ export function registerAuthRoutes<TLogger extends FastifyBaseLogger>(
           return;
         }
 
-        // No session or token yet — that is Phase 05. Until then this returns
-        // the authenticated user and nothing else, which is deliberately not
-        // enough to stay logged in with. Returning a placeholder token would
-        // be worse than returning none: clients would store it, and replacing
-        // it later would be a breaking change to a field that never worked.
         const { user } = result.value;
 
         await container.audit.recordEvent.execute({
@@ -188,11 +198,212 @@ export function registerAuthRoutes<TLogger extends FastifyBaseLogger>(
           subjectId: user.id,
         });
 
+        let sessionData: { sessionId?: string; accessToken?: string; refreshToken?: string } = {};
+        if (container.sessions !== undefined) {
+          const userAgent = request.headers["user-agent"];
+          const sessionResult = await container.sessions.issueSession.execute({
+            userId: user.id,
+            ipAddress: request.ip,
+            ...(userAgent !== undefined ? { userAgent } : {}),
+          });
+          if (Result.isOk(sessionResult)) {
+            sessionData = {
+              sessionId: sessionResult.value.sessionId,
+              accessToken: sessionResult.value.accessToken,
+              refreshToken: sessionResult.value.refreshToken,
+            };
+            const cookies = sessionCookies({
+              refreshToken: sessionResult.value.refreshToken,
+              csrfToken: sessionResult.value.sessionId,
+              sessionMaxAgeSeconds: 30 * 24 * 60 * 60,
+              csrfMaxAgeSeconds: 30 * 24 * 60 * 60,
+            });
+            reply.header("Set-Cookie", cookies);
+          }
+        }
+
         await reply.status(200).send({
           id: user.id,
           email: user.email.value,
           displayName: user.displayName.value,
           status: user.status,
+          ...sessionData,
+        });
+      } catch (error) {
+        sendError(reply, error);
+      }
+    },
+  );
+
+  app.post<{ Body: VerifyEmailBody }>(
+    "/verify-email",
+    { schema: { body: verifyEmailBodySchema } },
+    async (request, reply) => {
+      try {
+        const result = await container.credentials.confirmEmailVerification.execute({
+          token: request.body.token,
+        });
+
+        if (Result.isErr(result)) {
+          sendDomainError(reply, result.error);
+          return;
+        }
+
+        const { user } = result.value;
+        await container.audit.recordEvent.execute({
+          action: "user.email_verified",
+          actorId: user.id,
+          subjectId: user.id,
+        });
+
+        await reply.status(200).send({
+          status: "ok",
+          user: {
+            id: user.id,
+            email: user.email.value,
+            displayName: user.displayName.value,
+            status: user.status,
+          },
+        });
+      } catch (error) {
+        sendError(reply, error);
+      }
+    },
+  );
+
+  app.post<{ Body: RefreshBody }>(
+    "/refresh",
+    { schema: { body: refreshBodySchema } },
+    async (request, reply) => {
+      try {
+        if (container.sessions === undefined) {
+          sendApiError(reply, "NOT_IMPLEMENTED", "Sessions are not enabled.");
+          return;
+        }
+
+        // Check body, Authorization header, or cookie
+        let refreshToken = request.body?.refreshToken;
+        if (!refreshToken && request.headers.authorization) {
+          const auth = request.headers.authorization;
+          if (auth.startsWith("Bearer ")) {
+            refreshToken = auth.slice(7);
+          }
+        }
+        if (!refreshToken && request.headers.cookie) {
+          const cookieHeader = request.headers.cookie;
+          const cookiePart = cookieHeader
+            .split(";")
+            .map((c) => c.trim())
+            .find((c) => c.startsWith(`${REFRESH_COOKIE_NAME}=`));
+          if (cookiePart) {
+            refreshToken = cookiePart.slice(REFRESH_COOKIE_NAME.length + 1);
+          }
+        }
+
+        if (!refreshToken) {
+          sendApiError(reply, "AUTHENTICATION_FAILED", "Refresh token is required.");
+          return;
+        }
+
+        const result = await container.sessions.refreshAccessToken.execute({
+          refreshToken,
+          identifier: request.ip,
+        });
+        if (Result.isErr(result)) {
+          sendDomainError(reply, result.error);
+          return;
+        }
+
+        const cookies = sessionCookies({
+          refreshToken: result.value.refreshToken,
+          csrfToken: "refreshed-csrf",
+          sessionMaxAgeSeconds: 30 * 24 * 60 * 60,
+          csrfMaxAgeSeconds: 30 * 24 * 60 * 60,
+        });
+        reply.header("Set-Cookie", cookies);
+
+        await reply.status(200).send({
+          accessToken: result.value.accessToken,
+          refreshToken: result.value.refreshToken,
+        });
+      } catch (error) {
+        sendError(reply, error);
+      }
+    },
+  );
+
+  app.post<{ Body: LogoutBody }>(
+    "/logout",
+    { schema: { body: logoutBodySchema } },
+    async (request, reply) => {
+      try {
+        const sessionId =
+          request.body?.sessionId ?? (request.headers["x-session-id"] as string | undefined);
+
+        if (container.sessions !== undefined && sessionId) {
+          await container.sessions.logout.execute({ sessionId });
+        }
+
+        reply.header("Set-Cookie", clearedSessionCookies());
+        await reply.status(200).send({ status: "ok" });
+      } catch (error) {
+        sendError(reply, error);
+      }
+    },
+  );
+
+  app.post<{ Body: ForgotPasswordBody }>(
+    "/forgot-password",
+    { schema: { body: forgotPasswordBodySchema } },
+    async (request, reply) => {
+      try {
+        await container.credentials.requestPasswordReset.execute({
+          email: request.body.email,
+        });
+
+        await container.audit.recordEvent.execute({
+          action: "user.password_reset_requested",
+          metadata: { email: request.body.email },
+        });
+
+        // Always 200 to prevent user enumeration
+        await reply.status(200).send({
+          message: "If that email is registered, password reset instructions have been sent.",
+        });
+      } catch (error) {
+        sendError(reply, error);
+      }
+    },
+  );
+
+  app.post<{ Body: ResetPasswordBody }>(
+    "/reset-password",
+    { schema: { body: resetPasswordBodySchema } },
+    async (request, reply) => {
+      try {
+        const result = await container.credentials.confirmPasswordReset.execute({
+          token: request.body.token,
+          newPassword: request.body.newPassword,
+        });
+
+        if (Result.isErr(result)) {
+          sendDomainError(reply, result.error);
+          return;
+        }
+
+        const { user } = result.value;
+        await container.audit.recordEvent.execute({
+          action: "user.password_reset_completed",
+          actorId: user.id,
+          subjectId: user.id,
+        });
+
+        await reply.status(200).send({
+          status: "ok",
+          user: {
+            id: user.id,
+            email: user.email.value,
+          },
         });
       } catch (error) {
         sendError(reply, error);
