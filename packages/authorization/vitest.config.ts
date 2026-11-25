@@ -25,7 +25,9 @@ export default mergeConfig(
           statements: 88,
           lines: 88,
           functions: 90,
-          branches: 89,
+          // Vitest 5 maps V8 coverage through the AST, which counts branches more
+          // strictly: the same tests read 83.7% here instead of ~90% under vitest 3.
+          branches: 83,
         },
       },
     },
