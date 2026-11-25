@@ -484,6 +484,12 @@ export const rawEnvSchema = z.object({
    * Logical service name attached to emitted OpenTelemetry resource attributes.
    */
   OTEL_SERVICE_NAME: z.string().min(1).default("verixa-api"),
+  /**
+   * Serve Prometheus metrics at GET /metrics. Off by default: the endpoint is
+   * unauthenticated and exposes route names, request volumes and error rates,
+   * so it is enabled only where an (internal) scraper needs it.
+   */
+  METRICS_ENABLED: booleanFromEnv.default("false"),
 
   /**
    * Collector-agnostic OTLP exporter endpoint URL (e.g. `http://localhost:4318`
