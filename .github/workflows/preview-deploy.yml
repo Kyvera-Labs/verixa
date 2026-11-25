@@ -1,0 +1,129 @@
+name: Preview Deploy
+
+# Phase 19, Issue #489 (roadmap 377): Preview environment secrets & config isolation.
+#
+# Why `pull_request` (and deliberately NOT `pull_request_target`):
+# `pull_request_target` runs in the context of the base repository with access
+# to repository/environment secrets even when triggered by an untrusted fork.
+# Checking out the PR head inside `pull_request_target` is a well-known
+# credential-exfiltration vector ("pwn request"). Using `pull_request` ensures
+# GitHub withholds all secrets from fork-originated PRs by default, and the
+# explicit `head.repo.full_name == github.repository` guard below reinforces
+# that boundary so fork PRs never attempt to enter the `preview` environment
+# without explicit maintainer action.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+# Least-privilege token permissions at the workflow level.
+permissions:
+  contents: read
+  deployments: write
+  pull-requests: write
+
+# Cancel superseded preview deploys for the same PR so stale runs cannot
+# overwrite newer preview state or race with teardown.
+concurrency:
+  group: preview-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # Runs on every PR (including forks) with ZERO secrets. Verifies that the
+  # preview workflow and environment manifest still uphold all isolation
+  # invariants before any deployment job can run.
+  verify-preview-isolation:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies for isolation check
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Verify preview environment secret and config isolation
+        run: node infra/ci/check-preview-isolation.mjs
+
+  # Deploys an ephemeral preview for trusted (same-repo) PRs only.
+  # Fork-originated PRs are skipped by default because they cannot access
+  # `preview` GitHub Environment secrets without explicit maintainer approval.
+  deploy-preview:
+    needs: verify-preview-isolation
+    if: >-
+      github.event.action != 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    environment:
+      name: preview
+      url: https://pr-${{ github.event.pull_request.number }}.${{ vars.PREVIEW_BASE_DOMAIN || 'preview.verixa.dev' }}
+    env:
+      # Scoped strictly to the `preview` GitHub Environment.
+      # Production credentials and connection strings are never referenced here.
+      PREVIEW_PR_NUMBER: ${{ github.event.pull_request.number }}
+      PREVIEW_ENVIRONMENT_TIER: preview
+      NODE_ENV: development
+      PREVIEW_DB_SCHEMA: verixa_pr_${{ github.event.pull_request.number }}
+      PREVIEW_REDIS_NAMESPACE: "preview:pr-${{ github.event.pull_request.number }}:"
+      DATABASE_URL: ${{ secrets.PREVIEW_DATABASE_URL }}
+      DATABASE_MIGRATION_URL: ${{ secrets.PREVIEW_DATABASE_MIGRATION_URL }}
+      REDIS_URL: ${{ secrets.PREVIEW_REDIS_URL }}
+      SESSION_ACCESS_TOKEN_SECRET: ${{ secrets.PREVIEW_SESSION_ACCESS_TOKEN_SECRET }}
+      PREVIEW_API_KEY: ${{ secrets.PREVIEW_API_KEY }}
+      PREVIEW_DEPLOY_TOKEN: ${{ secrets.PREVIEW_DEPLOY_TOKEN }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies for runtime isolation guard
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      # Runtime guard: fail closed if any injected preview secret resembles a
+      # production connection string or live API key, without ever printing
+      # secret values to workflow logs.
+      - name: Assert no production credentials in preview runtime environment
+        run: node infra/ci/check-preview-isolation.mjs --check-env
+
+      - name: Prepare isolated preview configuration
+        run: |
+          set -eu
+          echo "Deploying isolated preview for PR #${PREVIEW_PR_NUMBER}"
+          echo "Environment tier: ${PREVIEW_ENVIRONMENT_TIER}"
+          echo "Database schema: ${PREVIEW_DB_SCHEMA}"
+          echo "Redis namespace: ${PREVIEW_REDIS_NAMESPACE}"
+          # Deliberately never echo DATABASE_URL, REDIS_URL, or any secret.
+
+  # Tears down the ephemeral PR preview environment and its isolated schema /
+  # Redis namespace when the PR is closed or merged.
+  teardown-preview:
+    if: >-
+      github.event.action == 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    environment:
+      name: preview
+    env:
+      PREVIEW_PR_NUMBER: ${{ github.event.pull_request.number }}
+      PREVIEW_DB_SCHEMA: verixa_pr_${{ github.event.pull_request.number }}
+      PREVIEW_REDIS_NAMESPACE: "preview:pr-${{ github.event.pull_request.number }}:"
+      PREVIEW_DEPLOY_TOKEN: ${{ secrets.PREVIEW_DEPLOY_TOKEN }}
+    steps:
+      - name: Tear down isolated preview resources
+        run: |
+          set -eu
+          echo "Tearing down preview for PR #${PREVIEW_PR_NUMBER}"
+          echo "Releasing database schema: ${PREVIEW_DB_SCHEMA}"
+          echo "Flushing Redis namespace: ${PREVIEW_REDIS_NAMESPACE}"

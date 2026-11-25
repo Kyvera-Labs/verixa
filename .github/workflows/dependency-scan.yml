@@ -58,11 +58,11 @@ jobs:
     name: Audit production dependencies
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: pnpm
@@ -81,18 +81,38 @@ jobs:
       - name: Capture the production audit report
         run: pnpm audit --prod --json > dependency-audit.json || true
 
+      # On a pull request, the same audit of the target branch is the
+      # baseline: findings already there were not introduced by the pull
+      # request and are reported without failing it. Pushes to main and the
+      # nightly run have no baseline, so a pre-existing finding still fails
+      # where it can be fixed. The baseline comes from origin, not from the
+      # pull request, and `pnpm audit` needs no install to read it.
+      - name: Capture the base branch's production audit report
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -eu
+          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          git worktree add --detach "$RUNNER_TEMP/base" FETCH_HEAD
+          (cd "$RUNNER_TEMP/base" && pnpm audit --prod --json) > base-dependency-audit.json || true
+
       - name: Fail on unexcepted high or critical advisories
-        run: >
-          node infra/ci/dependency-scan.mjs
-          --audit dependency-audit.json
-          --exceptions infra/ci/security-exceptions.json
+        env:
+          BASELINE: ${{ github.event_name == 'pull_request' && 'base-dependency-audit.json' || '' }}
+        run: |
+          set -eu
+          node infra/ci/dependency-scan.mjs \
+            --audit dependency-audit.json \
+            --exceptions infra/ci/security-exceptions.json \
+            ${BASELINE:+--baseline "$BASELINE"}
 
       # Kept even when the gate passes: the report is the evidence for what the
       # job looked at, and a nightly run whose artifact is missing cannot be
       # audited after the fact.
       - name: Upload the audit report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: dependency-audit
           path: dependency-audit.json

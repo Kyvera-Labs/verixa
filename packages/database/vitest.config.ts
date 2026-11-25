@@ -7,6 +7,9 @@ export default mergeConfig(
   defineConfig({
     test: {
       name: "@verixa/database",
+      coverage: {
+        exclude: [...(baseConfig.test?.coverage?.exclude ?? []), "prisma/seed.ts", "scripts/**"],
+      },
     },
   }),
 );

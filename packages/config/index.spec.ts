@@ -36,6 +36,11 @@ describe("loadConfig", () => {
       CORS_ALLOW_CREDENTIALS: false,
       MFA_ENFORCEMENT_LEVEL: "optional",
       MFA_ALLOWED_METHODS: [],
+      OTEL_SERVICE_NAME: "verixa-api",
+      OTEL_EXPORTER_OTLP_ENDPOINT: undefined,
+      OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf",
+      OTEL_EXPORTER_OTLP_HEADERS: {},
+      OTEL_TRACES_SAMPLER_RATE: 0.1,
     });
   });
 
@@ -72,6 +77,117 @@ describe("loadConfig", () => {
       CORS_ALLOW_CREDENTIALS: false,
       MFA_ENFORCEMENT_LEVEL: "optional",
       MFA_ALLOWED_METHODS: [],
+      OTEL_SERVICE_NAME: "verixa-api",
+      OTEL_EXPORTER_OTLP_ENDPOINT: undefined,
+      OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf",
+      OTEL_EXPORTER_OTLP_HEADERS: {},
+      OTEL_TRACES_SAMPLER_RATE: 1,
+    });
+  });
+
+  describe("OpenTelemetry OTLP exporter & sampling configuration", () => {
+    it("defaults OTEL_TRACES_SAMPLER_RATE to 1.0 in development, 0.1 in production, and 0 in test", () => {
+      const dev = loadConfig({
+        NODE_ENV: "development",
+        SESSION_ACCESS_TOKEN_SECRET: VALID_SESSION_SECRET,
+      });
+      const prod = loadConfig({
+        NODE_ENV: "production",
+        SESSION_ACCESS_TOKEN_SECRET: VALID_SESSION_SECRET,
+      });
+      const test = loadConfig({
+        NODE_ENV: "test",
+        SESSION_ACCESS_TOKEN_SECRET: VALID_SESSION_SECRET,
+      });
+
+      expect(dev.OTEL_TRACES_SAMPLER_RATE).toBe(1);
+      expect(prod.OTEL_TRACES_SAMPLER_RATE).toBe(0.1);
+      expect(test.OTEL_TRACES_SAMPLER_RATE).toBe(0);
+    });
+
+    it("accepts valid OTLP endpoint, protocol, headers, and explicit sampling rate", () => {
+      const config = loadConfig({
+        NODE_ENV: "production",
+        SESSION_ACCESS_TOKEN_SECRET: VALID_SESSION_SECRET,
+        OTEL_SERVICE_NAME: "verixa-auth",
+        OTEL_EXPORTER_OTLP_ENDPOINT: "https://otel.example.com:4318",
+        OTEL_EXPORTER_OTLP_PROTOCOL: "http/json",
+        OTEL_EXPORTER_OTLP_HEADERS: "Authorization=Bearer secret, x-tenant=core",
+        OTEL_TRACES_SAMPLER_RATE: "0.25",
+      });
+
+      expect(config.OTEL_SERVICE_NAME).toBe("verixa-auth");
+      expect(config.OTEL_EXPORTER_OTLP_ENDPOINT).toBe("https://otel.example.com:4318");
+      expect(config.OTEL_EXPORTER_OTLP_PROTOCOL).toBe("http/json");
+      expect(config.OTEL_EXPORTER_OTLP_HEADERS).toEqual({
+        Authorization: "Bearer secret",
+        "x-tenant": "core",
+      });
+      expect(config.OTEL_TRACES_SAMPLER_RATE).toBe(0.25);
+    });
+
+    it("treats empty OTLP endpoint and sampling rate strings as unset", () => {
+      const config = loadConfig({
+        NODE_ENV: "development",
+        SESSION_ACCESS_TOKEN_SECRET: VALID_SESSION_SECRET,
+        OTEL_EXPORTER_OTLP_ENDPOINT: "   ",
+        OTEL_TRACES_SAMPLER_RATE: "",
+      });
+
+      expect(config.OTEL_EXPORTER_OTLP_ENDPOINT).toBeUndefined();
+      expect(config.OTEL_TRACES_SAMPLER_RATE).toBe(1);
+    });
+
+    it("fails fast on malformed or non-HTTP OTLP endpoints", () => {
+      expect(() =>
+        loadConfig({
+          SESSION_ACCESS_TOKEN_SECRET: VALID_SESSION_SECRET,
+          OTEL_EXPORTER_OTLP_ENDPOINT: "not-a-url",
+        }),
+      ).toThrowError(ConfigError);
+
+      expect(() =>
+        loadConfig({
+          SESSION_ACCESS_TOKEN_SECRET: VALID_SESSION_SECRET,
+          OTEL_EXPORTER_OTLP_ENDPOINT: "ftp://collector.example.com:4318",
+        }),
+      ).toThrowError(ConfigError);
+    });
+
+    it("fails fast on unsupported OTLP protocols", () => {
+      expect(() =>
+        loadConfig({
+          SESSION_ACCESS_TOKEN_SECRET: VALID_SESSION_SECRET,
+          OTEL_EXPORTER_OTLP_PROTOCOL: "udp",
+        }),
+      ).toThrowError(ConfigError);
+    });
+
+    it("fails fast on malformed OTLP headers", () => {
+      expect(() =>
+        loadConfig({
+          SESSION_ACCESS_TOKEN_SECRET: VALID_SESSION_SECRET,
+          OTEL_EXPORTER_OTLP_HEADERS: "missing-equals-sign",
+        }),
+      ).toThrowError(ConfigError);
+
+      expect(() =>
+        loadConfig({
+          SESSION_ACCESS_TOKEN_SECRET: VALID_SESSION_SECRET,
+          OTEL_EXPORTER_OTLP_HEADERS: "key=",
+        }),
+      ).toThrowError(ConfigError);
+    });
+
+    it("fails fast on out-of-range or non-numeric sampling rates", () => {
+      for (const badRate of ["-0.1", "1.5", "NaN", "always"]) {
+        expect(() =>
+          loadConfig({
+            SESSION_ACCESS_TOKEN_SECRET: VALID_SESSION_SECRET,
+            OTEL_TRACES_SAMPLER_RATE: badRate,
+          }),
+        ).toThrowError(ConfigError);
+      }
     });
   });
 

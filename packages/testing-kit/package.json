@@ -1,0 +1,39 @@
+{
+  "name": "@verixa/testing-kit",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "main": "index.ts",
+  "types": "index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./contract-test": "./contract-test.ts",
+    "./factories": "./factories/index.ts",
+    "./fakes": "./fakes/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@verixa/audit": "workspace:*",
+    "@verixa/authorization": "workspace:*",
+    "@verixa/credentials": "workspace:*",
+    "@verixa/database": "workspace:*",
+    "@verixa/identity": "workspace:*",
+    "@verixa/mfa": "workspace:*",
+    "@verixa/sessions": "workspace:*",
+    "@verixa/shared-kernel": "workspace:*",
+    "@verixa/stellar-anchor": "workspace:*",
+    "@verixa/verification": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@vitest/coverage-v8": "^5.1.0",
+    "typescript": "^6.0.3",
+    "vitest": "^5.1.0"
+  }
+}

@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
 
+# Read-only token. Nothing in this workflow writes to the repository, comments
+# on a pull request or publishes anything, so a compromised step or dependency
+# gets a token that can read code that is already public and do nothing else.
+permissions:
+  contents: read
+
 jobs:
   ci:
     runs-on: ubuntu-latest
@@ -63,7 +69,7 @@ jobs:
       # report green. This turns "no Redis" into a hard failure in CI only.
       REQUIRE_REDIS_TESTS: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # Issue 215. Runs before the install it guards, and deliberately invoked
       # as `node` rather than `pnpm run check:lockfile`: the gate has to work on
@@ -81,9 +87,9 @@ jobs:
       - name: Check for malware indicators
         run: node infra/ci/check-malware-indicators.mjs
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: pnpm
@@ -150,6 +156,12 @@ jobs:
       - name: Check Prisma schema formatting
         run: pnpm --filter @verixa/database run db:format:check
 
+      # Migration safety & policy check (Issues 393 & 394). Verifies forward-only
+      # policy (flags undocumented destructive drops) and zero-downtime compatibility
+      # (flags single-step NOT NULL column additions without DEFAULTs).
+      - name: Check migration safety and zero-downtime policy
+        run: pnpm run check:migration-safety
+
       # Drift detection: does replaying every migration actually produce the
       # schema.prisma in the repo? They diverge when someone edits the schema
       # and forgets to generate a migration — the edit works locally (the
@@ -172,6 +184,13 @@ jobs:
       - name: Check formatting
         run: pnpm format:check
 
+      # Issue 389: Environment configuration matrix sync check.
+      # Verifies that docs/guides/deployment.md stays in exact sync with
+      # packages/config/schema.ts so new variables are never added without
+      # being classified by secret status and environment source.
+      - name: Verify environment configuration matrix sync
+        run: pnpm check:env-matrix
+
       - name: Typecheck
         run: pnpm typecheck
 
@@ -183,6 +202,13 @@ jobs:
       # nothing else runs before the SBOM step.
       - name: Typecheck CI tooling
         run: pnpm typecheck:ci
+
+      # Issue 414: Flaky test quarantine audit.
+      # Scans the test suites to ensure no @quarantine tags have reached their
+      # time-boxed expiration date. If a quarantined test's deadline has elapsed,
+      # this step fails CI so the test must either be fixed or explicitly re-scoped.
+      - name: Verify test quarantines
+        run: pnpm flaky:track --scan-quarantines
 
       - name: Test
         run: pnpm test
@@ -226,6 +252,12 @@ jobs:
       - name: Verification coverage gate
         run: pnpm --filter @verixa/verification run test:coverage
 
+      # packages/rate-limiting implements Phase 15 rate limiting and abuse
+      # prevention. Held to an enforced coverage floor (vitest.config.ts)
+      # following the Issue 037 pattern (Issue 298 / #312).
+      - name: Rate limiting coverage gate
+        run: pnpm --filter @verixa/rate-limiting run test:coverage
+
   # Verifies the *other* database strategy. The `ci` job above points
   # TEST_DATABASE_URL at a service container, so it never exercises the
   # Testcontainers path in database-harness.ts (Issue 047). This job
@@ -241,11 +273,11 @@ jobs:
       REQUIRE_DATABASE_TESTS: "1"
       DATABASE_URL: postgres://verixa:verixa@localhost:5432/verixa_placeholder
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: pnpm
@@ -287,6 +319,65 @@ jobs:
       - name: Run authorization repository contract tests against Testcontainers Postgres
         run: pnpm --filter @verixa/authorization run test
 
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: verixa
+          POSTGRES_PASSWORD: verixa
+          POSTGRES_DB: verixa_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U verixa -d verixa_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://verixa:verixa@localhost:5432/verixa_test
+      TEST_DATABASE_URL: postgres://verixa:verixa@localhost:5432/verixa_test
+      TEST_REDIS_URL: redis://localhost:6379
+      REQUIRE_DATABASE_TESTS: "1"
+      REQUIRE_REDIS_TESTS: "1"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Build
+        run: pnpm build
+
+      - name: Re-link workspace packages
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply migrations to test database
+        run: pnpm db:migrate:deploy
+
+      - name: Run process-level HTTP smoke test with disposable services
+        run: pnpm --filter @verixa/integration-tests run test:e2e
+
   # Verifies the *compose* stack's database roles, which nothing else covers.
   #
   # The `ci` job talks to a bare service container and the `docker` job builds
@@ -309,11 +400,11 @@ jobs:
     env:
       DATABASE_URL: postgres://verixa:verixa@localhost:5432/verixa
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: pnpm
@@ -398,10 +489,63 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - name: Build image
-        run: docker build -f apps/api/Dockerfile -t verixa-api:ci .
+      - name: Build production target image
+        run: docker build -f apps/api/Dockerfile --target production -t verixa-api:ci .
+
+      # The waiver validator parses YAML with the workspace's `yaml` package,
+      # which this job otherwise never installs. Scripts are skipped: nothing
+      # here needs Prisma or the git hooks, only the module on disk.
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies for the waiver validator
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Validate documented vulnerability waivers
+        run: node infra/ci/check-trivy-waivers.mjs
+
+      - name: Scan OS packages
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          scan-type: image
+          image-ref: verixa-api:ci
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          vuln-type: os
+          ignore-unfixed: true
+          exit-code: "1"
+          format: json
+          output: trivy-os.json
+
+      - name: Scan application dependencies
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          scan-type: image
+          image-ref: verixa-api:ci
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          vuln-type: library
+          ignore-unfixed: true
+          exit-code: "1"
+          format: json
+          output: trivy-dependencies.json
+
+      - name: Archive image scan reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: trivy-ci-${{ github.run_number }}
+          path: |
+            trivy-os.json
+            trivy-dependencies.json
+          if-no-files-found: ignore
+          retention-days: 30
 
       - name: Run container
         run: |
@@ -420,6 +564,11 @@ jobs:
           echo "::error::verixa-api did not become healthy in time"
           docker logs verixa-api
           exit 1
+
+      - name: Verify HEALTHCHECK instruction status
+        run: |
+          status="$(docker inspect --format='{{json .State.Health.Status}}' verixa-api || echo 'none')"
+          echo "Container health status: $status"
 
       - name: Verify the container does not run as root
         run: |
@@ -515,3 +664,208 @@ jobs:
       - name: Stop container
         if: always()
         run: docker rm -f verixa-api || true
+
+      - name: Build standalone notifications pilot service
+        run: docker build -f packages/notifications/Dockerfile --target production -t verixa-notifications:ci .
+
+      - name: Run notifications container
+        run: docker run -d --name verixa-notifications -p 3001:3001 verixa-notifications:ci
+
+      - name: Wait for notifications /health
+        run: |
+          for _ in $(seq 1 20); do
+            if curl -sf http://localhost:3001/health; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::verixa-notifications did not become healthy in time"
+          docker logs verixa-notifications
+          exit 1
+
+      - name: Stop notifications container
+        if: always()
+        run: docker rm -f verixa-notifications || true
+      # The rollback drill proves that selecting an earlier immutable image
+      # restores the code that actually serves requests. The response carries
+      # its build version so this assertion cannot pass by checking only that
+      # some process answered on the port.
+      - name: Build two versioned images for the rollback drill
+        run: |
+          docker build -f apps/api/Dockerfile --build-arg VERIXA_BUILD_VERSION=drill-a -t verixa-api:drill-a .
+          docker build -f apps/api/Dockerfile --build-arg VERIXA_BUILD_VERSION=drill-b -t verixa-api:drill-b .
+
+      - name: Deploy version B before rolling back to version A
+        env:
+          SESSION_ACCESS_TOKEN_SECRET: ci-rollback-secret-value-at-least-32-characters
+          DATABASE_URL: postgres://verixa:verixa@127.0.0.1:5432/verixa
+          API_IMAGE: verixa-api
+          API_CONTAINER_NAME: verixa-api-drill
+          API_PORT: "3001"
+          API_BIND_ADDRESS: 127.0.0.1
+          API_PULL_IMAGE: "0"
+        run: |
+          set -eu
+          docker run -d --name verixa-api-drill --publish 127.0.0.1:3001:3000 \
+            --env SESSION_ACCESS_TOKEN_SECRET="$SESSION_ACCESS_TOKEN_SECRET" \
+            --env DATABASE_URL="$DATABASE_URL" \
+            verixa-api:drill-b
+          for _ in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:3001/health >/dev/null; then break; fi
+            sleep 1
+          done
+          test "$(curl -sf http://127.0.0.1:3001/version)" = '{"version":"drill-b"}'
+          API_PORT=3001 ./infra/docker/scripts/rollback.sh drill-a
+          test "$(curl -sf http://127.0.0.1:3001/version)" = '{"version":"drill-a"}'
+          test "$(curl -sf http://127.0.0.1:3001/health)" = '{"status":"ok"}'
+
+      - name: Stop rollback drill container
+        if: always()
+        run: docker rm -f verixa-api-drill || true
+
+  # Issue 385 / #497. The `docker` job builds the image; this job proves the
+  # *overlay* actually produces a production topology when combined with the
+  # dev file. Resolving the config first catches merge mistakes (a surviving
+  # source bind-mount or dev port) before spending minutes on an image build.
+  compose-production-smoke:
+    runs-on: ubuntu-latest
+    env:
+      POSTGRES_PASSWORD: ci-postgres-password
+      REDIS_PASSWORD: ci-redis-password
+      REDIS_URL: redis://:ci-redis-password@redis:6379
+      DATABASE_URL: postgres://verixa_app:verixa_app@postgres:5432/verixa
+      DATABASE_MIGRATION_URL: postgres://verixa:ci-postgres-password@postgres:5432/verixa
+      SESSION_ACCESS_TOKEN_SECRET: ci-smoke-secret-at-least-32-characters
+      VERIXA_API_IMAGE: verixa-api:ci
+      VERIXA_MIGRATION_IMAGE: verixa-migration:ci
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies for the config gate
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Resolve and verify the merged production config
+        run: |
+          set -eu
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml config --format json > compose.resolved.json
+          node infra/ci/compose-config.mjs --check compose.resolved.json
+
+      - name: Start production services
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+            up -d --build --wait postgres redis migration api
+
+      - name: API serves health on the internal network
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T api \
+            node -e "fetch('http://127.0.0.1:3000/health').then(r => { if (!r.ok) process.exit(1); console.log(r.status); }).catch(() => process.exit(1))"
+
+      - name: Stop the stack
+        if: always()
+        run: docker compose -f docker-compose.yml -f docker-compose.prod.yml down --volumes || true
+
+  # Issue 386 / #498. This is a restore drill, not a file-existence check:
+  # seed data, back it up, recreate the containers without their volumes to
+  # prove the data was really in the named volumes, then destroy the volumes
+  # and restore from the dumps. A backup that was never restored is a guess.
+  compose-backup-restore:
+    runs-on: ubuntu-latest
+    env:
+      POSTGRES_PASSWORD: ci-postgres-password
+      REDIS_PASSWORD: ci-redis-password
+      DATABASE_URL: postgres://verixa_app:verixa_app@postgres:5432/verixa
+      DATABASE_MIGRATION_URL: postgres://verixa:ci-postgres-password@postgres:5432/verixa
+      REDIS_URL: redis://:ci-redis-password@redis:6379
+      SESSION_ACCESS_TOKEN_SECRET: ci-smoke-secret-at-least-32-characters
+      VERIXA_API_IMAGE: verixa-api:ci
+      VERIXA_MIGRATION_IMAGE: verixa-migration:ci
+      PGUSER: verixa
+      PGPASSWORD: ci-postgres-password
+      REDISCLI_AUTH: ci-redis-password
+      VERIXA_RESTORE_CONFIRM: "1"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Start stateful services
+        run: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --wait postgres redis
+
+      - name: Seed probe data
+        run: |
+          set -eu
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T postgres \
+            psql -U verixa -d verixa -v ON_ERROR_STOP=1 -c \
+            "CREATE TABLE IF NOT EXISTS backup_probe (id text PRIMARY KEY, value text); INSERT INTO backup_probe (id, value) VALUES ('probe-1', 'before') ON CONFLICT (id) DO UPDATE SET value = 'before';"
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T redis \
+            redis-cli -a "$REDIS_PASSWORD" SET backup_probe before
+
+      - name: Back up the running containers
+        run: |
+          node infra/docker/scripts/backup.mjs \
+            --compose-file docker-compose.yml --compose-file docker-compose.prod.yml \
+            --output-dir backups --label ci
+          chmod 644 backups/redis-ci.rdb || true
+          test -s backups/postgres-ci.dump
+          test -s backups/redis-ci.rdb
+
+      - name: Recreate containers without deleting volumes
+        run: |
+          set -eu
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml down
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --wait postgres redis
+          value="$(docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T postgres psql -U verixa -d verixa -tAX -c "SELECT value FROM backup_probe WHERE id = 'probe-1'")"
+          test "$value" = "before"
+          value="$(docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T redis redis-cli -a "$REDIS_PASSWORD" GET backup_probe | tr -d '\r')"
+          test "$value" = "before"
+
+      - name: Destroy the named volumes
+        run: docker compose -f docker-compose.yml -f docker-compose.prod.yml down --volumes
+
+      - name: Start with empty volumes and restore
+        run: |
+          set -eu
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --wait postgres redis
+          node infra/docker/scripts/restore.mjs \
+            --compose-file docker-compose.yml --compose-file docker-compose.prod.yml \
+            --dump backups/postgres-ci.dump --rdb backups/redis-ci.rdb
+
+      - name: Assert restored data
+        run: |
+          set -eu
+          value="$(docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T postgres psql -U verixa -d verixa -tAX -c "SELECT value FROM backup_probe WHERE id = 'probe-1'")"
+          test "$value" = "before"
+          value="$(docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T redis redis-cli -a "$REDIS_PASSWORD" GET backup_probe | tr -d '\r')"
+          test "$value" = "before"
+
+      - name: Stop the stack
+        if: always()
+        run: docker compose -f docker-compose.yml -f docker-compose.prod.yml down --volumes || true
+
+  # Issue 387 / #499. Uses the same nginx.conf as production with a stub API,
+  # so a redirect or handshake regression in the shipped config fails here.
+  compose-tls-smoke:
+    runs-on: ubuntu-latest
+    env:
+      PORT_HTTP: "18080"
+      PORT_HTTPS: "18443"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Assert HTTP redirect, TLS handshake and upstream forwarding
+        run: node infra/ci/compose-tls-smoke.mjs

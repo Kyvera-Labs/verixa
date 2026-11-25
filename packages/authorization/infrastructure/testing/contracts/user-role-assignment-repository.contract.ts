@@ -14,8 +14,8 @@ const USER_2 = asId<"UserId">("22222222-2222-4222-8222-222222222222");
 const ADMIN = asId<"UserId">("33333333-3333-4333-8333-333333333333");
 const ROLE_A = asId<"RoleId">("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
 const ROLE_B = asId<"RoleId">("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
-const ORG_X = asId<"OrganizationId">("xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx");
-const ORG_Y = asId<"OrganizationId">("yyyyyyyy-yyyy-4yyy-8yyy-yyyyyyyyyyyy");
+const ORG_X = asId<"OrganizationId">("cccccccc-cccc-4ccc-8ccc-cccccccccccc");
+const ORG_Y = asId<"OrganizationId">("dddddddd-dddd-4ddd-8ddd-dddddddddddd");
 
 function makeAssignment(params: {
   userId: UserId;
@@ -38,13 +38,25 @@ function makeAssignment(params: {
   return result.value;
 }
 
+export interface UserRoleAssignmentRepositoryContractOptions {
+  /**
+   * Whether the repository implementation supports global assignments (`orgId: null`).
+   * In-memory fakes support this; relational database adapters enforcing tenant isolation
+   * and foreign keys on `organization_id` do not. Defaults to `true`.
+   */
+  readonly supportsGlobalAssignments?: boolean;
+}
+
 /**
  * Behavioral contract every `UserRoleAssignmentRepository` implementation must satisfy.
  * Follows the Issue 031 contract-testing pattern.
  */
 export function userRoleAssignmentRepositoryContract(
   createRepository: () => UserRoleAssignmentRepository,
+  options: UserRoleAssignmentRepositoryContractOptions = {},
 ): void {
+  const supportsGlobal = options.supportsGlobalAssignments ?? true;
+
   describe("UserRoleAssignmentRepository contract", () => {
     it("returns undefined for an assignment that was never saved", async () => {
       const repository = createRepository();
@@ -76,7 +88,9 @@ export function userRoleAssignmentRepositoryContract(
       const repository = createRepository();
       const a1 = makeAssignment({ userId: USER_1, roleId: ROLE_A, orgId: ORG_X });
       const a2 = makeAssignment({ userId: USER_1, roleId: ROLE_B, orgId: ORG_Y });
-      const a3 = makeAssignment({ userId: USER_1, roleId: ROLE_A, orgId: null }); // global
+      const a3 = supportsGlobal
+        ? makeAssignment({ userId: USER_1, roleId: ROLE_A, orgId: null })
+        : makeAssignment({ userId: USER_1, roleId: ROLE_B, orgId: ORG_X });
       const otherUser = makeAssignment({ userId: USER_2, roleId: ROLE_A, orgId: ORG_X });
 
       await repository.save(a1);
@@ -97,29 +111,34 @@ export function userRoleAssignmentRepositoryContract(
       const repository = createRepository();
       const scopedX = makeAssignment({ userId: USER_1, roleId: ROLE_A, orgId: ORG_X });
       const scopedY = makeAssignment({ userId: USER_1, roleId: ROLE_A, orgId: ORG_Y });
-      const global = makeAssignment({ userId: USER_1, roleId: ROLE_B, orgId: null });
+      const otherScope = supportsGlobal
+        ? makeAssignment({ userId: USER_1, roleId: ROLE_B, orgId: null })
+        : makeAssignment({ userId: USER_1, roleId: ROLE_B, orgId: ORG_Y });
 
       await repository.save(scopedX);
       await repository.save(scopedY);
-      await repository.save(global);
+      await repository.save(otherScope);
 
       const results = await repository.findByUserAndOrg(USER_1, ORG_X);
       expect(results).toHaveLength(1);
       expect(results[0]?.id).toBe(scopedX.id);
     });
 
-    it("findByUserAndOrg finds global assignments when orgId is null", async () => {
-      const repository = createRepository();
-      const scoped = makeAssignment({ userId: USER_1, roleId: ROLE_A, orgId: ORG_X });
-      const global = makeAssignment({ userId: USER_1, roleId: ROLE_B, orgId: null });
+    it.skipIf(!supportsGlobal)(
+      "findByUserAndOrg finds global assignments when orgId is null",
+      async () => {
+        const repository = createRepository();
+        const scoped = makeAssignment({ userId: USER_1, roleId: ROLE_A, orgId: ORG_X });
+        const global = makeAssignment({ userId: USER_1, roleId: ROLE_B, orgId: null });
 
-      await repository.save(scoped);
-      await repository.save(global);
+        await repository.save(scoped);
+        await repository.save(global);
 
-      const results = await repository.findByUserAndOrg(USER_1, null);
-      expect(results).toHaveLength(1);
-      expect(results[0]?.id).toBe(global.id);
-    });
+        const results = await repository.findByUserAndOrg(USER_1, null);
+        expect(results).toHaveLength(1);
+        expect(results[0]?.id).toBe(global.id);
+      },
+    );
 
     it("findByUserAndOrg excludes expired assignments by default (acceptance criteria)", async () => {
       const repository = createRepository();
@@ -195,7 +214,7 @@ export function userRoleAssignmentRepositoryContract(
       const active = makeAssignment({
         userId: USER_1,
         roleId: ROLE_A,
-        orgId: null,
+        orgId: supportsGlobal ? null : ORG_X,
         assignedAt: pastAssigned,
       });
 

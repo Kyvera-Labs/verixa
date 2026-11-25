@@ -31,6 +31,10 @@ const LOCKFILE_GATE = join(REPO_ROOT, "infra", "ci", "check-lockfile-integrity.m
 const MALWARE_INDICATOR_GATE = join(REPO_ROOT, "infra", "ci", "check-malware-indicators.mjs");
 const SBOM_GENERATOR = join(REPO_ROOT, "infra", "ci", "generate-sbom.ts");
 const DEPENDENCY_SCAN_GATE = join(REPO_ROOT, "infra", "ci", "dependency-scan.mjs");
+const QUALITY_GATE = join(REPO_ROOT, "infra", "ci", "quality-gate.mjs");
+export const QUALITY_GATES_CONFIG = join(REPO_ROOT, "infra", "ci", "quality-gates.json");
+const CHECK_ENV_MATRIX_GATE = join(REPO_ROOT, "infra", "ci", "check-env-matrix.ts");
+const CI_DASHBOARD_GENERATOR = join(REPO_ROOT, "scripts", "ci-dashboard", "generate.ts");
 const SECURITY_FIXTURE_CONFIG = join(
   REPO_ROOT,
   "infra",
@@ -97,6 +101,21 @@ export function runMalwareIndicatorGate(repositoryDirectory: string): ToolResult
 }
 
 /** `pnpm run check:lockfile` at the repository root — the script developers and docs point at. */
+export function runQualityGate(args: readonly string[], env: NodeJS.ProcessEnv = {}): ToolResult {
+  const result = spawnSync(process.execPath, [QUALITY_GATE, ...args], {
+    cwd: REPO_ROOT,
+    encoding: "utf8",
+    // Without this, a GITHUB_STEP_SUMMARY inherited from a CI runner would
+    // have the spec's fixture reports appended to the real job summary.
+    env: { ...process.env, GITHUB_STEP_SUMMARY: "", ...env },
+  });
+  return {
+    exitCode: result.status ?? -1,
+    stdout: result.stdout ?? "",
+    stderr: result.stderr ?? "",
+  };
+}
+
 export function runLockfileGateViaPnpmScript(): ToolResult {
   return run("pnpm", ["run", "check:lockfile"], REPO_ROOT);
 }
@@ -127,6 +146,16 @@ export function runDependencyScan(args: readonly string[]): ToolResult {
 /** `tsx infra/ci/generate-sbom.ts <args>` */
 export function runSbomGenerator(args: readonly string[]): ToolResult {
   return run(process.execPath, [TSX_CLI, SBOM_GENERATOR, ...args], REPO_ROOT);
+}
+
+/** `tsx infra/ci/check-env-matrix.ts <args>` — the Issue 389 environment matrix check. */
+export function runCheckEnvMatrix(args: readonly string[] = []): ToolResult {
+  return run(process.execPath, [TSX_CLI, CHECK_ENV_MATRIX_GATE, ...args], REPO_ROOT);
+}
+
+/** `tsx scripts/ci-dashboard/generate.ts <args>` — the Issue 379 CI dashboard generator. */
+export function runCiDashboardGenerator(args: readonly string[] = []): ToolResult {
+  return run(process.execPath, [TSX_CLI, CI_DASHBOARD_GENERATOR, ...args], REPO_ROOT);
 }
 
 /** `pnpm run sbom:generate <args>` — what `release.yml` calls. */

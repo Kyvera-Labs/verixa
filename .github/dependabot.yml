@@ -1,0 +1,82 @@
+# Dependabot: proposes dependency upgrades as pull requests.
+#
+# Two kinds of pull request come from here, and only one is scheduled:
+#
+# - Security updates open as soon as an advisory affects a locked version.
+#   They are switched on in Settings -> Code security, not in this file, and
+#   the cooldown below does not delay them: a fix for a published advisory
+#   should not wait.
+# - Version updates (everything below) open weekly, grouped, so upgrades
+#   arrive as a few reviewable pull requests rather than a stream.
+#
+# Every one of them is an ordinary pull request: it runs every required
+# check, including the dependency and malware gates, and is merged by a
+# maintainer after review. Nothing here merges anything by itself.
+#
+# Cooldown: a release is only proposed once it has been public for a few
+# days. Most malicious package versions are found and pulled within that
+# window, so waiting means the upgrade arrives after the community has had a
+# look at it rather than in the first hours after it was published.
+
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+    open-pull-requests-limit: 5
+    groups:
+      # Patch and minor upgrades of development tooling (tests, lint, types)
+      # change nothing that ships, so one grouped pull request covers them.
+      dev-dependencies:
+        dependency-type: development
+        update-types: [minor, patch]
+      # Runtime patch and minor upgrades together; a major version of a
+      # runtime dependency always gets its own pull request and its own review.
+      production-dependencies:
+        dependency-type: production
+        update-types: [minor, patch]
+    commit-message:
+      prefix: "fix(deps)"
+      prefix-development: "chore(deps)"
+
+  # The actions in .github/workflows are pinned to commit SHAs with the
+  # release named in a trailing comment; Dependabot updates both together.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+    groups:
+      # Minor and patch releases together. A major version of an action can
+      # change its inputs or runtime, so each one gets its own pull request and
+      # is tested on its own (one grouped PR of 11 majors was not reviewable).
+      github-actions:
+        patterns: ["*"]
+        update-types: [minor, patch]
+    commit-message:
+      prefix: "ci"
+
+  # Base images of the API container (apps/api/Dockerfile).
+  - package-ecosystem: docker
+    directory: /apps/api
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    ignore:
+      # The runtime is Node 22 (package.json engines). Moving to a new major
+      # is a decision, not a routine upgrade.
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
+    commit-message:
+      prefix: "chore(docker)"
