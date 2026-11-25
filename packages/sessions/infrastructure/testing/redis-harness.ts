@@ -75,7 +75,13 @@ function dockerAvailable(): boolean {
 }
 
 function connect(url: string): Redis {
-  const client = new Redis(url, { maxRetriesPerRequest: 1, lazyConnect: false });
+  const client = new Redis(url, {
+    // Logical database 2 is this suite's alone (sessions revocation list); see the other
+    // Redis harnesses. Parallel suites must not clear each other's keys.
+    db: 2,
+    maxRetriesPerRequest: 1,
+    lazyConnect: false,
+  });
   // ioredis emits 'error' on connection trouble; without a listener Node treats
   // it as an unhandled error and can tear the process down. Tests attach their
   // own handling where they exercise failure; this keeps the happy path quiet.
