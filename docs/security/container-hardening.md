@@ -116,8 +116,8 @@ RUN rm -rf /usr/local/lib/node_modules/npm \
 These are in `node:22-alpine` because the same image family is used to build.
 In a production container they are post-compromise tooling:
 
-- `npm`/`npx`/`corepack` turn a foothold into arbitrary code — `npm install
-<anything>` fetches from a registry the operator never approved, into a
+- `npm`/`npx`/`corepack` turn a foothold into arbitrary code —
+  `npm install <anything>` fetches from a registry the operator never approved, into a
   container that already has the database credentials.
 - `/usr/local/include/node` exists only to compile native addons. Nobody
   compiles in a runtime container, and a compiler toolchain that can be
@@ -244,7 +244,7 @@ and an invented figure would be the kind of number someone later cites as
 evidence.
 
 CI measures it on the commit. The `docker` job in `ci.yml` prints
-`docker images verixa-api:ci --format 'size {{.Size}}'` plus `du -sh /app` and
+<code v-pre>docker images verixa-api:ci --format 'size {{.Size}}'</code> plus `du -sh /app` and
 a file count inside the running container, and `container-scan.yml` prints the
 same for its own build with per-layer sizes. Whoever next touches the
 Dockerfile should put the measured figure here, or delete this section as
