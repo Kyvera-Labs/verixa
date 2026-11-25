@@ -15,10 +15,6 @@
       "types": "./dist/composition-root.d.ts",
       "default": "./dist/composition-root.js"
     },
-    "./instrumentation": {
-      "types": "./dist/instrumentation.d.ts",
-      "default": "./dist/instrumentation.js"
-    },
     "./plugins/http-metrics": {
       "types": "./dist/plugins/http-metrics.d.ts",
       "default": "./dist/plugins/http-metrics.js"
