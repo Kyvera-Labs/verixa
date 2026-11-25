@@ -232,3 +232,35 @@ describe("testing-kit builders (Issue 419)", () => {
     });
   });
 });
+
+describe("builder options covered by the coverage ratchet", () => {
+  it("forDeletedUser replaces the hash with an unverifiable sentinel and clears lockout", () => {
+    const credential = aCredential().lockedOut().forDeletedUser().build(NOW);
+
+    expect(credential.passwordHash).toBe("[DELETED]");
+    expect(credential.failedAttempts).toBe(0);
+    expect(credential.lockedUntil).toBeUndefined();
+  });
+
+  it("expiringIn sets the invitation's expiry relative to build time", () => {
+    const ttlMs = 60 * 60 * 1000;
+    const invitation = aPendingInvitation().expiringIn(ttlMs).build(NOW);
+
+    expect(invitation.expiresAt.getTime()).toBe(NOW.getTime() + ttlMs);
+  });
+
+  it("pendingEnrollment leaves the method pending, with or without an explicit secret", () => {
+    const withSecret = anMfaMethod().pendingEnrollment("JBSWY3DPEHPK3PXP").build(NOW);
+    const withDefault = anMfaMethod().pendingEnrollment().build(NOW);
+
+    expect(withSecret.status).toBe("pending");
+    expect(withSecret.secret).toBe("JBSWY3DPEHPK3PXP");
+    expect(withDefault.status).toBe("pending");
+  });
+
+  it("ofType sets the MFA factor kind", () => {
+    const method = anMfaMethod().ofType("webauthn").build(NOW);
+
+    expect(method.type).toBe("webauthn");
+  });
+});
