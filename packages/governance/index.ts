@@ -81,3 +81,11 @@ export type {
   RetentionRunSummary,
 } from "./application/retention-enforcement-job.js";
 export { InMemoryRetentionActionLog } from "./infrastructure/in-memory-retention-action-log.js";
+
+export {
+  Policy,
+  PolicyVersion,
+  type PolicyId,
+  type PolicyStatus,
+  type Ruleset,
+} from "./domain/policy.js";
