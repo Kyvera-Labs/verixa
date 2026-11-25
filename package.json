@@ -37,8 +37,11 @@
     "check:env-matrix": "tsx infra/ci/check-env-matrix.ts",
     "check:migration-safety": "tsx infra/ci/check-migration-safety.ts",
     "sbom:generate": "tsx infra/ci/generate-sbom.ts",
-    "release:dry-run": "semantic-release --dry-run --no-ci",
-    "typecheck:ci": "tsc -p infra/ci/tsconfig.json --noEmit"
+    "typecheck:ci": "tsc -p infra/ci/tsconfig.json --noEmit",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs",
+    "release:dry-run": "semantic-release --dry-run --no-ci"
   },
   "lint-staged": {
     "*.{ts,tsx}": [
@@ -73,6 +76,7 @@
     "tsx": "^4.23.15",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.73.0",
+    "vitepress": "^1.6.4",
     "yaml": "^2.9.1"
   }
 }

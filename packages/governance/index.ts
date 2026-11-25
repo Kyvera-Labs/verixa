@@ -103,3 +103,12 @@ export {
   RemoveMember,
   type MembershipRepository,
 } from "./application/use-cases/manage-membership.js";
+
+export {
+  PolicyToAbacRuleTranslator,
+  PolicyTranslationError,
+} from "./application/policy-to-abac-translator.js";
+export type {
+  GovernancePolicy,
+  TranslatedPolicy,
+} from "./application/policy-to-abac-translator.js";

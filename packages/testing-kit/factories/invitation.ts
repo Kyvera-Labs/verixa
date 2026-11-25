@@ -19,6 +19,8 @@ export interface InvitationFactoryOptions {
   invitedByUserId?: UserId | string;
   status?: InvitationStatus;
   ttlMs?: number;
+  /** Creation time; `expiresAt` is `now + ttlMs`. Defaults to the wall clock. */
+  now?: Date;
 }
 
 /**
@@ -46,7 +48,7 @@ export function makeInvitation(overrides: InvitationFactoryOptions = {}): Invita
       : overrides.invitedByUserId
     : createId<"UserId">()) as unknown as UserId;
 
-  const now = new Date();
+  const now = overrides.now ?? new Date();
   const expiresAt = new Date(now.getTime() + (overrides.ttlMs ?? 7 * 24 * 60 * 60 * 1000));
   const id = (overrides.id
     ? typeof overrides.id === "string"
