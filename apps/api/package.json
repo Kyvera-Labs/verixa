@@ -26,10 +26,6 @@
     "./shutdown": {
       "types": "./dist/shutdown.d.ts",
       "default": "./dist/shutdown.js"
-    },
-    "./plugins/http-metrics": {
-      "types": "./dist/plugins/http-metrics.d.ts",
-      "default": "./dist/plugins/http-metrics.js"
     }
   },
   "scripts": {
