@@ -113,3 +113,8 @@ export { PrismaVerificationRequestRepository } from "./infrastructure/persistenc
 
 // Infrastructure: testing fakes, for contexts that build on verification.
 export { InMemoryVerificationRequestRepository } from "./infrastructure/testing/in-memory-verification-request-repository.js";
+
+// Retention (consumed by governance's retention enforcement, joined structurally in the composition root)
+export type { VerificationRetentionStore } from "./application/ports/verification-retention-store.js";
+export { VerificationRetentionTarget } from "./infrastructure/verification-retention-target.js";
+export { InMemoryVerificationRetentionStore } from "./infrastructure/testing/in-memory-verification-retention-store.js";

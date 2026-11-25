@@ -1,0 +1,3 @@
+# Every ignored CVE must have a rationale and an expiry date. Keep the
+# matching identifier in .trivyignore; the validator checks the two lists.
+waivers: []
