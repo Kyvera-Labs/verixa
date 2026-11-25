@@ -489,7 +489,7 @@ export const rawEnvSchema = z.object({
    * unauthenticated and exposes route names, request volumes and error rates,
    * so it is enabled only where an (internal) scraper needs it.
    */
-  METRICS_ENABLED: booleanFromEnv.default("false"),
+  METRICS_ENABLED: booleanFromEnv.prefault("false"),
 
   /**
    * Collector-agnostic OTLP exporter endpoint URL (e.g. `http://localhost:4318`
