@@ -75,9 +75,11 @@ describe.skipIf(database === undefined)("Prisma repositories (real Postgres)", (
     await db.stop();
   }, 120_000);
 
+  // #region real-database-contract
   describe("UserRepository", () => {
     userRepositoryContract(() => new PrismaUserRepository(db.prisma));
   });
+  // #endregion real-database-contract
 
   describe("OrganizationRepository", () => {
     beforeEach(async () => {
@@ -142,6 +144,7 @@ describe.skipIf(database === undefined)("Prisma repositories (real Postgres)", (
       });
     }
 
+    // #region database-invariant
     it("rejects a second active membership for the same user and organization", async () => {
       const now = new Date();
       await seedOwner(CONTRACT_USER_ID);
@@ -177,6 +180,7 @@ describe.skipIf(database === undefined)("Prisma repositories (real Postgres)", (
 
       await expect(duplicate).rejects.toThrow();
     });
+    // #endregion database-invariant
 
     it("allows rejoining after a membership is revoked", async () => {
       const now = new Date();

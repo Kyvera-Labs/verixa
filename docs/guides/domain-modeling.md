@@ -688,7 +688,7 @@ The registry rejects definitions that are incomplete for their channel:
   dropped without warning at send time;
 - a blank or duplicate entry in `requiredPayloadFields`.
 
-It does **not** parse `{{placeholders}}` out of the body to check that each
+It does **not** parse <code v-pre>{{placeholders}}</code> out of the body to check that each
 one is listed in `requiredPayloadFields`. That check needs a placeholder
 syntax, and the templating engine (Issue 265) chooses that syntax. If
 this issue picked one, it would be a guess that Issue 265 then has to

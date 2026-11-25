@@ -80,6 +80,7 @@ function createMockGeoFetch(mode: "ok" | "timeout" | "malformed" | "server_error
   };
 }
 
+// #region contract
 defineContractTests<GeoIpResolver>(
   [
     {
@@ -123,6 +124,7 @@ defineContractTests<GeoIpResolver>(
     });
   },
 );
+// #endregion contract
 
 describe("GeoIpResolver failure-mode contracts", () => {
   it("enforces timeout failure contract across adapters", async () => {
