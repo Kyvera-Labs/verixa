@@ -445,6 +445,9 @@ importers:
       '@verixa/config':
         specifier: workspace:*
         version: link:../config
+      '@verixa/shared-kernel':
+        specifier: workspace:*
+        version: link:../shared-kernel
       prom-client:
         specifier: ^15.1.3
         version: 15.1.3
