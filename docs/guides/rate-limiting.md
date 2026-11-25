@@ -104,7 +104,7 @@ Both workers saw 1 token and granted the request, yielding 2 granted requests wh
 
 ### The Lua Script Solution
 
-Redis executes Lua scripts atomically in a single event-loop cycle without yielding to other commands. Verixa's `infrastructure/lua/consume-bucket.lua` runs the entire read-refill-consume sequence atomically in one round-trip:
+Redis executes Lua scripts atomically in a single event-loop cycle without yielding to other commands. Verixa's `packages/rate-limiting/infrastructure/lua/consume-bucket.lua` runs the entire read-refill-consume sequence atomically in one round-trip:
 
 1. Retrieves `tokens` and `last_refill` via `HMGET`.
 2. Computes proportional token refill based on `now_ms - last_refill`.
