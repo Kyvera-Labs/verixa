@@ -1,9 +1,87 @@
 import { asId } from "@verixa/shared-kernel";
-import { describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { Credential } from "../../domain/entities/credential.js";
 import { Argon2PasswordHasher } from "../argon2-password-hasher.js";
+import { credentialRepositoryContract } from "../testing/contracts/credential-repository.contract.js";
+import {
+  emailVerificationTokenRepositoryContract,
+  passwordResetTokenRepositoryContract,
+} from "../testing/contracts/verification-token-repository.contract.js";
+import { startTestDatabase, type TestDatabase } from "../testing/database-harness.js";
 import { InMemoryCredentialRepository } from "../testing/in-memory-credential-repository.js";
+
+import { PrismaCredentialRepository } from "./prisma-credential-repository.js";
+import {
+  PrismaEmailVerificationTokenRepository,
+  PrismaPasswordResetTokenRepository,
+} from "./prisma-verification-token-repositories.js";
+
+const database = await startTestDatabase();
+
+const CONTRACT_USER_IDS = [
+  "00000000-0000-4000-8000-000000000001",
+  "00000000-0000-4000-8000-000000000002",
+  "00000000-0000-4000-8000-000000000003",
+  "00000000-0000-4000-8000-000000000010",
+  "00000000-0000-4000-8000-000000000011",
+  "00000000-0000-4000-8000-000000000012",
+  "00000000-0000-4000-8000-000000000013",
+  "00000000-0000-4000-8000-000000000020",
+  "00000000-0000-4000-8000-000000000021",
+  "00000000-0000-4000-8000-000000000022",
+  "00000000-0000-4000-8000-000000000023",
+];
+
+describe.skipIf(database === undefined)("Prisma credentials repositories (real Postgres)", () => {
+  const db = database as TestDatabase;
+
+  beforeAll(async () => {
+    await db.prisma.$connect();
+  }, 120_000);
+
+  afterEach(async () => {
+    await db.prisma.emailVerificationToken.deleteMany({});
+    await db.prisma.passwordResetToken.deleteMany({});
+    await db.prisma.credential.deleteMany({});
+    await db.prisma.user.deleteMany({});
+  });
+
+  afterAll(async () => {
+    await db.stop();
+  }, 120_000);
+
+  beforeEach(async () => {
+    for (const id of CONTRACT_USER_IDS) {
+      await db.prisma.user.create({
+        data: {
+          id,
+          email: `user-${id}@example.com`,
+          displayName: `Contract User ${id.slice(-2)}`,
+          status: "active",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+    }
+  });
+
+  describe("PrismaCredentialRepository contract", () => {
+    credentialRepositoryContract(() => new PrismaCredentialRepository(db.prisma));
+  });
+
+  describe("PrismaEmailVerificationTokenRepository contract", () => {
+    emailVerificationTokenRepositoryContract(
+      () => new PrismaEmailVerificationTokenRepository(db.prisma.emailVerificationToken),
+    );
+  });
+
+  describe("PrismaPasswordResetTokenRepository contract", () => {
+    passwordResetTokenRepositoryContract(
+      () => new PrismaPasswordResetTokenRepository(db.prisma.passwordResetToken),
+    );
+  });
+});
 
 /**
  * Weak and strong parameter sets for testing staleness detection.

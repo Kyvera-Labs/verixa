@@ -46,3 +46,47 @@ describe("GET /health", () => {
     expect(response.body).toEqual({ status: "ok" });
   });
 });
+
+describe("GET /version", () => {
+  const app = buildApp();
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it("returns the build version supplied by the deployment", async () => {
+    const previous = process.env["VERIXA_BUILD_VERSION"];
+    process.env["VERIXA_BUILD_VERSION"] = "ci-smoke-a";
+    try {
+      await app.ready();
+      const response = await supertest(app.server).get("/version");
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({ version: "ci-smoke-a" });
+    } finally {
+      if (previous === undefined) delete process.env["VERIXA_BUILD_VERSION"];
+      else process.env["VERIXA_BUILD_VERSION"] = previous;
+    }
+  });
+});
+
+describe("Rate limiting plugin registration", () => {
+  it("registers rate-limiting plugin and enforces limits on requests", async () => {
+    const app = buildApp({ rateLimit: { defaultMax: 2, defaultTimeWindowMs: 60_000 } });
+    await app.ready();
+
+    const res1 = await app.inject({ method: "GET", url: "/health" });
+    expect(res1.statusCode).toBe(200);
+    expect(res1.headers["x-ratelimit-limit"]).toBe("2");
+    expect(res1.headers["x-ratelimit-remaining"]).toBe("1");
+
+    const res2 = await app.inject({ method: "GET", url: "/health" });
+    expect(res2.statusCode).toBe(200);
+    expect(res2.headers["x-ratelimit-remaining"]).toBe("0");
+
+    const res3 = await app.inject({ method: "GET", url: "/health" });
+    expect(res3.statusCode).toBe(429);
+    expect(res3.headers["retry-after"]).toBeDefined();
+
+    await app.close();
+  });
+});
