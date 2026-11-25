@@ -10,8 +10,8 @@
 #   arrive as a few reviewable pull requests rather than a stream.
 #
 # Every one of them is an ordinary pull request: it runs every required
-# check, including the dependency and malware gates, and needs a code-owner
-# review before it can merge. Nothing here merges anything by itself.
+# check, including the dependency and malware gates, and is merged by a
+# maintainer after review. Nothing here merges anything by itself.
 #
 # Cooldown: a release is only proposed once it has been public for a few
 # days. Most malicious package versions are found and pulled within that
@@ -54,9 +54,14 @@ updates:
       day: monday
     cooldown:
       default-days: 7
+      semver-major-days: 14
     groups:
+      # Minor and patch releases together. A major version of an action can
+      # change its inputs or runtime, so each one gets its own pull request and
+      # is tested on its own (one grouped PR of 11 majors was not reviewable).
       github-actions:
         patterns: ["*"]
+        update-types: [minor, patch]
     commit-message:
       prefix: "ci"
 
