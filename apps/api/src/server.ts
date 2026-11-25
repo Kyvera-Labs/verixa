@@ -5,6 +5,7 @@ import { buildApp } from "./app.js";
 import { buildContainer } from "./composition-root.js";
 import { corsPolicyFromConfig } from "./plugins/cors.js";
 import { securityHeadersFromConfig } from "./plugins/security-headers.js";
+import { createShutdownHandler } from "./shutdown.js";
 
 let config;
 let securityHeaders;
@@ -47,29 +48,19 @@ const app = buildApp({
   trustProxy: config.TRUST_PROXY,
 });
 
-// Close the database connection on shutdown rather than letting the process
-// exit with connections still checked out. Postgres reclaims them eventually,
-// but "eventually" during a rolling deploy means the new instances compete
-// for a pool the old ones have not released.
-const shutdown = (signal: string): void => {
-  app.log.info({ signal }, "shutting down");
-  void app
-    .close()
-    .then(() => container.dispose())
-    .then(() => {
-      process.exit(0);
-    })
-    .catch((error: unknown) => {
-      app.log.error({ err: error }, "error during shutdown");
-      process.exit(1);
-    });
-};
+export {
+  createShutdownHandler,
+  DEFAULT_SHUTDOWN_TIMEOUT_MS,
+  type ShutdownOptions,
+} from "./shutdown.js";
+
+const shutdown = createShutdownHandler(app, container);
 
 process.on("SIGTERM", () => {
-  shutdown("SIGTERM");
+  void shutdown("SIGTERM");
 });
 process.on("SIGINT", () => {
-  shutdown("SIGINT");
+  void shutdown("SIGINT");
 });
 
 app.listen({ port: config.PORT, host: config.HOST }).catch((error: unknown) => {

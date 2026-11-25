@@ -12,3 +12,6 @@ docs
 .env
 .env.*
 !.env.example
+*.log
+*.tsbuildinfo
+.turbo

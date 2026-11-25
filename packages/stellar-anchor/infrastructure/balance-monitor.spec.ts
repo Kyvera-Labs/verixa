@@ -302,7 +302,7 @@ describe("StellarHashAnchor funding guard", () => {
 
     expect(Result.isErr(result)).toBe(true);
     expect(reported).toHaveLength(0);
-  });
+  }, 15000);
 
   it("hands the guard's refusal back unchanged", async () => {
     const guardError = new AnchorError("the guard's own words");

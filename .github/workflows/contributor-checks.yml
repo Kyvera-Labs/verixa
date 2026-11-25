@@ -350,6 +350,8 @@ jobs:
 
       - name: Audit for known vulnerabilities
         if: steps.lock.outputs.changed == 'true'
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
           set -eu
           pnpm install --frozen-lockfile
@@ -366,8 +368,21 @@ jobs:
           # from the pull request, so a change to it is a change to this gate:
           # CODEOWNERS requires a maintainer to review anything under infra/ci/.
           pnpm audit --json > dependency-audit.json || true
+
+          # The same audit of the branch this pull request targets. Findings
+          # already present there were not introduced here, so they are
+          # reported but do not fail the gate: an advisory published against a
+          # dependency on main is main's to fix (the nightly scan has no
+          # baseline and fails on it), not every open pull request's. The
+          # baseline comes from origin, never from the pull request, so a
+          # pull request cannot widen it. `pnpm audit` reads only the lockfile
+          # and workspace manifest, so the base checkout needs no install.
+          git worktree add --detach "$RUNNER_TEMP/base" "origin/$BASE_REF"
+          (cd "$RUNNER_TEMP/base" && pnpm audit --json) > base-dependency-audit.json || true
+
           if ! node infra/ci/dependency-scan.mjs \
             --audit dependency-audit.json \
+            --baseline base-dependency-audit.json \
             --exceptions infra/ci/security-exceptions.json; then
             echo "::error::A high or critical severity advisory affects this dependency change."
             echo "Options, roughly in order of preference: upgrade the dependency,"
@@ -383,7 +398,7 @@ jobs:
   welcome:
     name: First-time contributor
     runs-on: ubuntu-latest
-    if: github.event.action == 'opened'
+    if: github.event.action == 'opened' && github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/github-script@v7
         with:

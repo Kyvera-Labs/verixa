@@ -9,6 +9,9 @@
     "index.spec.ts",
     "config-error.ts",
     "signing-keys.ts",
-    "signing-keys.spec.ts"
+    "signing-keys.spec.ts",
+    "secrets-source.ts",
+    "secrets-source.spec.ts",
+    "secrets-source.contract.spec.ts"
   ]
 }
