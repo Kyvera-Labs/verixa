@@ -1,10 +1,96 @@
-// Curated public API of @verixa/testing-kit: the port contract-test harness,
-// standardized fixture factories (Object Mother pattern) and in-memory fakes.
+// Curated public API of @verixa/testing-kit (Issue 420). Nothing outside this
+// package should import a deep path (`@verixa/testing-kit/factories/...`) —
+// the same boundary every context package keeps (Issue 038; see
+// docs/guides/domain-modeling.md, "Package encapsulation"), enforced by the
+// `no-restricted-imports` rule in eslint.config.mjs.
+//
+// Every name is listed explicitly rather than `export *`-ed from a folder
+// barrel, so adding a helper inside the package never publishes it by
+// accident. Each one is documented in docs/guides/tutorials/testing-the-platform.md
+// or a guide under docs/guides/testing/ — add the docs when adding a name.
 
+// Builders: fluent, domain-valid test data with a history (Issue 419)
+export { aCredential } from "./builders/credential.js";
+export type { CredentialBuilder } from "./builders/credential.js";
+export { aPendingInvitation } from "./builders/invitation.js";
+export type { InvitationBuilder } from "./builders/invitation.js";
+export { anMfaMethod } from "./builders/mfa-method.js";
+export type { MfaMethodBuilder } from "./builders/mfa-method.js";
+export { aVerificationRequest } from "./builders/verification-request.js";
+export type { VerificationRequestBuilder } from "./builders/verification-request.js";
+
+// Factories: Object Mothers for every core aggregate (Issue 402)
+export { makeAuditEvent } from "./factories/audit-event.js";
+export type { AuditEventFactoryOptions } from "./factories/audit-event.js";
+export { makeCredential } from "./factories/credential.js";
+export type { CredentialFactoryOptions } from "./factories/credential.js";
+export { makeInvitation } from "./factories/invitation.js";
+export type { InvitationFactoryOptions } from "./factories/invitation.js";
+export { makeMfaMethod } from "./factories/mfa-method.js";
+export type { MfaMethodFactoryOptions } from "./factories/mfa-method.js";
+export { makeOrganizationMembership } from "./factories/organization-membership.js";
+export type { OrganizationMembershipFactoryOptions } from "./factories/organization-membership.js";
+export { makeOrganization } from "./factories/organization.js";
+export type { OrganizationFactoryOptions } from "./factories/organization.js";
+export { makeRefreshToken } from "./factories/refresh-token.js";
+export type { RefreshTokenFactoryOptions } from "./factories/refresh-token.js";
+export { makeSession } from "./factories/session.js";
+export type { SessionFactoryOptions } from "./factories/session.js";
+export { makeUser } from "./factories/user.js";
+export type { UserFactoryOptions } from "./factories/user.js";
+export { makeVerificationRequest } from "./factories/verification-request.js";
+export type { VerificationRequestFactoryOptions } from "./factories/verification-request.js";
+
+// Fakes: the in-memory adapter registry (Issue 403)
+export type { ResettableFake } from "./fakes/fake-contract.js";
+export { InMemoryRateLimiter } from "./fakes/rate-limiter.js";
+export { InMemoryCaptchaValidator, NoopCaptchaValidator } from "./fakes/captcha.js";
+export type { CaptchaValidator } from "./fakes/captcha.js";
+export {
+  // Identity
+  InMemoryApiKeyRepository,
+  InMemoryInvitationRepository,
+  InMemoryOrganizationMembershipRepository,
+  InMemoryOrganizationRepository,
+  InMemoryUnitOfWork,
+  InMemoryUserRepository,
+  // Sessions
+  InMemoryRevocationList,
+  InMemorySessionAuditLogger,
+  InMemorySessionRepository,
+  // Credentials
+  InMemoryCredentialRepository,
+  InMemoryCredentialsUnitOfWork,
+  InMemoryEmailVerificationTokenRepository,
+  InMemoryPasswordResetTokenRepository,
+  // MFA
+  InMemoryDomainEventPublisher,
+  InMemoryMfaMethodRepository,
+  InMemoryWebAuthnChallengeRepository,
+  InMemoryWebAuthnCredentialRepository,
+  // Authorization
+  InMemoryPermissionRepository,
+  InMemoryPolicyRepository,
+  InMemoryRoleRepository,
+  InMemoryUserRoleAssignmentRepository,
+  // Audit
+  InMemoryAnchorRecordRepository,
+  InMemoryAuditEventReader,
+  InMemoryAuditLogRepository,
+  // Verification
+  InMemoryVerificationRequestRepository,
+  // Shared kernel
+  InMemoryBruteForceAttemptStore,
+  InMemoryEventPublisher,
+  // Stellar anchor
+  InMemoryHashAnchor,
+} from "./fakes/index.js";
+
+// Contract tests: one suite, every adapter of a port (Issue 409)
 export { defineContractTests } from "./contract-test.js";
 export type { ContractImplementation, ContractSpec } from "./contract-test.js";
-export * from "./factories/index.js";
-export * from "./fakes/index.js";
+
+// Determinism: controllable time and randomness (Issue 404)
 export { FixedClock } from "./fixed-clock.js";
 export type { Clock } from "./fixed-clock.js";
 export { SeededRandom } from "./seeded-random.js";
