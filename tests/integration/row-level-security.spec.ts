@@ -1,4 +1,4 @@
-import { PrismaClient } from "@verixa/database";
+import { createPrismaClient, type PrismaClient } from "@verixa/database";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
@@ -152,7 +152,7 @@ describe.skipIf(!available)("row-level security", () => {
       ],
     });
 
-    app = new PrismaClient({ datasources: { db: { url: restrictedUrl() } } });
+    app = createPrismaClient(restrictedUrl());
     await app.$connect();
   }, 120_000);
 

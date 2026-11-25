@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { PrismaClient } from "@verixa/database";
+import { createPrismaClient } from "@verixa/database";
 import { Result } from "@verixa/shared-kernel";
 
 import { User, type UserId } from "../domain/entities/user.js";
@@ -105,7 +105,7 @@ function makeUser(seed: string): User {
 async function main(): Promise<void> {
   const databaseUrl =
     process.env["DATABASE_URL"] ?? "postgres://verixa:verixa@localhost:5432/verixa";
-  const prisma = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
+  const prisma = createPrismaClient(databaseUrl);
   const users = new PrismaUserRepository(prisma);
 
   const seeded: User[] = [];

@@ -361,9 +361,12 @@ Two settings, both validated through `@verixa/config`:
 | `DATABASE_POOL_SIZE`            | 10      | Max connections this process holds open |
 | `DATABASE_POOL_TIMEOUT_SECONDS` | 10      | How long to wait for a free connection  |
 
-The composition root appends these to the connection URL as Prisma's
-`connection_limit` and `pool_timeout` parameters, so operators tune ordinary
-validated config instead of hand-editing query strings.
+The composition root passes these to `createPrismaClient` (in
+`@verixa/database`), which sets them on the node-postgres pool behind
+Prisma's pg driver adapter (`max` and `connectionTimeoutMillis`), so
+operators tune ordinary validated config instead of hand-editing query
+strings. A `connection_limit` or `pool_timeout` parameter already in
+`DATABASE_URL` still overrides them.
 
 **Sizing:** `pool size ≈ (peak concurrent requests touching the database) /
 (number of app instances)`, rounded up modestly.

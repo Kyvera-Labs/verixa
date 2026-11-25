@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { createConnection } from "node:net";
 
-import { PrismaClient } from "@verixa/database";
+import { createPrismaClient, type PrismaClient } from "@verixa/database";
 import { asId, Result } from "@verixa/shared-kernel";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
@@ -47,7 +47,7 @@ describe.skipIf(database === undefined)(
     let prisma: PrismaClient;
 
     beforeAll(async () => {
-      prisma = new PrismaClient({ datasources: { db: { url: database as string } } });
+      prisma = createPrismaClient(database as string);
       await prisma.$connect();
     }, 60_000);
 

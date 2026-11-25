@@ -22,12 +22,12 @@ WORKDIR /repo
 FROM base AS deps
 
 # Only the files pnpm resolves the dependency graph from, plus the Prisma
-# schema the root `prepare` script needs for `db:generate`. `--parents` keeps
+# schema and config the root `prepare` script needs for `db:generate`. `--parents` keeps
 # their workspace-relative paths without an enumerated list that would rot
 # the moment a new package is added (Issue 050). Copying `packages/` whole
 # used to invalidate this layer on every package source edit; now a
 # source-only commit reuses the install layer untouched.
-COPY --parents pnpm-workspace.yaml pnpm-lock.yaml package.json tests/package.json apps/*/package.json packages/*/package.json packages/*/tsconfig.json packages/*/prisma/schema.prisma ./
+COPY --parents pnpm-workspace.yaml pnpm-lock.yaml package.json tests/package.json apps/*/package.json packages/*/package.json packages/*/tsconfig.json packages/*/prisma/schema.prisma packages/database/prisma.config.ts ./
 
 # The pnpm store is a cache, not build output: its contents are derived from
 # the lockfile and can be reused across builds and branches. A layer holding
@@ -134,11 +134,11 @@ RUN set -eu; \
 # container logs. It runs against the pruned tree, so what is proven here is
 # byte-for-byte what ships.
 #
-# The URL is a placeholder: PrismaClient's constructor requires one but does
-# not connect, and connecting is not what is being tested.
+# The URL is a placeholder: building the client (and its pg driver adapter)
+# needs one but does not connect, and connecting is not what is being tested.
 RUN cd /out \
       && DATABASE_URL="postgresql://verixa:verixa@127.0.0.1:5432/verixa" \
-         node --input-type=module -e "const { PrismaClient } = await import('@verixa/database'); new PrismaClient(); console.log('deploy bundle loads and the prisma client initialises');"
+         node --input-type=module -e "const { createPrismaClient } = await import('@verixa/database'); createPrismaClient(process.env.DATABASE_URL); console.log('deploy bundle loads and the prisma client initialises');"
 
 # ---- production: minimal image, non-root, only the deployed bundle ----
 FROM ${NODE_IMAGE} AS production

@@ -4,10 +4,9 @@
 // only this package and the repository adapters that implement Phase 02's
 // ports ever see Prisma types, and the domain/application layers never do.
 //
-// The client is generated, not committed — it's platform-specific (it ships a
-// compiled query-engine binary for the machine that generated it), so
-// `pnpm db:generate` must run after a fresh clone and any time the schema
-// changes. See docs/guides/database.md.
+// The client is generated, not committed — it is derived from the schema (and
+// bundles the query compiler for it), so `pnpm db:generate` must run after a
+// fresh clone and any time the schema changes. See docs/guides/database.md.
 // Loaded through createRequire rather than a static `export ... from`.
 //
 // The generated Prisma client is CommonJS, and Node's ESM loader can only
@@ -22,6 +21,9 @@
 // imported this package, which is why wiring the composition root into the
 // server was worth doing on its own.
 import { createRequire } from "node:module";
+
+// Ships a real ESM build (unlike the generated client), so a static import works.
+import { PrismaPg } from "@prisma/adapter-pg";
 
 const require = createRequire(import.meta.url);
 const prismaRuntime = require("@prisma/client") as typeof import("@prisma/client");
@@ -73,6 +75,72 @@ export const PrismaClientKnownRequestError = prismaRuntime.Prisma.PrismaClientKn
 export type PrismaClientKnownRequestError = InstanceType<
   typeof prismaRuntime.Prisma.PrismaClientKnownRequestError
 >;
+
+/** Pool settings applied when the connection string does not set its own. */
+export interface PoolDefaults {
+  /** Most connections this process holds open (`DATABASE_POOL_SIZE`). */
+  readonly poolSize?: number;
+  /** Seconds to wait for a free connection; 0 waits forever. */
+  readonly poolTimeoutSeconds?: number;
+}
+
+/** The subset of node-postgres's PoolConfig that createPrismaClient sets. */
+export interface PgPoolConfig {
+  readonly connectionString: string;
+  readonly max?: number;
+  readonly connectionTimeoutMillis?: number;
+}
+
+/**
+ * Translates a connection string into node-postgres pool settings.
+ *
+ * Prisma 6's query engine read `connection_limit` and `pool_timeout` from the
+ * URL. Since Prisma 7 the client connects through node-postgres (the pg
+ * driver adapter), which neither understands those parameters nor reads pool
+ * size from the URL at all. So they are lifted out of the URL here and mapped
+ * to `max` and `connectionTimeoutMillis`. As before, values written in the URL
+ * win over `defaults`, so a deployment can still override per environment.
+ */
+export function pgPoolConfig(connectionString: string, defaults: PoolDefaults = {}): PgPoolConfig {
+  const url = new URL(connectionString);
+  const limit = takeIntegerParam(url, "connection_limit", 1) ?? defaults.poolSize;
+  const timeout = takeIntegerParam(url, "pool_timeout", 0) ?? defaults.poolTimeoutSeconds;
+  const rewritten = url.searchParams.size !== new URL(connectionString).searchParams.size;
+  return {
+    // Untouched unless a parameter was removed, so a URL with unusual
+    // escaping is never re-serialised needlessly.
+    connectionString: rewritten ? url.toString() : connectionString,
+    ...(limit !== undefined && { max: limit }),
+    ...(timeout !== undefined && { connectionTimeoutMillis: timeout * 1000 }),
+  };
+}
+
+function takeIntegerParam(url: URL, name: string, min: number): number | undefined {
+  const raw = url.searchParams.get(name);
+  if (raw === null) return undefined;
+  url.searchParams.delete(name);
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < min) {
+    throw new Error(`${name} in the database URL must be an integer >= ${min}, got "${raw}"`);
+  }
+  return value;
+}
+
+/**
+ * Builds a PrismaClient connected to `connectionString`.
+ *
+ * Prisma 7 removed the `datasources` constructor option; a client now needs a
+ * driver adapter. Every client in this repo is built here so that the adapter
+ * and the pool translation above live in one place.
+ */
+export function createPrismaClient(
+  connectionString: string,
+  pool: PoolDefaults = {},
+): PrismaClient {
+  return new prismaRuntime.PrismaClient({
+    adapter: new PrismaPg(pgPoolConfig(connectionString, pool)),
+  });
+}
 
 // Row types for the models defined in prisma/schema.prisma. Repository
 // adapters (Issue 046 onward) map between these and the domain entities;

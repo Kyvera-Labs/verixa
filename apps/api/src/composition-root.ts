@@ -28,7 +28,7 @@ import {
   RequestEmailVerification,
   RequestPasswordReset,
 } from "@verixa/credentials";
-import { PrismaClient } from "@verixa/database";
+import { createPrismaClient, type PrismaClient } from "@verixa/database";
 import {
   GetComplianceCase,
   InMemoryComplianceCaseRepository,
@@ -119,31 +119,21 @@ import { registerNotificationSubscribers } from "./composition/register-notifica
  */
 
 /**
- * Applies pool settings to the connection string (Issue 053).
+ * Pool settings from validated config (Issue 053).
  *
- * Prisma has no constructor option for pool size — it reads
- * `connection_limit` and `pool_timeout` from the URL query string. Building
- * that here keeps the tuning knobs as ordinary validated config
- * (`DATABASE_POOL_SIZE`, `DATABASE_POOL_TIMEOUT_SECONDS`) instead of
- * requiring operators to hand-append query parameters to a URL and get the
- * spelling right.
- *
- * Existing query parameters are preserved; explicit ones in `DATABASE_URL`
- * win, so a deployment can still override per-environment without changing
- * code.
+ * Keeps the tuning knobs as ordinary validated config (`DATABASE_POOL_SIZE`,
+ * `DATABASE_POOL_TIMEOUT_SECONDS`) instead of requiring operators to
+ * hand-append query parameters to a URL and get the spelling right. Explicit
+ * `connection_limit` / `pool_timeout` parameters in `DATABASE_URL` still win,
+ * so a deployment can override per environment without changing code; see
+ * pgPoolConfig in @verixa/database for how they reach the driver.
  */
-function pooledDatabaseUrl(): string {
+function createConfiguredPrismaClient(): PrismaClient {
   const config = loadConfig();
-  const url = new URL(config.DATABASE_URL);
-
-  if (!url.searchParams.has("connection_limit")) {
-    url.searchParams.set("connection_limit", String(config.DATABASE_POOL_SIZE));
-  }
-  if (!url.searchParams.has("pool_timeout")) {
-    url.searchParams.set("pool_timeout", String(config.DATABASE_POOL_TIMEOUT_SECONDS));
-  }
-
-  return url.toString();
+  return createPrismaClient(config.DATABASE_URL, {
+    poolSize: config.DATABASE_POOL_SIZE,
+    poolTimeoutSeconds: config.DATABASE_POOL_TIMEOUT_SECONDS,
+  });
 }
 
 /**
@@ -389,8 +379,7 @@ export function buildContainer(
   prismaClient?: PrismaClient,
   overrides: ContainerOverrides = {},
 ): Container {
-  const prisma =
-    prismaClient ?? new PrismaClient({ datasources: { db: { url: pooledDatabaseUrl() } } });
+  const prisma = prismaClient ?? createConfiguredPrismaClient();
 
   const users = new PrismaUserRepository(prisma);
   const organizations = new PrismaOrganizationRepository(prisma);

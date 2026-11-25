@@ -30,8 +30,10 @@ echo "Applying pending database schema migrations with prisma migrate deploy..."
 if command -v pnpm >/dev/null 2>&1; then
   pnpm --filter @verixa/database run db:migrate:deploy
 elif command -v npx >/dev/null 2>&1; then
-  SCHEMA_PATH="${PRISMA_SCHEMA_PATH:-packages/database/prisma/schema.prisma}"
-  npx prisma migrate deploy --schema="$SCHEMA_PATH"
+  # Prisma 7 reads the schema path and DATABASE_URL from prisma.config.ts,
+  # which it only finds in the working directory unless pointed at it.
+  CONFIG_PATH="${PRISMA_CONFIG_PATH:-packages/database/prisma.config.ts}"
+  npx prisma migrate deploy --config="$CONFIG_PATH"
 else
   echo "Error: Neither pnpm nor npx is available to execute prisma migrate deploy" >&2
   exit 1

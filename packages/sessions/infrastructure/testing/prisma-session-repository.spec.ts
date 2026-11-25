@@ -4,7 +4,7 @@ import { createConnection } from "node:net";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { PrismaClient } from "@verixa/database";
+import { createPrismaClient, type PrismaClient } from "@verixa/database";
 import { createId } from "@verixa/shared-kernel";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
@@ -61,7 +61,7 @@ async function databaseAvailability(): Promise<boolean> {
 
 /** A client for `url`, defaulting to the configured test database. */
 function createTestPrismaClient(url = testDatabaseUrl()): PrismaClient {
-  return new PrismaClient({ datasources: { db: { url } } });
+  return createPrismaClient(url);
 }
 
 /**
