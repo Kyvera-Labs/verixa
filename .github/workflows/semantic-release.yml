@@ -1,0 +1,74 @@
+name: Semantic release
+
+# Computes the next SemVer version from the Conventional Commits on main and
+# publishes a tag plus GitHub Release (Issue 368 / #480, contributed in #590).
+#
+# Manual only (Actions -> Semantic release -> Run workflow). Running on every
+# push to main would publish a release for every merge, and because deploy.yml
+# follows the "Release" workflow, it would also try to deploy each one. A
+# release is a maintainer decision, so it is a button, not a side effect.
+#
+# This is deliberately not named "Release": deploy.yml triggers on the
+# completion of a workflow with that name. The tag created here uses the
+# workflow's GITHUB_TOKEN, which by GitHub's design does not start other
+# workflows, so the tag-triggered SBOM in release.yml does not run on its
+# own. See docs/guides/release-process.md for attaching the SBOM.
+#
+# semantic-release and its plugins come from the lockfile (root
+# devDependencies), not `npx --yes`, so they pass the same supply-chain checks
+# as every other dependency (pnpm minimumReleaseAge, trustPolicy, audit).
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only compute and print the next version; publish nothing"
+        type: boolean
+        default: true
+
+concurrency:
+  group: semantic-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Compute version and publish GitHub Release
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      # Push the tag and create the GitHub Release.
+      contents: write
+      # @semantic-release/github comments on the issues and PRs it released.
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # Full history so semantic-release can walk back to the last tag.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Run semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            pnpm exec semantic-release --dry-run
+          else
+            pnpm exec semantic-release
+          fi

@@ -1,7 +1,23 @@
 name: Commit messages
 
+# Enforces Conventional Commits (Issue 010) on both the pull request title and
+# individual commits (Issue 367 / #479).
+#
+# Why both?
+# - PR title: GitHub squash-merge defaults the resulting commit on `main` to
+#   the PR title. `semantic-release` reads commits on `main` to compute version
+#   bumps and release notes, so a non-conforming PR title breaks release
+#   automation even when individual branch commits were valid.
+# - Individual commits: keeps branch history clean and catches `--no-verify`
+#   bypasses of the local Husky commit-msg hook.
+#
+# Both jobs evaluate against the shared `commitlint.config.cjs` so there is a
+# single source of truth for allowed types and formatting rules.
 on:
   pull_request:
+    # Re-run when the PR title is edited so contributors get immediate feedback
+    # without needing to push an empty commit.
+    types: [opened, edited, synchronize, reopened]
 
 # Read-only token. The action reads the pull request's commits to lint their
 # messages and writes nothing.
@@ -10,7 +26,39 @@ permissions:
   pull-requests: read
 
 jobs:
+  pr-title:
+    name: Validate PR title (Conventional Commits)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      # Validate the PR title directly with the repository's commitlint config
+      # rather than a separate regex action whose type list could drift from
+      # commitlint.config.cjs.
+      - name: Lint PR title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -eu
+          if ! printf '%s\n' "$PR_TITLE" | pnpm exec commitlint --config commitlint.config.cjs; then
+            echo "::error::PR title does not follow Conventional Commits: '$PR_TITLE'. Expected '<type>[optional scope]: <description>' (see docs/guides/conventional-commits.md)."
+            exit 1
+          fi
+
+  # Keep this job reporting as `commitlint`: it is a required status check on
+  # main, and renaming it would leave every pull request waiting forever.
   commitlint:
+    name: commitlint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0

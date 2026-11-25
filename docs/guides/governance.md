@@ -153,3 +153,22 @@ A failed action is logged as `failed` and the job carries on with the rest; the 
 - Session retention scopes by organization through an `OrganizationUserLookup`, because sessions are keyed by user. The composition root must supply it from the identity context.
 - The job is not yet scheduled or composed in the API, and there is no audit-export target yet.
 - `RetentionRule` here is the minimum the job needs. Versioning and overlapping-rule rejection belong to the retention-rule model issue (#369).
+
+## Policy versioning
+
+Policies are edited only while `draft`. Publishing creates an immutable
+`PolicyVersion` snapshot (deep-frozen) and increments the policy version; to
+change a published policy, `revise()` starts a new draft, and the next publish
+appends a new version rather than mutating a published snapshot. This append-only choice
+lets an audit reader reconstruct which rules were in force at an earlier point.
+Published policies can be archived, but their version history remains
+queryable in publication order.
+
+## Organization membership
+
+Organization roles are scoped to one organization and are not platform RBAC.
+`owner` and `admin` may manage memberships; only an owner may grant or retain
+the owner role. A membership change is evaluated against the current owner
+count so the last owner cannot be removed or demoted. Use cases perform
+authorization and persistence orchestration, while the aggregate enforces the
+invariants, making retries safe and auditable at the repository boundary.

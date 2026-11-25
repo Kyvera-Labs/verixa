@@ -35,3 +35,19 @@ export {
   HttpNotificationSender,
   type HttpNotificationSenderConfig,
 } from "./infrastructure/adapters/http-notification-sender.js";
+export type {
+  NotificationComposition,
+  NotificationSubscriber,
+  NotificationWorker,
+} from "./application/ports/notification-runtime.js";
+
+export {
+  type NotificationDeliveryFailure,
+  type NotificationDeliveryQueue,
+} from "./application/ports/delivery-queue.js";
+export {
+  type DeadLetterNotification,
+  type DeadLetterStore,
+} from "./application/ports/dead-letter-store.js";
+export { InMemoryDeadLetterStore } from "./infrastructure/persistence/dead-letter-store.js";
+export { ReplayDeadLetterNotification } from "./application/use-cases/replay-dead-letter-notification.js";
