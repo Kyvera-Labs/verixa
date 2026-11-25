@@ -41,7 +41,8 @@ const baseMetadataSchema = z.object({}).strict();
 
 const ipAddressSchema = z
   .object({
-    ipAddress: z.string().ip().optional(),
+    // Zod 4 split .ip() into ipv4()/ipv6(); the union accepts the same values.
+    ipAddress: z.union([z.ipv4(), z.ipv6()]).optional(),
     userAgent: z.string().optional(),
   })
   .strict();
