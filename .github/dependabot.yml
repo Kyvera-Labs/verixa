@@ -53,8 +53,9 @@ updates:
       interval: weekly
       day: monday
     cooldown:
+      # semver-major-days is not supported for github-actions, so majors
+      # use the same 7-day cooldown; they still arrive one per pull request.
       default-days: 7
-      semver-major-days: 14
     groups:
       # Minor and patch releases together. A major version of an action can
       # change its inputs or runtime, so each one gets its own pull request and
