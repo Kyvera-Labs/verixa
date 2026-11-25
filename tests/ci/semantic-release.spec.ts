@@ -49,25 +49,38 @@ describe("semantic-release configuration & workflow (#480)", () => {
     }
   });
 
-  it("gates semantic-release strictly to pushes on main while preserving tag-triggered SBOM job", async () => {
-    const workflowPath = path.resolve(REPO_ROOT, ".github/workflows/release.yml");
+  it("runs semantic-release only by hand, on main, from the lockfile", async () => {
+    // A release is a maintainer decision. Running on every push to main would
+    // publish a release per merge, and deploy.yml follows the "Release"
+    // workflow, so it would also try to deploy each one.
+    const workflowPath = path.resolve(REPO_ROOT, ".github/workflows/semantic-release.yml");
     const parsed = parseYaml(await fs.readFile(workflowPath, "utf-8")) as {
-      on: { push: { branches: string[]; tags: string[] } };
+      name: string;
+      on: Record<string, unknown>;
       jobs: Record<string, { if?: string; steps: Array<{ run?: string }> }>;
     };
 
-    expect(parsed.on.push.branches).toContain("main");
-    expect(parsed.on.push.tags).toContain("v[0-9]+.[0-9]+.[0-9]+");
+    expect(Object.keys(parsed.on)).toEqual(["workflow_dispatch"]);
+    expect(parsed.name).not.toBe("Release");
 
-    const releaseJob = parsed.jobs["semantic-release"];
+    const releaseJob = parsed.jobs["release"];
     expect(releaseJob).toBeDefined();
     expect(releaseJob?.if).toContain("refs/heads/main");
 
     const releaseRuns = (releaseJob?.steps ?? []).map((s) => s.run ?? "").join("\n");
-    expect(releaseRuns).toContain("semantic-release");
+    expect(releaseRuns).toContain("pnpm exec semantic-release");
+    expect(releaseRuns).not.toContain("npx");
+  });
 
-    const sbomJob = parsed.jobs["sbom"];
-    expect(sbomJob).toBeDefined();
-    expect(sbomJob?.if).toContain("refs/tags/v");
+  it("keeps the SBOM release workflow tag-triggered only", async () => {
+    const workflowPath = path.resolve(REPO_ROOT, ".github/workflows/release.yml");
+    const parsed = parseYaml(await fs.readFile(workflowPath, "utf-8")) as {
+      on: { push: { branches?: string[]; tags: string[] } };
+      jobs: Record<string, unknown>;
+    };
+
+    expect(parsed.on.push.branches).toBeUndefined();
+    expect(parsed.on.push.tags).toContain("v[0-9]+.[0-9]+.[0-9]+");
+    expect(parsed.jobs["semantic-release"]).toBeUndefined();
   });
 });
