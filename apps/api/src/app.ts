@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 
 import fastifySwagger from "@fastify/swagger";
 import fastifySwaggerUi from "@fastify/swagger-ui";
+import type { MetricsRecorder } from "@verixa/observability";
 import { createLogger, type Logger } from "@verixa/shared-kernel";
 import Fastify from "fastify";
 
@@ -16,6 +17,7 @@ import {
   registerBaselineResponseHeaders,
 } from "./plugins/baseline-response-headers.js";
 import { NO_CORS, registerCors, type CorsPolicy } from "./plugins/cors.js";
+import { registerHttpMetrics, type HttpMetricsOptions } from "./plugins/http-metrics.js";
 import { registerRateLimit, type RateLimitPluginOptions } from "./plugins/rate-limit.js";
 import {
   NO_TRANSPORT_SECURITY,
@@ -40,6 +42,8 @@ export type { HstsDirective, SecurityHeadersOptions };
  * into `src/plugins/`.
  */
 export type { CorsPolicy, RateLimitPluginOptions };
+export type { HttpMetricsOptions };
+export { registerHttpMetrics };
 
 /** Re-exported for the integration suite, which builds a GraphQL-only app around a test container. */
 export { createGraphQLApp } from "./graphql/server.js";
@@ -96,6 +100,11 @@ export interface BuildAppOptions {
    * Pass `false` to disable or pass a configuration object to tune limits.
    */
   readonly rateLimit?: boolean | RateLimitPluginOptions;
+  /**
+   * Operational metrics recorder (Phase 18 Observability, Issue 349 / #461).
+   * When provided, registers HTTP golden signal metrics hooks across all routes.
+   */
+  readonly metricsRecorder?: MetricsRecorder;
 }
 
 /**
@@ -154,6 +163,10 @@ export function buildApp(options: BuildAppOptions = {}) {
   // config-driven concern (`./plugins/security-headers.js`, Issue 213) and is
   // deliberately not set here.
   registerBaselineResponseHeaders(app);
+
+  if (options.metricsRecorder !== undefined) {
+    registerHttpMetrics(app, { recorder: options.metricsRecorder });
+  }
 
   if (process.env["NODE_ENV"] !== "production") {
     app.register(fastifySwagger, {
