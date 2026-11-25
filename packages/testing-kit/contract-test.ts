@@ -22,6 +22,8 @@ export function defineContractTests<Port>(
     throw new Error("defineContractTests requires at least one implementation");
   }
 
+  // Validate every name before registering any suite, so a bad list fails as a
+  // whole instead of leaving the earlier implementations' suites registered.
   const names = new Set<string>();
   for (const implementation of implementations) {
     if (implementation.name.trim() === "") {
@@ -31,7 +33,9 @@ export function defineContractTests<Port>(
       throw new Error(`Duplicate contract implementation name: ${implementation.name}`);
     }
     names.add(implementation.name);
+  }
 
+  for (const implementation of implementations) {
     describe(`${implementation.name} contract`, () => {
       let current: Port | undefined;
       beforeEach(async () => {

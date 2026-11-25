@@ -1,5 +1,5 @@
 import { asId } from "@verixa/shared-kernel";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 import { Permission } from "../../domain/value-objects/permission.js";
 import type { AuthenticatedPrincipal, RequestWithPrincipal } from "../guards/require-permission.js";
@@ -13,14 +13,14 @@ import { createResolvePrincipalHook, type PermissionResolverLike } from "./resol
 
 describe("createResolvePrincipalHook", () => {
   let mockChecker: PermissionResolverLike;
-  let resolveEffectivePermissionsSpy: ReturnType<typeof vi.fn>;
+  let resolveEffectivePermissionsSpy: Mock<PermissionResolverLike["resolveEffectivePermissions"]>;
 
   const userId = asId<"UserId">("user_123");
   const orgId = asId<"OrganizationId">("org_456");
 
   beforeEach(() => {
     resolveEffectivePermissionsSpy = vi
-      .fn()
+      .fn<PermissionResolverLike["resolveEffectivePermissions"]>()
       .mockResolvedValue(new Set([Permission.from("users:read"), Permission.from("orgs:*")]));
     mockChecker = {
       resolveEffectivePermissions: resolveEffectivePermissionsSpy,
