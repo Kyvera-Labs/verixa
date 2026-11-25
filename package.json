@@ -41,8 +41,7 @@
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
-    "release:dry-run": "semantic-release --dry-run --no-ci",
-    "typecheck:ci": "tsc -p infra/ci/tsconfig.json --noEmit"
+    "release:dry-run": "semantic-release --dry-run --no-ci"
   },
   "lint-staged": {
     "*.{ts,tsx}": [
@@ -77,8 +76,6 @@
     "tsx": "^4.23.15",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.73.0",
-    "typescript": "^5.7.2",
-    "typescript-eslint": "^8.18.1",
     "vitepress": "^1.6.4",
     "yaml": "^2.9.1"
   }
