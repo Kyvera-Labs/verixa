@@ -29,7 +29,7 @@ export class VerixaClient implements RequestClient {
   readonly #fetch: typeof globalThis.fetch;
 
   constructor(options: VerixaClientOptions) {
-    this.#baseUrl = options.baseUrl.replace(/\/+$/u, "");
+    this.#baseUrl = trimTrailingSlashes(options.baseUrl);
     this.#headers = { Accept: "application/json", ...options.headers };
     this.#fetch = options.fetch ?? globalThis.fetch;
     this.audit = new AuditResource(this);
@@ -53,4 +53,14 @@ export class VerixaClient implements RequestClient {
 
     return (await response.json()) as T;
   }
+}
+
+/**
+ * Strips trailing slashes with a linear scan. A `/\/+$/` regex is quadratic on
+ * long runs of slashes (CodeQL js/polynomial-redos), and baseUrl is caller input.
+ */
+function trimTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47) end -= 1;
+  return value.slice(0, end);
 }
