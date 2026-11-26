@@ -7,6 +7,7 @@ import {
   aggregateCoverage,
   generateHtmlDashboard,
   generateMarkdownSummary,
+  mergeFileEntries,
   parseLcovString,
   runCoverageMerge,
 } from "../../infra/ci/coverage-merge.js";
@@ -178,5 +179,29 @@ describe("coverage-merge (Issue 412)", () => {
     expect(summary.total.lines.pct).toBe(83.33);
     expect(summary.packages["@verixa/pkg-a"]?.lines.pct).toBe(66.67);
     expect(summary.packages["@verixa/pkg-b"]?.lines.pct).toBe(100);
+  });
+
+  it("counts the CI-tooling specs' report (tests/coverage/ci) toward tests/integration", () => {
+    // Since #611 the ci/** specs run under their own config and write to
+    // coverage/ci; both runs are the tests package's coverage.
+    mkdirSync(path.join(tmpDir, "tests/coverage/ci"), { recursive: true });
+    writeFileSync(path.join(tmpDir, "tests/coverage/lcov.info"), FIXTURE_LCOV_1);
+    writeFileSync(path.join(tmpDir, "tests/coverage/ci/lcov.info"), FIXTURE_LCOV_2);
+
+    const report = runCoverageMerge({ repoRoot: tmpDir, outputDir: path.join(tmpDir, "out") });
+
+    expect(Object.keys(report.packages)).toEqual(["tests/integration"]);
+    expect(report.packages["tests/integration"]?.lines).toMatchObject({ covered: 5, total: 6 });
+    expect(report.totalFiles).toBe(2);
+  });
+
+  it("keeps the better-covered entry when two reports measure the same file", () => {
+    const partly = parseLcovString(FIXTURE_LCOV_1);
+    const fully = parseLcovString(FIXTURE_LCOV_1.replace("LH:2", "LH:3"));
+
+    const merged = mergeFileEntries([partly, fully]);
+
+    expect(merged["packages/pkg-a/src/a.ts"]?.lines).toMatchObject({ covered: 3, total: 3 });
+    expect(mergeFileEntries([fully, partly])["packages/pkg-a/src/a.ts"]?.lines.covered).toBe(3);
   });
 });

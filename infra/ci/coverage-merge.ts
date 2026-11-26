@@ -123,6 +123,29 @@ function packageName(fullPath: string, fallback: string): string {
 }
 
 /**
+ * Combines per-file entries from several reports of the same target.
+ *
+ * LCOV summaries here keep only totals per file, not which lines were hit,
+ * so a file covered by two runs cannot be unioned exactly. Keeping the
+ * better-covered entry is a lower bound: it can under-report such a file,
+ * never inflate it. A file only one run loads counts in full.
+ */
+export function mergeFileEntries(
+  reports: ReadonlyArray<Record<string, CoverageEntry>>,
+): Record<string, CoverageEntry> {
+  const merged: Record<string, CoverageEntry> = {};
+  for (const files of reports) {
+    for (const [file, entry] of Object.entries(files)) {
+      const existing = merged[file];
+      if (existing === undefined || entry.lines.covered > existing.lines.covered) {
+        merged[file] = entry;
+      }
+    }
+  }
+  return merged;
+}
+
+/**
  * Discovers coverage directories across packages/* and apps/*.
  */
 export function findPackageCoverageDirs(repoRoot: string): Array<{ name: string; dir: string }> {
@@ -138,6 +161,14 @@ export function findPackageCoverageDirs(repoRoot: string): Array<{ name: string;
       const covDir = path.join(groupDir, "coverage");
       if (existsSync(covDir)) {
         dirs.push({ name: "tests/integration", dir: covDir });
+      }
+      // The CI-tooling specs run under their own config (Issue 415, #611)
+      // and write to coverage/ci. Before that split they ran in the same
+      // coverage run as everything else here, so they count toward the same
+      // target; skipping their report dropped tests/integration by ~7%.
+      const ciCovDir = path.join(covDir, "ci");
+      if (existsSync(ciCovDir)) {
+        dirs.push({ name: "tests/integration", dir: ciCovDir });
       }
       continue;
     }
@@ -351,7 +382,9 @@ export function runCoverageMerge(
   mkdirSync(outputDir, { recursive: true });
 
   const pkgDirs = findPackageCoverageDirs(repoRoot);
-  const packageEntries: Array<{ name: string; files: Record<string, CoverageEntry> }> = [];
+  // Several directories can report the same target (tests/integration has
+  // two runs), so collect per name and merge before aggregating.
+  const reportsByName = new Map<string, Array<Record<string, CoverageEntry>>>();
   const mergedLcovParts: string[] = [];
 
   for (const pkg of pkgDirs) {
@@ -359,10 +392,16 @@ export function runCoverageMerge(
     if (existsSync(lcovFile)) {
       const content = readFileSync(lcovFile, "utf-8");
       mergedLcovParts.push(content);
-      const files = parseLcovString(content);
-      packageEntries.push({ name: pkg.name, files });
+      const reports = reportsByName.get(pkg.name) ?? [];
+      reports.push(parseLcovString(content));
+      reportsByName.set(pkg.name, reports);
     }
   }
+
+  const packageEntries = [...reportsByName].map(([name, reports]) => ({
+    name,
+    files: mergeFileEntries(reports),
+  }));
 
   const report = aggregateCoverage(packageEntries);
 
