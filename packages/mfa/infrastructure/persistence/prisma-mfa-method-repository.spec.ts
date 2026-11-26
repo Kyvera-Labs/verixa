@@ -4,7 +4,7 @@ import { createConnection } from "node:net";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { PrismaClient } from "@verixa/database";
+import { createPrismaClient, type PrismaClient } from "@verixa/database";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { MfaMethod, type UserId } from "../../domain/entities/mfa-method.js";
@@ -86,7 +86,7 @@ describe.skipIf(database === undefined)("PrismaMfaMethodRepository (real Postgre
     process.env["MFA_ENCRYPTION_KEY"] ??= Buffer.alloc(32, 7).toString("base64");
 
     databaseName = scratchDatabaseName();
-    const admin = new PrismaClient({ datasources: { db: { url: database as string } } });
+    const admin = createPrismaClient(database as string);
     try {
       // DDL: Postgres cannot bind a database name. `databaseName` comes only from
       // `scratchDatabaseName()` (fixed prefix, pid, random hex), never from input.
@@ -97,13 +97,13 @@ describe.skipIf(database === undefined)("PrismaMfaMethodRepository (real Postgre
     }
     const scratchUrl = urlForDatabase(database as string, databaseName);
     applyMigrations(scratchUrl);
-    prisma = new PrismaClient({ datasources: { db: { url: scratchUrl } } });
+    prisma = createPrismaClient(scratchUrl);
     await prisma.$connect();
   }, 120_000);
 
   afterAll(async () => {
     await prisma.$disconnect();
-    const admin = new PrismaClient({ datasources: { db: { url: database as string } } });
+    const admin = createPrismaClient(database as string);
     try {
       // eslint-disable-next-line no-restricted-syntax
       await admin.$executeRawUnsafe(`DROP DATABASE IF EXISTS "${databaseName}" WITH (FORCE)`);

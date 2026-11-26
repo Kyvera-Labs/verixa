@@ -4,7 +4,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
-import { PrismaClient } from "@verixa/database";
+import { createPrismaClient, type PrismaClient } from "@verixa/database";
 
 /**
  * Provides a real Postgres for integration tests, by whichever route is
@@ -117,7 +117,7 @@ export async function startTestDatabase(): Promise<TestDatabase | undefined> {
 
   const existing = await existingDatabaseUrl();
   if (existing !== undefined) {
-    const prisma = new PrismaClient({ datasources: { db: { url: existing } } });
+    const prisma = createPrismaClient(existing);
     return {
       url: existing,
       prisma,
@@ -157,7 +157,7 @@ export async function startTestDatabase(): Promise<TestDatabase | undefined> {
   applyMigrations(url);
   // #endregion testcontainers
 
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
+  const prisma = createPrismaClient(url);
   const started = container;
 
   return {

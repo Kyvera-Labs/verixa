@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { randomUUID } from "node:crypto";
 
-import { PrismaClient } from "@verixa/database";
+import { createPrismaClient } from "@verixa/database";
 import { Result } from "@verixa/shared-kernel";
 import { StellarHashAnchor } from "@verixa/stellar-anchor";
 
@@ -145,7 +145,7 @@ async function main(): Promise<void> {
     fail("DATABASE_URL must be set to verify the audit chain.");
   }
 
-  const prisma = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
+  const prisma = createPrismaClient(databaseUrl);
 
   const verify = new VerifyAuditChain(
     new PrismaAuditLogRepository(prisma.auditLogEntry, (work) =>

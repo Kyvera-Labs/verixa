@@ -1,6 +1,6 @@
 import { createConnection } from "node:net";
 
-import { PrismaClient } from "@verixa/database";
+import { createPrismaClient, type PrismaClient } from "@verixa/database";
 
 const CONNECT_TIMEOUT_MS = 2_000;
 
@@ -39,7 +39,7 @@ export async function startTestDatabase(): Promise<TestDatabase | undefined> {
   const required = process.env["REQUIRE_DATABASE_TESTS"] === "1";
   const existing = await existingDatabaseUrl();
   if (existing !== undefined) {
-    const prisma = new PrismaClient({ datasources: { db: { url: existing } } });
+    const prisma = createPrismaClient(existing);
     return { prisma, stop: async () => prisma.$disconnect() };
   }
 

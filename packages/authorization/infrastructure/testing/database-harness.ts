@@ -4,7 +4,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
-import { PrismaClient } from "@verixa/database";
+import { createPrismaClient, type PrismaClient } from "@verixa/database";
 
 const CONNECT_TIMEOUT_MS = 2_000;
 const CONTAINER_START_TIMEOUT_MS = 120_000;
@@ -58,7 +58,7 @@ export async function startTestDatabase(): Promise<TestDatabase | undefined> {
   const required = process.env["REQUIRE_DATABASE_TESTS"] === "1";
   const existing = await existingDatabaseUrl();
   if (existing !== undefined) {
-    const prisma = new PrismaClient({ datasources: { db: { url: existing } } });
+    const prisma = createPrismaClient(existing);
     return { prisma, stop: () => prisma.$disconnect() };
   }
 
@@ -93,7 +93,7 @@ export async function startTestDatabase(): Promise<TestDatabase | undefined> {
     throw error;
   }
 
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
+  const prisma = createPrismaClient(url);
   return {
     prisma,
     stop: async () => {
