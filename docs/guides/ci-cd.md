@@ -55,9 +55,9 @@ The pnpm store cache is keyed strictly on the hash of `pnpm-lock.yaml` rather th
 
 On a warm cache, `pnpm install --frozen-lockfile` completes in ~5-15 seconds compared to ~60-90 seconds uncached.
 
-#### Why the build matrix collapses OS to `ubuntu-latest`
+#### Why CI runs one Node LTS on `ubuntu-latest`
 
-`.github/workflows/ci.yml` uses a Node LTS matrix (`node-version: [22]`) on `ubuntu-latest`. Adding `macos-latest` or `windows-latest` runners was rejected because Linux containers are the sole production deployment target, and non-Linux runners multiply GitHub Actions minute cost by 5-10x without catching production regressions.
+`.github/workflows/ci.yml` runs Node 22, the active LTS, on `ubuntu-latest`. It is not written as a one-entry matrix: GitHub appends matrix values to the check name (`ci (22)`), and branch protection requires a check named `ci`. Testing a second LTS means adding the matrix and updating the required checks together. Adding `macos-latest` or `windows-latest` runners was rejected because Linux containers are the sole production deployment target, and non-Linux runners multiply GitHub Actions minute cost by 5-10x without catching production regressions.
 
 ## Pipeline Stages
 
