@@ -6,8 +6,7 @@ import type {
   RawServerDefault,
   RouteOptions,
 } from "fastify";
-import type { ZodTypeAny } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
+import { z } from "zod";
 
 type OpenApiSchema = Record<string, unknown>;
 
@@ -36,7 +35,7 @@ function getOrCreateAppSchemas(app: FastifyInstance): Map<string, OpenApiSchema>
 }
 
 /** Register one Zod DTO as a reusable Fastify validator and OpenAPI component. */
-export function registerZodSchema<TLogger extends FastifyBaseLogger, TSchema extends ZodTypeAny>(
+export function registerZodSchema<TLogger extends FastifyBaseLogger, TSchema extends z.ZodType>(
   app: App<TLogger>,
   name: string,
   schema: TSchema,
@@ -57,10 +56,15 @@ export function registerZodSchema<TLogger extends FastifyBaseLogger, TSchema ext
     throw new Error(`OpenAPI schema is already registered: ${name}`);
   }
 
-  const jsonSchema = zodToJsonSchema(schema, {
-    target: "openApi3",
-    $refStrategy: "none",
+  // Zod 4 converts natively. `io: "input"` describes what a client must send
+  // (before defaults and transforms), which is what request validation needs;
+  // the `$schema` marker is dropped because the component is embedded in an
+  // OpenAPI document and a Fastify schema store, not served standalone.
+  const jsonSchema = z.toJSONSchema(schema, {
+    target: "openapi-3.0",
+    io: "input",
   }) as OpenApiSchema;
+  delete jsonSchema["$schema"];
   const component = { ...jsonSchema, $id: name };
   schemaHost.addSchema(component);
   appSchemas.set(name, component);
