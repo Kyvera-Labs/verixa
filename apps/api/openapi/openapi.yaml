@@ -5,8 +5,8 @@ info:
   summary: OpenAPI-first contract for the Verixa REST API.
   description: >-
     The contract is authored before route implementations. Reserved tags keep
-    the bounded-context surface stable while each context adds operations in
-    its own focused change.
+    the bounded-context surface stable while each context adds operations in its
+    own focused change.
 servers:
   - url: http://localhost:3000
     description: Local development server
@@ -37,7 +37,8 @@ paths:
       tags:
         - Audit
       summary: Query organization audit log
-      description: Returns a paginated list of audit events for the authenticated reader's organization.
+      description: Returns a paginated list of audit events for the authenticated
+        reader's organization.
       parameters:
         - name: cursor
           in: query
@@ -246,9 +247,9 @@ paths:
       description: >-
         The client names an event; the server transition table decides the
         destination state. A client-supplied target state is never accepted.
-        Responds 409 when the event is not legal from the current state, or
-        when it is a gated transition and the approval chain is not satisfied
-        (or was rejected). Requires `compliance-cases:write`.
+        Responds 409 when the event is not legal from the current state, or when
+        it is a gated transition and the approval chain is not satisfied (or was
+        rejected). Requires `compliance-cases:write`.
       requestBody:
         required: true
         content:
@@ -279,9 +280,9 @@ paths:
       summary: Record an approval or rejection
       description: >-
         Fills one approval slot. Requires `compliance-cases:approve` and, for
-        the requested role, `compliance-cases:approve:<role>`. A role the
-        caller may not use is answered with the same 403 as any other denial.
-        One person can record only one decision per case.
+        the requested role, `compliance-cases:approve:<role>`. A role the caller
+        may not use is answered with the same 403 as any other denial. One
+        person can record only one decision per case.
       requestBody:
         required: true
         content:
@@ -303,6 +304,134 @@ paths:
           $ref: "#/components/responses/ComplianceNotFound"
         "409":
           $ref: "#/components/responses/ComplianceConflict"
+  /admin/organizations/{orgId}/policies:
+    post:
+      tags:
+        - Governance
+      summary: Create an organization policy draft
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePolicyBody"
+      responses:
+        "201":
+          description: Created policy draft
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Policy"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    get:
+      tags:
+        - Governance
+      summary: List organization policies
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        "200":
+          description: Paginated policies
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PolicyPage"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /admin/organizations/{orgId}/policies/{policyId}:
+    patch:
+      tags:
+        - Governance
+      summary: Update a draft policy
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+        - $ref: "#/components/parameters/PolicyId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePolicyBody"
+      responses:
+        "200":
+          description: Updated policy draft
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Policy"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /admin/organizations/{orgId}/policies/{policyId}/publish:
+    post:
+      tags:
+        - Governance
+      summary: Publish a policy, safely repeatable
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+        - $ref: "#/components/parameters/PolicyId"
+      responses:
+        "200":
+          description: Published policy; retrying an already-published policy is a no-op
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Policy"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /admin/organizations/{orgId}/policies/{policyId}/versions:
+    get:
+      tags:
+        - Governance
+      summary: List immutable policy versions
+      parameters:
+        - $ref: "#/components/parameters/OrganizationId"
+        - $ref: "#/components/parameters/PolicyId"
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        "200":
+          description: Paginated policy version history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PolicyVersionPage"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
 components:
   securitySchemes:
     bearerAuth:
@@ -468,6 +597,108 @@ components:
         status:
           type: string
           const: ok
+    CreatePolicyBody:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - ruleset
+      properties:
+        name:
+          type: string
+          minLength: 1
+        ruleset:
+          type: object
+          additionalProperties: true
+    UpdatePolicyBody:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+        ruleset:
+          type: object
+          additionalProperties: true
+    Policy:
+      type: object
+      required:
+        - id
+        - organizationId
+        - name
+        - ruleset
+        - status
+        - version
+      properties:
+        id:
+          type: string
+        organizationId:
+          type: string
+        name:
+          type: string
+        ruleset:
+          type: object
+          additionalProperties: true
+        status:
+          type: string
+          enum:
+            - draft
+            - published
+            - archived
+        version:
+          type: integer
+          minimum: 0
+    PolicyPage:
+      type: object
+      required:
+        - items
+        - hasMore
+        - nextCursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Policy"
+        hasMore:
+          type: boolean
+        nextCursor:
+          type:
+            - string
+            - "null"
+    PolicyVersion:
+      type: object
+      required:
+        - version
+        - ruleset
+        - publishedAt
+      properties:
+        version:
+          type: integer
+          minimum: 1
+        ruleset:
+          type: object
+          additionalProperties: true
+        publishedAt:
+          type: string
+          format: date-time
+    PolicyVersionPage:
+      type: object
+      required:
+        - items
+        - hasMore
+        - nextCursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PolicyVersion"
+        hasMore:
+          type: boolean
+        nextCursor:
+          type:
+            - string
+            - "null"
   parameters:
     ComplianceOrgId:
       name: orgId
@@ -489,9 +720,24 @@ components:
       schema:
         type: string
         minLength: 1
+    OrganizationId:
+      name: orgId
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+    PolicyId:
+      name: policyId
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
   responses:
     ComplianceForbidden:
-      description: Not authenticated, or lacking the required permission. The body never names the permission.
+      description: Not authenticated, or lacking the required permission. The body
+        never names the permission.
       content:
         application/json:
           schema:
@@ -527,7 +773,8 @@ components:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
     NotFound:
-      description: The requested resource does not exist or is not visible to this principal.
+      description: The requested resource does not exist or is not visible to this
+        principal.
       content:
         application/json:
           schema:
