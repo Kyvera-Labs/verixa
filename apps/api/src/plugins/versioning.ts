@@ -23,7 +23,13 @@ declare module "fastify" {
 
 const DEFAULT_SUPPORTED_VERSIONS = ["v1"] as const;
 
-const DEFAULT_EXCLUDED_PATHS: readonly (string | RegExp)[] = ["/health", "/docs", "/favicon.ico"];
+const DEFAULT_EXCLUDED_PATHS: readonly (string | RegExp)[] = [
+  "/health",
+  "/metrics",
+  "/version",
+  "/docs",
+  "/favicon.ico",
+];
 
 function isPathExcluded(urlPath: string, exclusions: readonly (string | RegExp)[]): boolean {
   for (const exclusion of exclusions) {

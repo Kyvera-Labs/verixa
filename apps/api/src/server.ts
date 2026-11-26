@@ -34,15 +34,19 @@ try {
   throw error;
 }
 
-const logger = createLogger({ name: "verixa-api", level: config.LOG_LEVEL });
-
 // The composition root, finally constructed at runtime rather than only in
 // tests. Until this line existed, every repository, use case and mapper in
 // the workspace was unreachable from a running server.
 const container = buildContainer();
+const logger =
+  container.observability?.logger ?? createLogger({ name: "verixa-api", level: config.LOG_LEVEL });
+
 const app = buildApp({
   logger,
   container,
+  metricsRecorder: container.observability?.metricsRecorder,
+  healthCheckRegistry: container.observability?.healthCheckRegistry,
+  metricsEndpoint: config.METRICS_ENABLED,
   securityHeaders,
   cors: corsPolicy,
   trustProxy: config.TRUST_PROXY,

@@ -77,11 +77,17 @@ Images are published from exactly one workflow, so two pipelines never race to p
 - **PR build-only verification**: the `docker` job in `.github/workflows/ci.yml` builds the image on every pull request, without pushing, to verify that the Dockerfile and ESM runtime bundle remain healthy without pushing untrusted artifacts to GHCR.
 - **Single canonical Dockerfile**: we use `apps/api/Dockerfile` directly rather than duplicating a second Dockerfile under `infra/docker/Dockerfile`, preventing configuration drift between CI hardening checks and published images.
 
+## Branch Protection & Required Status Checks
+
+CI only protects `main` when GitHub is configured to block merges on failing checks. The gap between "CI runs" and "CI enforces" is closed by the repository's branch protection policy:
+
+- **Policy & Reproducible Setup**: [`.github/branch-protection.md`](../../.github/branch-protection.md)
+- **Machine-Readable GitHub Ruleset**: [`.github/branch-protection.json`](../../.github/branch-protection.json)
+- **Drift Validator**: `infra/ci/check-branch-protection.mjs` verifies that every required status check context in `.github/branch-protection.json` matches an actual job in `.github/workflows/*.yml` so a job rename can never silently orphan a merge gate.
+
 ## Continuous Delivery
 
-Release automation (semantic-release, driven by the Conventional Commits
-enforced in Issue 010), Docker image publishing, and deployment pipelines
-are covered in Phase 19 and Phase 20 — this document will grow accordingly.
+Release automation (the manual Semantic release workflow, GitHub Releases, and the tag-triggered SBOM) is documented in [`docs/guides/release-process.md`](./release-process.md).
 
 ## Pipeline Observability & Failure Notifications
 

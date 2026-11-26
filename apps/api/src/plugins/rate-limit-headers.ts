@@ -58,8 +58,6 @@ export function applyRateLimitHeaders(
 declare module "fastify" {
   interface FastifyContextConfig {
     rateLimit?: {
-      /** Exempt this route from the global limiter, e.g. the liveness probe (#587). */
-      skip?: boolean;
       action?: RateLimitKey["action"];
       identifier?: (request: FastifyRequest) => string;
       namespace?: string;
