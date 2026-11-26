@@ -118,15 +118,21 @@ COPY scripts/prune-runtime-bundle.mjs scripts/
 RUN node scripts/prune-runtime-bundle.mjs /out
 
 # `@prisma/client` declares the `prisma` CLI and `typescript` as optional peers,
-# and the workspace's `autoInstallPeers` makes `pnpm deploy --prod` install
-# them. Neither is read at runtime — the client loads only the generated
-# `.prisma` output copied above — and both are dev tooling the image must not
-# ship (CI's dev-dependency check). Removed before the load proof below, so a
-# client that did need either one fails the build here rather than in a
-# running container. The symlinks that pointed at them go too.
-RUN set -eu; \
-    find /out/node_modules/.pnpm -mindepth 1 -maxdepth 1 -type d \( -name 'prisma@*' -o -name 'typescript@*' \) -print -exec rm -rf {} +; \
-    find /out/node_modules -type l \( -name prisma -o -name typescript \) -print -delete
+# and the lockfile resolves them, so `pnpm deploy --prod` installs them. Neither
+# is read at runtime (the client loads only the generated `.prisma` output
+# copied above), and both are dev tooling the image must not ship (CI's
+# dev-dependency check). Deleting the two directories by name was enough for
+# Prisma 6; the Prisma 7 CLI brings ~130 packages of its own (Prisma Studio,
+# React, charting libraries and their @types), which stayed behind.
+#
+# So the script walks the bundle from the app's own node_modules, never into
+# `prisma`, `typescript` or `@types/*` (declarations only, never loaded), and
+# deletes every store entry the walk cannot reach, plus links left dangling.
+# Unit-tested in tests/integration/prune-unreachable-packages.spec.ts. Runs
+# before the load proof below, so if the app did need something removed here
+# the build fails at that line rather than in a running container.
+COPY scripts/prune-unreachable-packages.mjs scripts/
+RUN node scripts/prune-unreachable-packages.mjs /out
 
 # Prove the bundle actually loads before shipping it.
 #
