@@ -24,8 +24,8 @@ A common microservices anti-pattern is creating a separate Node.js service for G
 
 ## 2. GraphQL Bootstrap with Mercurius
 
-Mercurius is integrated into the Fastify pipeline in [`apps/api/src/graphql/server.ts`](file:///C:/Users/USER/Gold/verixa/apps/api/src/graphql/server.ts):
-Mercurius is integrated into the Fastify pipeline in [`apps/api/src/graphql/server.ts`](file:///C:/DripsWave/verixa/apps/api/src/graphql/server.ts):
+Mercurius is integrated into the Fastify pipeline in [`apps/api/src/graphql/server.ts`](../../apps/api/src/graphql/server.ts):
+Mercurius is integrated into the Fastify pipeline in [`apps/api/src/graphql/server.ts`](../../apps/api/src/graphql/server.ts):
 
 ```typescript
 import mercurius from "mercurius";
@@ -126,4 +126,4 @@ Standard queries such as `{ __typename }` and introspection are handled natively
 
 1. **Liveness & Independence**: The health endpoint (`GET /health`) remains an independent probe that does not depend on database or GraphQL schema compilation.
 2. **Correlation Header Propagation**: All responses from `/graphql` propagate incoming or generated correlation IDs (`x-correlation-id` / `x-request-id`), matching REST endpoints.
-3. **Automated Verification**: Verified via automated integration tests in [`apps/api/src/graphql/server.spec.ts`](file:///C:/DripsWave/verixa/apps/api/src/graphql/server.spec.ts).
+3. **Automated Verification**: Verified via automated integration tests in [`apps/api/src/graphql/server.spec.ts`](../../apps/api/src/graphql/server.spec.ts).

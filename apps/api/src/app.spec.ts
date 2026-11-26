@@ -72,20 +72,27 @@ describe("GET /version", () => {
 describe("Rate limiting plugin registration", () => {
   it("registers rate-limiting plugin and enforces limits on requests", async () => {
     const app = buildApp({ rateLimit: { defaultMax: 2, defaultTimeWindowMs: 60_000 } });
+    // Health probes are exempt (they must never be throttled), so exercise an
+    // ordinary route.
+    app.get("/limited", () => ({ ok: true }));
     await app.ready();
 
-    const res1 = await app.inject({ method: "GET", url: "/health" });
+    const res1 = await app.inject({ method: "GET", url: "/limited" });
     expect(res1.statusCode).toBe(200);
     expect(res1.headers["x-ratelimit-limit"]).toBe("2");
     expect(res1.headers["x-ratelimit-remaining"]).toBe("1");
 
-    const res2 = await app.inject({ method: "GET", url: "/health" });
+    const res2 = await app.inject({ method: "GET", url: "/limited" });
     expect(res2.statusCode).toBe(200);
     expect(res2.headers["x-ratelimit-remaining"]).toBe("0");
 
-    const res3 = await app.inject({ method: "GET", url: "/health" });
+    const res3 = await app.inject({ method: "GET", url: "/limited" });
     expect(res3.statusCode).toBe(429);
     expect(res3.headers["retry-after"]).toBeDefined();
+
+    // The liveness probe stays reachable while the client is throttled.
+    const probe = await app.inject({ method: "GET", url: "/health" });
+    expect(probe.statusCode).toBe(200);
 
     await app.close();
   });
