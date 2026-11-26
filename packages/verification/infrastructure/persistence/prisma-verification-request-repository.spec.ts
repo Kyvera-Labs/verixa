@@ -1,5 +1,8 @@
+import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createConnection } from "node:net";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { createPrismaClient, type PrismaClient } from "@verixa/database";
 import { asId, Result } from "@verixa/shared-kernel";
@@ -41,19 +44,78 @@ async function databaseUrl(): Promise<string | undefined> {
 
 const database = await databaseUrl();
 
+/** `migrate deploy` so the tests exercise the schema the migrations really produce. */
+function applyMigrations(databaseUrl: string): void {
+  const databasePackageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../database");
+  execFileSync("pnpm", ["exec", "prisma", "migrate", "deploy"], {
+    cwd: databasePackageRoot,
+    env: { ...process.env, DATABASE_URL: databaseUrl },
+    stdio: "ignore",
+    shell: process.platform === "win32",
+  });
+}
+
+/**
+ * A private, migrated copy of the shared database, dropped by `drop()`.
+ *
+ * `pnpm -r test` runs packages concurrently, and several suites clear tables
+ * between tests (`user.deleteMany({})`). On one shared database those clears
+ * delete other suites' fixtures mid-test, which surfaced as foreign-key
+ * failures and rows that vanished. So every caller gets a scratch database of
+ * its own, as the mfa and sessions suites already do.
+ */
+async function createScratchDatabase(
+  baseUrl: string,
+): Promise<{ url: string; drop: () => Promise<void> }> {
+  const name = `verixa_verification_it_${process.pid}_${randomUUID().replaceAll("-", "").slice(0, 8)}`;
+  const url = new URL(baseUrl);
+  url.pathname = `/${name}`;
+
+  // DDL: Postgres cannot bind a database name. `name` is built above from a
+  // fixed prefix, the pid and random hex, never from input.
+  const admin = createPrismaClient(baseUrl);
+  try {
+    // eslint-disable-next-line no-restricted-syntax
+    await admin.$executeRawUnsafe(`CREATE DATABASE "${name}"`);
+  } finally {
+    await admin.$disconnect();
+  }
+
+  const drop = async (): Promise<void> => {
+    const dropper = createPrismaClient(baseUrl);
+    try {
+      // eslint-disable-next-line no-restricted-syntax
+      await dropper.$executeRawUnsafe(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+    } finally {
+      await dropper.$disconnect();
+    }
+  };
+
+  try {
+    applyMigrations(url.toString());
+  } catch (error) {
+    await drop();
+    throw error;
+  }
+  return { url: url.toString(), drop };
+}
+
 describe.skipIf(database === undefined)(
   "PrismaVerificationRequestRepository (real Postgres)",
   () => {
     let prisma: PrismaClient;
+    let scratch: { url: string; drop: () => Promise<void> };
 
     beforeAll(async () => {
-      prisma = createPrismaClient(database as string);
+      scratch = await createScratchDatabase(database as string);
+      prisma = createPrismaClient(scratch.url);
       await prisma.$connect();
-    }, 60_000);
+    }, 120_000);
 
     afterAll(async () => {
       await prisma.$disconnect();
-    }, 60_000);
+      await scratch.drop();
+    }, 120_000);
 
     afterEach(async () => {
       // Contracts assume they start from an empty store. Order matters:
