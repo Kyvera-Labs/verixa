@@ -333,4 +333,4 @@ Cross-cutting infrastructure must be instantiated once at the composition root a
 | **Health Checks** | Live Prisma (`SELECT 1`) & Redis (`PING`)      | Memory stub health checks                 |
 | **`/metrics`**    | Served only when `METRICS_ENABLED=true`        | Not served                                |
 
-For a step-by-step tutorial on adding observability to a new service following Verixa conventions, see [Tutorial: Adding Observability to a Service](docs/guides/tutorials/adding-observability-to-a-service.md).
+For a step-by-step tutorial on adding observability to a new service following Verixa conventions, see [Tutorial: Adding Observability to a Service](./tutorials/adding-observability-to-a-service.md).
