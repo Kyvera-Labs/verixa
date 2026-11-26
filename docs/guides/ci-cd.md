@@ -42,12 +42,40 @@ tolerate a missing build and which doesn't — and regardless of whether a
 future check's failure mode on a missing build is an obvious error or a
 confusing cascade of unrelated ones.
 
-### `pnpm` caching
+### `pnpm` caching and shared workspace setup
 
-`actions/setup-node`'s `cache: pnpm` step caches the pnpm store keyed on
-`pnpm-lock.yaml`, so `pnpm install --frozen-lockfile` is fast on unchanged
-dependencies instead of re-downloading the whole dependency tree on every
-run.
+All workflows that install dependencies share the composite action `.github/actions/setup-workspace/action.yml`. It configures `pnpm`, installs the requested Node.js LTS version (default `22`, matching `package.json#engines.node`), and enables `actions/setup-node`'s `cache: pnpm`.
+
+#### Why lockfile-hash cache keys instead of branch-based keys
+
+The pnpm store cache is keyed strictly on the hash of `pnpm-lock.yaml` rather than on the Git branch name:
+
+- **Correctness**: a branch-keyed cache can serve stale dependency trees after a rebase or lockfile update.
+- **Security (cache poisoning)**: overly broad fallback keys (such as prefixing by branch) allow an untrusted pull request to pollute cache entries read by other runs. Keying on the lockfile hash guarantees that a cache hit matches the exact dependency graph verified by `infra/ci/check-lockfile-integrity.mjs`.
+
+On a warm cache, `pnpm install --frozen-lockfile` completes in ~5-15 seconds compared to ~60-90 seconds uncached.
+
+#### Why CI runs one Node LTS on `ubuntu-latest`
+
+`.github/workflows/ci.yml` runs Node 22, the active LTS, on `ubuntu-latest`. It is not written as a one-entry matrix: GitHub appends matrix values to the check name (`ci (22)`), and branch protection requires a check named `ci`. Testing a second LTS means adding the matrix and updating the required checks together. Adding `macos-latest` or `windows-latest` runners was rejected because Linux containers are the sole production deployment target, and non-Linux runners multiply GitHub Actions minute cost by 5-10x without catching production regressions.
+
+## Pipeline Stages
+
+Static analysis runs in `.github/workflows/lint.yml` as an **independent, parallel workflow** alongside `.github/workflows/ci.yml`:
+
+- Runs ESLint (`pnpm lint`), Prettier (`pnpm format:check`), and strict TypeScript typechecking (`pnpm typecheck` and `pnpm typecheck:ci`) with GitHub PR diff annotations enabled via a problem matcher.
+- **Why parallel instead of only inside the test job**: burying lint and typecheck behind Postgres/Redis service containers and integration tests delays contributor feedback and mixes static-analysis failures with runtime test failures. Running them in an independent workflow isolates the failure signal and fails fast in ~1 minute.
+
+## Image Publishing
+
+Images are published from exactly one workflow, so two pipelines never race to push the same tags.
+
+`.github/workflows/docker-publish.yml` builds the `apps/api` production container image from `apps/api/Dockerfile` (`target: production`) and publishes it to GitHub Container Registry (`ghcr.io/<owner>/verixa-api`):
+
+- **Multi-stage builds**: `apps/api/Dockerfile` separates dependency installation and TypeScript compilation (`deps` / `build` stages) from the minimal `production` runtime stage. Dev dependencies, TypeScript compilers, source maps, and package managers (`npm`, `npx`, `corepack`) are never shipped in the final image, shrinking image size and reducing the production attack surface.
+- **Tagging**: every build is tagged with `sha-<short>` for immutable commit traceability; semantic version tags (`vX.Y.Z`) additionally publish the `X.Y.Z` tag; pushes to `main` update `latest`.
+- **PR build-only verification**: the `docker` job in `.github/workflows/ci.yml` builds the image on every pull request, without pushing, to verify that the Dockerfile and ESM runtime bundle remain healthy without pushing untrusted artifacts to GHCR.
+- **Single canonical Dockerfile**: we use `apps/api/Dockerfile` directly rather than duplicating a second Dockerfile under `infra/docker/Dockerfile`, preventing configuration drift between CI hardening checks and published images.
 
 ## Branch Protection & Required Status Checks
 
