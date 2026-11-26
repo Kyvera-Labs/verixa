@@ -81,9 +81,14 @@ RUN --mount=type=cache,id=verixa-pnpm-store,target=/root/.local/share/pnpm/store
 # the deployed package gives it both, so it falls back to installing
 # @prisma/client from the network to recover — in a build stage, offline.
 # The artefact already exists and is correct. Moving it is the whole job.
+#
+# The patterns match `@prisma+client@<version>` exactly: Prisma 7 also
+# installs @prisma/client-runtime-utils, whose store directory
+# (`@prisma+client-runtime-utils@...`) the looser `*@prisma+client*` matched
+# first, so the client was copied into the wrong package.
 RUN set -eu; \
-    src="$(find /repo/node_modules/.pnpm -maxdepth 5 -type d -path '*@prisma+client*/node_modules/.prisma' -print -quit)"; \
-    dest="$(find /out/node_modules/.pnpm -maxdepth 4 -type d -path '*@prisma+client*/node_modules' -print -quit)"; \
+    src="$(find /repo/node_modules/.pnpm -maxdepth 5 -type d -path '*/@prisma+client@*/node_modules/.prisma' -print -quit)"; \
+    dest="$(find /out/node_modules/.pnpm -maxdepth 4 -type d -path '*/@prisma+client@*/node_modules' -print -quit)"; \
     test -n "$src"; \
     test -n "$dest"; \
     rm -rf "$dest/.prisma"; \
