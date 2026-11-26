@@ -16,6 +16,8 @@ overrides:
   vite: ^6.4.4
   undici: ^8.12.2
   tinypool: ^2.1.2
+  find-my-way: ^9.7.0
+  mysql2: ^3.22.0
 
 importers:
 
@@ -245,7 +247,7 @@ importers:
     devDependencies:
       '@prisma/client':
         specifier: 7.9.0
-        version: 7.9.0(prisma@7.9.0(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
+        version: 7.9.0(prisma@7.9.0(@types/node@22.20.4)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
       '@testcontainers/postgresql':
         specifier: ^12.2.1
         version: 12.2.1(bare-buffer@3.7.3)(supports-color@7.2.0)
@@ -334,7 +336,7 @@ importers:
         version: 7.9.0
       '@prisma/client':
         specifier: 7.9.0
-        version: 7.9.0(prisma@7.9.0(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
+        version: 7.9.0(prisma@7.9.0(@types/node@22.20.4)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
     devDependencies:
       '@types/node':
         specifier: ^22.10.0
@@ -344,7 +346,7 @@ importers:
         version: 5.1.1(vitest@5.1.1)
       prisma:
         specifier: 7.9.0
-        version: 7.9.0(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3)
+        version: 7.9.0(@types/node@22.20.4)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3)
       tsx:
         specifier: ^4.23.1
         version: 4.23.15
@@ -456,7 +458,7 @@ importers:
         version: 22.20.4
       '@verixa/testing-kit':
         specifier: workspace:*
-        version: file:packages/testing-kit(debug@4.4.3(supports-color@7.2.0))(prisma@7.9.0(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(supports-color@7.2.0)(typescript@6.0.3)
+        version: file:packages/testing-kit(debug@4.4.3(supports-color@7.2.0))(prisma@7.9.0(@types/node@22.20.4)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(supports-color@7.2.0)(typescript@6.0.3)
       '@vitest/coverage-v8':
         specifier: ^5.1.0
         version: 5.1.1(vitest@5.1.1)
@@ -490,7 +492,7 @@ importers:
         version: 22.20.4
       '@verixa/testing-kit':
         specifier: workspace:*
-        version: file:packages/testing-kit(debug@4.4.3(supports-color@7.2.0))(prisma@7.9.0(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(supports-color@7.2.0)(typescript@6.0.3)
+        version: file:packages/testing-kit(debug@4.4.3(supports-color@7.2.0))(prisma@7.9.0(@types/node@22.20.4)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(supports-color@7.2.0)(typescript@6.0.3)
       '@vitest/coverage-v8':
         specifier: ^5.1.0
         version: 5.1.1(vitest@5.1.1)
@@ -3649,10 +3651,6 @@ packages:
     resolution: {integrity: sha512-UwbZdEdk59YXIGPW/rbDn/Ayr3mJ5fPH/HJeMPlK8Ez10aUin4iyRwgJvNTSkRfpZ2h8uLX0LbvZm/YUBUpymw==}
     engines: {node: '>=20'}
 
-  find-my-way@9.6.0:
-    resolution: {integrity: sha512-Zf4Xve4RymLl7NgaavNebZ01joJ8MfVerOG43wy7SHLO+r+K0C6d/SE0BiR7AV5V1VOCFlOP7ecdo+I4qmiHrQ==}
-    engines: {node: '>=20'}
-
   find-up-simple@1.0.1:
     resolution: {integrity: sha512-afd4O7zpqHeRyg4PfDQsXmlDe2PfdHtJt6Akt8jOWaApLOZk5JXs6VMR29lz03pRe9mpykrRCYIYxaJYcfpncQ==}
     engines: {node: '>=18'}
@@ -4374,9 +4372,11 @@ packages:
   ms@2.1.3:
     resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
 
-  mysql2@3.15.3:
-    resolution: {integrity: sha512-FBrGau0IXmuqg4haEZRBfHNWB5mUARw6hNwPDXXGg0XzVJ50mr/9hb267lvpVMnhZ1FON3qNd4Xfcez1rbFwSg==}
+  mysql2@3.24.6:
+    resolution: {integrity: sha512-enu73KhbAua2L3dIxjc6qg6ZJ7H3pt1BImZASWNWY5xSsmJ1ZuUPULTDGXgmJbI61vb+nJAG19IZclIq19UidQ==}
     engines: {node: '>= 8.0'}
+    peerDependencies:
+      '@types/node': '>= 8'
 
   mz@2.7.0:
     resolution: {integrity: sha512-z81GNO7nnYMEhrGh9LeymoE4+Yr0Wn5McHIZMK5cfQCl+NDX08sCZgUc9/6MHni9IWuFLm1Z3HTCXu2z9fN62Q==}
@@ -5037,9 +5037,6 @@ packages:
     engines: {node: '>=10'}
     hasBin: true
 
-  seq-queue@0.0.5:
-    resolution: {integrity: sha512-hr3Wtp/GZIc/6DAGPDcV4/9WoZhjrkXsi5B/07QgX8tsdc6ilr7BFM6PM6rbdAX1kFSDYeZGLipIZZKyQP0O5Q==}
-
   set-cookie-parser@3.2.3:
     resolution: {integrity: sha512-bDO7NdAkLprNt3BNl3LAh0oVnOS5+WspzxOxiboo7vRIyTqj2pvFmNWYEFynSGQgpJ+7yG/9nc/aSG20UDBUpg==}
 
@@ -5142,9 +5139,9 @@ packages:
     resolution: {integrity: sha512-UcjcJOWknrNkF6PLX83qcHM6KHgVKNkV62Y8a5uYDVv9ydGQVwAHMKqHdJje1VTWpljG0WYpCDhrCdAOYH4TWg==}
     engines: {node: '>= 10.x'}
 
-  sqlstring@2.3.3:
-    resolution: {integrity: sha512-qC9iz2FlN7DQl3+wjwn3802RTyjCx7sDvfQEXchwa6CWOx07/WVfh91gBmQ9fahw8snwGEWU3xGzOt4tFyHLxg==}
-    engines: {node: '>= 0.6'}
+  sql-escaper@1.9.1:
+    resolution: {integrity: sha512-4p522TVYaJXTbMlYgAwacjyg3EJyYe9KYWYlYJVwZG1YjtzxU5m5iSzsZoGI69Po7j3i/2tKlpZQi7uvhTL+WA==}
+    engines: {bun: '>=1.0.0', deno: '>=2.0.0', node: '>=12.0.0'}
 
   ssh-remote-port-forward@1.0.4:
     resolution: {integrity: sha512-x0LV1eVDwjf1gmG7TTnfqIzf+3VPRz7vrNIjX6oYLbeCrf/PeVY6hkT68Mg+q02qXxQhrLjB0jfgvhevoCRmLQ==}
@@ -6566,11 +6563,11 @@ snapshots:
 
   '@prisma/client-runtime-utils@7.9.0': {}
 
-  '@prisma/client@7.9.0(prisma@7.9.0(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)':
+  '@prisma/client@7.9.0(prisma@7.9.0(@types/node@22.20.4)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)':
     dependencies:
       '@prisma/client-runtime-utils': 7.9.0
     optionalDependencies:
-      prisma: 7.9.0(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3)
+      prisma: 7.9.0(@types/node@22.20.4)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3)
       typescript: 6.0.3
 
   '@prisma/config@7.9.0(magicast@0.5.5)':
@@ -6594,7 +6591,7 @@ snapshots:
       '@prisma/get-platform': 7.2.0
       '@prisma/query-plan-executor': 7.2.0
       '@prisma/streams-local': 0.1.11
-      find-my-way: 9.6.0
+      find-my-way: 9.10.1
       foreground-child: 3.3.1
       get-port-please: 3.2.0
       pathe: 2.0.3
@@ -7329,9 +7326,9 @@ snapshots:
   '@unrs/resolver-binding-win32-x64-msvc@1.13.0':
     optional: true
 
-  '@verixa/audit@file:packages/audit(prisma@7.9.0(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)':
+  '@verixa/audit@file:packages/audit(prisma@7.9.0(@types/node@22.20.4)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)':
     dependencies:
-      '@verixa/database': file:packages/database(prisma@7.9.0(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
+      '@verixa/database': file:packages/database(prisma@7.9.0(@types/node@22.20.4)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
       '@verixa/shared-kernel': file:packages/shared-kernel
       zod: 3.25.76
     transitivePeerDependencies:
@@ -7343,49 +7340,49 @@ snapshots:
     dependencies:
       '@verixa/shared-kernel': file:packages/shared-kernel
 
-  '@verixa/credentials@file:packages/credentials(prisma@7.9.0(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)':
+  '@verixa/credentials@file:packages/credentials(prisma@7.9.0(@types/node@22.20.4)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)':
     dependencies:
       '@node-rs/argon2': 2.2.2
-      '@verixa/database': file:packages/database(prisma@7.9.0(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
-      '@verixa/identity': file:packages/identity(prisma@7.9.0(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
-      '@verixa/mfa': file:packages/mfa(prisma@7.9.0(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
+      '@verixa/database': file:packages/database(prisma@7.9.0(@types/node@22.20.4)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
+      '@verixa/identity': file:packages/identity(prisma@7.9.0(@types/node@22.20.4)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
+      '@verixa/mfa': file:packages/mfa(prisma@7.9.0(@types/node@22.20.4)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
       '@verixa/shared-kernel': file:packages/shared-kernel
     transitivePeerDependencies:
       - pg-native
       - prisma
       - typescript
 
-  '@verixa/database@file:packages/database(prisma@7.9.0(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)':
+  '@verixa/database@file:packages/database(prisma@7.9.0(@types/node@22.20.4)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)':
     dependencies:
       '@prisma/adapter-pg': 7.9.0
-      '@prisma/client': 7.9.0(prisma@7.9.0(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
+      '@prisma/client': 7.9.0(prisma@7.9.0(@types/node@22.20.4)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
     transitivePeerDependencies:
       - pg-native
       - prisma
       - typescript
 
-  '@verixa/identity@file:packages/identity(prisma@7.9.0(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)':
+  '@verixa/identity@file:packages/identity(prisma@7.9.0(@types/node@22.20.4)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)':
     dependencies:
-      '@verixa/database': file:packages/database(prisma@7.9.0(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
+      '@verixa/database': file:packages/database(prisma@7.9.0(@types/node@22.20.4)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
       '@verixa/shared-kernel': file:packages/shared-kernel
     transitivePeerDependencies:
       - pg-native
       - prisma
       - typescript
 
-  '@verixa/mfa@file:packages/mfa(prisma@7.9.0(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)':
+  '@verixa/mfa@file:packages/mfa(prisma@7.9.0(@types/node@22.20.4)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)':
     dependencies:
       '@node-rs/argon2': 2.2.2
-      '@verixa/database': file:packages/database(prisma@7.9.0(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
+      '@verixa/database': file:packages/database(prisma@7.9.0(@types/node@22.20.4)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
       '@verixa/shared-kernel': file:packages/shared-kernel
     transitivePeerDependencies:
       - pg-native
       - prisma
       - typescript
 
-  '@verixa/sessions@file:packages/sessions(prisma@7.9.0(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(supports-color@7.2.0)(typescript@6.0.3)':
+  '@verixa/sessions@file:packages/sessions(prisma@7.9.0(@types/node@22.20.4)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(supports-color@7.2.0)(typescript@6.0.3)':
     dependencies:
-      '@verixa/database': file:packages/database(prisma@7.9.0(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
+      '@verixa/database': file:packages/database(prisma@7.9.0(@types/node@22.20.4)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
       '@verixa/shared-kernel': file:packages/shared-kernel
       ioredis: 5.11.1(supports-color@7.2.0)
     transitivePeerDependencies:
@@ -7406,18 +7403,18 @@ snapshots:
       - debug
       - supports-color
 
-  '@verixa/testing-kit@file:packages/testing-kit(debug@4.4.3(supports-color@7.2.0))(prisma@7.9.0(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(supports-color@7.2.0)(typescript@6.0.3)':
+  '@verixa/testing-kit@file:packages/testing-kit(debug@4.4.3(supports-color@7.2.0))(prisma@7.9.0(@types/node@22.20.4)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(supports-color@7.2.0)(typescript@6.0.3)':
     dependencies:
-      '@verixa/audit': file:packages/audit(prisma@7.9.0(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
+      '@verixa/audit': file:packages/audit(prisma@7.9.0(@types/node@22.20.4)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
       '@verixa/authorization': file:packages/authorization
-      '@verixa/credentials': file:packages/credentials(prisma@7.9.0(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
-      '@verixa/database': file:packages/database(prisma@7.9.0(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
-      '@verixa/identity': file:packages/identity(prisma@7.9.0(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
-      '@verixa/mfa': file:packages/mfa(prisma@7.9.0(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
-      '@verixa/sessions': file:packages/sessions(prisma@7.9.0(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(supports-color@7.2.0)(typescript@6.0.3)
+      '@verixa/credentials': file:packages/credentials(prisma@7.9.0(@types/node@22.20.4)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
+      '@verixa/database': file:packages/database(prisma@7.9.0(@types/node@22.20.4)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
+      '@verixa/identity': file:packages/identity(prisma@7.9.0(@types/node@22.20.4)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
+      '@verixa/mfa': file:packages/mfa(prisma@7.9.0(@types/node@22.20.4)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
+      '@verixa/sessions': file:packages/sessions(prisma@7.9.0(@types/node@22.20.4)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(supports-color@7.2.0)(typescript@6.0.3)
       '@verixa/shared-kernel': file:packages/shared-kernel
       '@verixa/stellar-anchor': file:packages/stellar-anchor(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)
-      '@verixa/verification': file:packages/verification(prisma@7.9.0(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
+      '@verixa/verification': file:packages/verification(prisma@7.9.0(@types/node@22.20.4)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
     transitivePeerDependencies:
       - debug
       - pg-native
@@ -7425,9 +7422,9 @@ snapshots:
       - supports-color
       - typescript
 
-  '@verixa/verification@file:packages/verification(prisma@7.9.0(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)':
+  '@verixa/verification@file:packages/verification(prisma@7.9.0(@types/node@22.20.4)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)':
     dependencies:
-      '@verixa/database': file:packages/database(prisma@7.9.0(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
+      '@verixa/database': file:packages/database(prisma@7.9.0(@types/node@22.20.4)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3))(typescript@6.0.3)
       '@verixa/shared-kernel': file:packages/shared-kernel
     transitivePeerDependencies:
       - pg-native
@@ -8685,12 +8682,6 @@ snapshots:
       fast-querystring: 1.1.2
       safe-regex2: 5.1.2
 
-  find-my-way@9.6.0:
-    dependencies:
-      fast-deep-equal: 3.1.3
-      fast-querystring: 1.1.2
-      safe-regex2: 5.1.2
-
   find-up-simple@1.0.1: {}
 
   find-up@2.1.0:
@@ -9374,17 +9365,16 @@ snapshots:
 
   ms@2.1.3: {}
 
-  mysql2@3.15.3:
+  mysql2@3.24.6(@types/node@22.20.4):
     dependencies:
+      '@types/node': 22.20.4
       aws-ssl-profiles: 1.1.2
-      denque: 2.1.0
       generate-function: 2.3.1
       iconv-lite: 0.7.3
       long: 5.3.2
       lru.min: 1.1.5
       named-placeholders: 1.1.6
-      seq-queue: 0.0.5
-      sqlstring: 2.3.3
+      sql-escaper: 1.9.1
 
   mz@2.7.0:
     dependencies:
@@ -9684,17 +9674,18 @@ snapshots:
     dependencies:
       parse-ms: 4.0.0
 
-  prisma@7.9.0(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3):
+  prisma@7.9.0(@types/node@22.20.4)(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3):
     dependencies:
       '@prisma/config': 7.9.0(magicast@0.5.5)
       '@prisma/dev': 0.24.14(typescript@6.0.3)
       '@prisma/engines': 7.9.0
       '@prisma/studio-core': 0.33.0(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
-      mysql2: 3.15.3
+      mysql2: 3.24.6(@types/node@22.20.4)
       postgres: 3.4.7
     optionalDependencies:
       typescript: 6.0.3
     transitivePeerDependencies:
+      - '@types/node'
       - '@types/react'
       - '@types/react-dom'
       - magicast
@@ -9986,8 +9977,6 @@ snapshots:
 
   semver@7.8.6: {}
 
-  seq-queue@0.0.5: {}
-
   set-cookie-parser@3.2.3: {}
 
   setprototypeof@1.2.0: {}
@@ -10097,7 +10086,7 @@ snapshots:
 
   split2@4.2.0: {}
 
-  sqlstring@2.3.3: {}
+  sql-escaper@1.9.1: {}
 
   ssh-remote-port-forward@1.0.4:
     dependencies:

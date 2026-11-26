@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { pgPoolConfig, Prisma, PrismaClient, UserStatus, type UserRow } from "./index.js";
+import {
+  createPrismaClient,
+  pgPoolConfig,
+  Prisma,
+  PrismaClient,
+  UserStatus,
+  type UserRow,
+} from "./index.js";
 
 /**
  * These assert that the generated client exists and is exported correctly —
@@ -132,5 +139,22 @@ describe("pgPoolConfig", () => {
   it("rejects a connection_limit that is not a positive integer", () => {
     expect(() => pgPoolConfig(`${base}?connection_limit=0`)).toThrow(/connection_limit/);
     expect(() => pgPoolConfig(`${base}?pool_timeout=soon`)).toThrow(/pool_timeout/);
+  });
+});
+
+describe("createPrismaClient", () => {
+  it("builds a client on the pg driver adapter without connecting", async () => {
+    // Nothing listens on port 1: building the client must not connect.
+    // The client is never handed to expect() itself, which would recurse
+    // through its proxies (see the note at the top of this file).
+    const client = createPrismaClient("postgresql://verixa:verixa@127.0.0.1:1/verixa", {
+      poolSize: 2,
+      poolTimeoutSeconds: 1,
+    });
+
+    // The constructor returns a proxy, so check its surface, not instanceof.
+    expect(typeof client.$connect).toBe("function");
+    expect(typeof client.user.findMany).toBe("function");
+    await client.$disconnect();
   });
 });

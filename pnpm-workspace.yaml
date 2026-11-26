@@ -123,3 +123,14 @@ overrides:
   # leading to RCE (two advisories, both closed at 2.1.2). Transitive via
   # vitest's own worker-pool dependency.
   tinypool: "^2.1.2"
+  # find-my-way <=9.6.0: denial of service over HTTP/2 (GHSA-c96f-x56v-gq3h,
+  # high), fixed in 9.7.0. fastify already resolves a fixed 9.x; the old copy
+  # is pinned by @prisma/dev, the prisma CLI's local dev-server tooling
+  # (build-time only, stripped from the image), so an override is the only
+  # lever. Constrained to the 9.x line, same reasoning as nanoid above.
+  find-my-way: "^9.7.0"
+  # mysql2 <3.22.0: auth-plugin downgrade leaks plaintext credentials
+  # (GHSA-3f6p-5ww8-9rcr, high), fixed in 3.22.0. Pinned exactly by the
+  # prisma 7 CLI for MySQL support; this repo only talks to Postgres, so the
+  # code never runs, but the audit gate rightly counts it. Constrained to 3.x.
+  mysql2: "^3.22.0"
