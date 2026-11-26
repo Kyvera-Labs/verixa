@@ -7,7 +7,7 @@ import {
   aggregateCoverage,
   generateHtmlDashboard,
   generateMarkdownSummary,
-  mergeFileEntries,
+  mergeLcovReports,
   parseLcovString,
   runCoverageMerge,
 } from "../../infra/ci/coverage-merge.js";
@@ -195,13 +195,43 @@ describe("coverage-merge (Issue 412)", () => {
     expect(report.totalFiles).toBe(2);
   });
 
-  it("keeps the better-covered entry when two reports measure the same file", () => {
-    const partly = parseLcovString(FIXTURE_LCOV_1);
-    const fully = parseLcovString(FIXTURE_LCOV_1.replace("LH:2", "LH:3"));
+  it("unions two reports of the same file line by line", () => {
+    // Run one covers lines 1-2 and one branch; run two covers line 3 and the
+    // other branch. Neither alone is complete; together they are.
+    const runTwo = `
+TN:
+SF:packages/pkg-a/src/a.ts
+FN:1,funcA
+FNDA:0,funcA
+FNF:1
+FNH:0
+BRDA:5,0,0,-
+BRDA:5,0,1,3
+BRF:2
+BRH:1
+DA:1,0
+DA:2,0
+DA:3,4
+LF:3
+LH:1
+end_of_record
+`;
 
-    const merged = mergeFileEntries([partly, fully]);
+    const merged = parseLcovString(mergeLcovReports([FIXTURE_LCOV_1, runTwo]));
+    const file = merged["packages/pkg-a/src/a.ts"];
 
-    expect(merged["packages/pkg-a/src/a.ts"]?.lines).toMatchObject({ covered: 3, total: 3 });
-    expect(mergeFileEntries([fully, partly])["packages/pkg-a/src/a.ts"]?.lines.covered).toBe(3);
+    expect(file?.lines).toMatchObject({ covered: 3, total: 3 });
+    expect(file?.functions).toMatchObject({ covered: 1, total: 1 });
+    expect(file?.branches).toMatchObject({ covered: 2, total: 2 });
+  });
+
+  it("keeps files that only one report contains", () => {
+    const merged = parseLcovString(mergeLcovReports([FIXTURE_LCOV_1, FIXTURE_LCOV_2]));
+
+    expect(Object.keys(merged).sort()).toEqual([
+      "packages/pkg-a/src/a.ts",
+      "packages/pkg-b/src/b.ts",
+    ]);
+    expect(merged["packages/pkg-b/src/b.ts"]?.lines).toMatchObject({ covered: 3, total: 3 });
   });
 });
