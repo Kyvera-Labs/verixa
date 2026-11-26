@@ -77,6 +77,20 @@ describe("Conventional Commit & PR-title lint enforcement (#479)", () => {
     15_000,
   );
 
+  // ad89fbd from #590 is the single exempt header (see commitlint.config.cjs).
+  const exemptHeader =
+    "feat(ci): add test coverage workflow, dashboards-as-code, commitlint PR-title gate, and semantic-release";
+
+  it("accepts the one exempt historical header, which is over the length limit", () => {
+    expect(exemptHeader.length).toBeGreaterThan(100);
+    expect(lintCommitMessage(exemptHeader).status).toBe(0);
+  }, 15_000);
+
+  it("still rejects that header with any change, so the exemption cannot be reused", () => {
+    expect(lintCommitMessage(`${exemptHeader}s`).status).not.toBe(0);
+    expect(lintCommitMessage(exemptHeader.replace("feat(ci)", "feat(api)")).status).not.toBe(0);
+  }, 15_000);
+
   it("configures .github/workflows/commitlint.yml to lint PR titles on title edits", async () => {
     const workflowPath = path.resolve(REPO_ROOT, ".github/workflows/commitlint.yml");
     const raw = await fs.readFile(workflowPath, "utf-8");
