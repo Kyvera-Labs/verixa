@@ -41,7 +41,8 @@
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
-    "release:dry-run": "semantic-release --dry-run --no-ci"
+    "release:dry-run": "semantic-release --dry-run --no-ci",
+    "perf:budget": "tsx infra/ci/perf-budget.ts"
   },
   "lint-staged": {
     "*.{ts,tsx}": [
@@ -59,6 +60,8 @@
     "@semantic-release/commit-analyzer": "^13.0.1",
     "@semantic-release/github": "^11.0.6",
     "@semantic-release/release-notes-generator": "^14.1.1",
+    "@stryker-mutator/core": "^10.1.1",
+    "@stryker-mutator/vitest-runner": "^10.1.1",
     "@types/node": "^22.10.0",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
