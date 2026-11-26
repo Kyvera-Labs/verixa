@@ -65,3 +65,60 @@ describe("GetUsersByOrganizationIds", () => {
     expect(map.get(ORG_2)?.[0]?.id).toBe(user2.id);
   });
 });
+
+/**
+ * Added in Issue 417: kills mutants the mutation-testing spike found
+ * surviving in get-users-by-organization-ids.ts.
+ */
+describe("GetUsersByOrganizationIds: memberships that must not produce a user", () => {
+  const registered = (email: string) =>
+    User.register({
+      email: unwrap(Email.create(email)),
+      displayName: unwrap(DisplayName.create(email.split("@")[0] ?? email)),
+    });
+
+  it("leaves out a user whose membership was revoked", async () => {
+    // Kills :42 (the `status === "active"` filter replaced by `true`, or
+    // removed): a user who left would still be listed as a member.
+    const userRepo = new InMemoryUserRepository();
+    const membershipRepo = new InMemoryOrganizationMembershipRepository();
+    const member = registered("member@example.com");
+    const former = registered("former@example.com");
+    await userRepo.save(member);
+    await userRepo.save(former);
+    await membershipRepo.save(
+      unwrap(OrganizationMembership.create({ userId: member.id, organizationId: ORG_1 })),
+    );
+    await membershipRepo.save(
+      unwrap(OrganizationMembership.create({ userId: former.id, organizationId: ORG_1 })).revoke(),
+    );
+
+    const result = await new GetUsersByOrganizationIds(membershipRepo, userRepo).execute({
+      organizationIds: [ORG_1],
+    });
+
+    expect(Result.isOk(result) && result.value.get(ORG_1)?.map((u) => u.id)).toEqual([member.id]);
+  });
+
+  it("skips a membership whose user no longer exists, rather than listing a hole", async () => {
+    // Kills :54 (`user !== undefined` -> `true`), which would push `undefined`
+    // into the organization's user list.
+    const userRepo = new InMemoryUserRepository();
+    const membershipRepo = new InMemoryOrganizationMembershipRepository();
+    const member = registered("present@example.com");
+    const missing = registered("missing@example.com");
+    await userRepo.save(member);
+    await membershipRepo.save(
+      unwrap(OrganizationMembership.create({ userId: member.id, organizationId: ORG_2 })),
+    );
+    await membershipRepo.save(
+      unwrap(OrganizationMembership.create({ userId: missing.id, organizationId: ORG_2 })),
+    );
+
+    const result = await new GetUsersByOrganizationIds(membershipRepo, userRepo).execute({
+      organizationIds: [ORG_2],
+    });
+
+    expect(Result.isOk(result) && result.value.get(ORG_2)?.map((u) => u.id)).toEqual([member.id]);
+  });
+});

@@ -141,3 +141,33 @@ describe("Invitation", () => {
     expect(revoked.status).toBe("accepted");
   });
 });
+
+/** Added in Issue 417: kills mutants the mutation-testing spike found surviving in invitation.ts. */
+describe("Invitation: default lifetime, the expiry instant, and events per action", () => {
+  it("expires seven days after it is created when no lifetime is given", () => {
+    // Kills :31 (the DEFAULT_TTL_MS arithmetic) and :118 (`?? DEFAULT` ->
+    // `&& DEFAULT`).
+    const { invitation } = issue();
+    expect(invitation.expiresAt.getTime() - invitation.createdAt.getTime()).toBe(
+      7 * 24 * 60 * 60 * 1000,
+    );
+  });
+
+  it("counts as expired at the exact expiry instant", () => {
+    // Kills :151 (`>=` -> `>`): an invitation must not be accepted at the
+    // instant it was meant to stop working.
+    const { invitation } = issue(60_000);
+    expect(invitation.isExpired(new Date(invitation.expiresAt.getTime()))).toBe(true);
+  });
+
+  it("produces no new events when accepted or revoked", () => {
+    // Kills :182 and :191 (the empty event lists replaced): each instance
+    // carries only the events of the action that produced it, so accepting
+    // or revoking must not re-emit anything.
+    const { invitation } = issue();
+    const accepted = invitation.accept();
+    if (!Result.isOk(accepted)) throw new Error("fixture setup failed");
+    expect(accepted.value.pullDomainEvents()).toEqual([]);
+    expect(issue().invitation.revoke().pullDomainEvents()).toEqual([]);
+  });
+});

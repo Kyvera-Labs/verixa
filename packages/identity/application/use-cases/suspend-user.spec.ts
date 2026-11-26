@@ -74,3 +74,28 @@ describe("SuspendUser", () => {
     expect(Result.isErr(result)).toBe(true);
   });
 });
+
+/**
+ * Added in Issue 417: kills suspend-user.ts:31 (the field-error object or its
+ * array emptied), which the mutation-testing spike found surviving because
+ * the existing test checked only the error code.
+ */
+describe("SuspendUser: what a refusal says", () => {
+  it("names the reason field when the reason is missing", async () => {
+    const repository = new InMemoryUserRepository();
+    const registered = await new RegisterUser(repository).execute({
+      email: "dave@example.com",
+      displayName: "Dave",
+    });
+    if (!Result.isOk(registered)) throw new Error("fixture setup failed");
+
+    const result = await new SuspendUser(repository).execute({
+      userId: registered.value.id,
+      reason: "",
+    });
+
+    expect(Result.isErr(result) && result.error).toMatchObject({
+      fieldErrors: { reason: ["required"] },
+    });
+  });
+});

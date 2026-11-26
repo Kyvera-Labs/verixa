@@ -5,10 +5,13 @@ export const policyParamsZod = z
   .object({ orgId: z.string().min(1), policyId: z.string().min(1) })
   .strict();
 export const createPolicyBodyZod = z
-  .object({ name: z.string().trim().min(1), ruleset: z.record(z.unknown()) })
+  .object({ name: z.string().trim().min(1), ruleset: z.record(z.string(), z.unknown()) })
   .strict();
 export const updatePolicyBodyZod = z
-  .object({ name: z.string().trim().min(1).optional(), ruleset: z.record(z.unknown()).optional() })
+  .object({
+    name: z.string().trim().min(1).optional(),
+    ruleset: z.record(z.string(), z.unknown()).optional(),
+  })
   .strict()
   .refine((body) => body.name !== undefined || body.ruleset !== undefined, {
     message: "At least one policy field must be provided.",
