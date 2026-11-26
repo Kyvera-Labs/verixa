@@ -70,3 +70,9 @@ sbom/
 # site CI uploads as an artifact.
 docs/.vitepress/cache/
 docs/.vitepress/dist/
+
+# CI health dashboard written by scripts/ci-dashboard/generate.ts. CI
+# regenerates it from GitHub run history in notify-on-failure.yml and
+# publishes it to the run summary; a local run has no history and writes
+# an empty, misleading copy into the repo root.
+/ci-dashboard.md
