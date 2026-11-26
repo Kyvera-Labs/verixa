@@ -89,18 +89,21 @@ a developer's own development database.
 
 ## Waiting for Postgres to be ready
 
-`pnpm db:wait` (`scripts/db-wait.mjs`) polls a plain TCP connection to
-`DATABASE_URL`'s host:port until it succeeds or times out (30 attempts,
-1s apart). It's a standalone Node script, not a workspace package — no
-`pg` driver dependency, just `node:net` — because "is anything listening on
-this port yet" doesn't require speaking the Postgres wire protocol. That's
-weaker than "Postgres has finished initializing and is ready for queries"
-(a container can accept a TCP connection slightly before the database
-behind it is fully up), which is why `docker-compose.yml`'s own
-`healthcheck` (`pg_isready`, the real Postgres readiness check) is still
-the authoritative signal for `depends_on: condition: service_healthy` in
-that file. `db:wait` exists for contexts without compose's health-check
-orchestration to lean on — a plain shell script, a CI step before compose
+`pnpm db:wait` (`scripts/db-wait.mjs`) polls `DATABASE_URL`'s host:port
+until Postgres itself answers, or times out (30 attempts, 1s apart). It's a
+standalone Node script, not a workspace package: no `pg` driver dependency,
+just `node:net`. Each attempt sends the 8-byte SSLRequest that opens every
+Postgres session and waits for the server's one-byte reply.
+
+A plain TCP connect is not enough. Docker publishes a container port through
+a proxy that accepts connections on the host as soon as the container
+starts, before Postgres inside is listening, so a connect-only check passed
+immediately and the `prisma migrate deploy` after it failed with P1001 (seen
+in CI's quickstart job). The proxy just closes the connection; only Postgres
+sends the reply byte. `docker-compose.yml`'s own `healthcheck` (`pg_isready`)
+remains the signal for `depends_on: condition: service_healthy` in that
+file. `db:wait` exists for contexts without compose's health-check
+orchestration to lean on: a plain shell script, a CI step before compose
 is involved, or a developer who wants to know from the command line.
 
 ## Verifying connectivity
@@ -109,8 +112,8 @@ is involved, or a developer who wants to know from the command line.
 `TEST_DATABASE_URL` succeeds — no application code, no ORM, just proof that
 whatever's running there is reachable from wherever the test is. It shares
 its connection-check helper (`tests/integration/helpers/tcp-connect.ts`)
-with nothing else in the codebase on purpose: `scripts/db-wait.mjs` needs
-the identical logic but is a dependency-free root-level script outside any
+with nothing else in the codebase on purpose: `scripts/db-wait.mjs` once
+needed the identical logic (it now checks for a Postgres reply instead) and is a dependency-free root-level script outside any
 workspace package's TypeScript project, so importing between the two would
 mean crossing a boundary that doesn't otherwise exist. Duplicating ~15
 lines was the simpler, more honest choice than inventing a shared module
