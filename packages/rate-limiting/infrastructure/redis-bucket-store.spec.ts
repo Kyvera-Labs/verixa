@@ -50,8 +50,9 @@ class InMemoryMockRedis {
       }
     }
 
-    let allowed = 0;
-    let timeToNextMs = 0;
+    // Assigned on every branch below.
+    let allowed: number;
+    let timeToNextMs: number;
 
     if (currentTokens >= requested) {
       allowed = 1;
