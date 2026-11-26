@@ -1,0 +1,48 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`shared error envelope > 400 VALIDATION_ERROR: a request rejected by route schema validation 1`] = `
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "details": {
+      "fields": {
+        "body.password": [
+          "must have required property 'password'",
+        ],
+      },
+    },
+    "message": "Request validation failed.",
+    "requestId": Any<String>,
+  },
+}
+`;
+
+exports[`shared error envelope > 401 AUTHENTICATION_FAILED: a domain error returned by a use case 1`] = `
+{
+  "error": {
+    "code": "AUTHENTICATION_FAILED",
+    "message": "Invalid email or password.",
+    "requestId": Any<String>,
+  },
+}
+`;
+
+exports[`shared error envelope > 403 FORBIDDEN: a request refused by a route guard 1`] = `
+{
+  "error": {
+    "code": "FORBIDDEN",
+    "message": "Reviewer role required",
+    "requestId": Any<String>,
+  },
+}
+`;
+
+exports[`shared error envelope > 500 INTERNAL_ERROR: an unexpected failure, with its detail withheld 1`] = `
+{
+  "error": {
+    "code": "INTERNAL_ERROR",
+    "message": "An unexpected error occurred.",
+    "requestId": Any<String>,
+  },
+}
+`;

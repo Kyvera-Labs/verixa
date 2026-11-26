@@ -72,3 +72,30 @@ describe("Email", () => {
     expect(Result.isOk(result) && result.value.toString()).toBe("bob@example.com");
   });
 });
+
+/** Added in Issue 417: kills mutants the mutation-testing spike found surviving in email.ts. */
+describe("Email: edges the pattern and the limit must hold", () => {
+  it("rejects an address with a second @ after a valid prefix", () => {
+    // Kills :10 (the `$` anchor dropped): without it, "user@example.com" is
+    // matched as a prefix and the rest of the string is never checked.
+    const result = Email.create("user@example.com@evil.test");
+    expect(Result.isErr(result) && result.error).toMatchObject({
+      fieldErrors: { email: ["invalid_format"] },
+    });
+  });
+
+  it("accepts an address of exactly the maximum length", () => {
+    // Kills :40 (`>` -> `>=`). 254 characters is the RFC 5321 limit itself.
+    const address = `${"a".repeat(254 - "@example.com".length)}@example.com`;
+    expect(address).toHaveLength(254);
+    expect(Result.isOk(Email.create(address))).toBe(true);
+  });
+
+  it("does not consider two different addresses equal", () => {
+    // Kills :58 (`===` -> `true`).
+    const a = Email.create("a@example.com");
+    const b = Email.create("b@example.com");
+    if (!Result.isOk(a) || !Result.isOk(b)) throw new Error("fixture setup failed");
+    expect(a.value.equals(b.value)).toBe(false);
+  });
+});
