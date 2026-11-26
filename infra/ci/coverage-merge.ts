@@ -122,6 +122,85 @@ function packageName(fullPath: string, fallback: string): string {
   return fallback;
 }
 
+interface FileHits {
+  lines: Map<number, number>;
+  functionLines: Map<string, string>;
+  functions: Map<string, number>;
+  branches: Map<string, number>;
+}
+
+/**
+ * Merges several LCOV reports of the same target into one, line by line.
+ *
+ * Two test runs can load the same file and cover different parts of it, so
+ * the hit counts are summed per line (`DA`), per function (`FNDA`) and per
+ * branch (`BRDA`, where `-` means never taken) and the `LF`/`LH`, `FNF`/`FNH`
+ * and `BRF`/`BRH` totals are recomputed from the union. Taking either run's
+ * totals alone would under-report such a file.
+ */
+export function mergeLcovReports(reports: readonly string[]): string {
+  const files = new Map<string, FileHits>();
+  for (const report of reports) {
+    for (const record of report.split("end_of_record")) {
+      let hits: FileHits | undefined;
+      for (const raw of record.split("\n")) {
+        const line = raw.trim();
+        const colon = line.indexOf(":");
+        if (colon < 0) continue;
+        const tag = line.slice(0, colon);
+        const value = line.slice(colon + 1);
+        if (tag === "SF") {
+          hits = files.get(value);
+          if (hits === undefined) {
+            hits = {
+              lines: new Map(),
+              functionLines: new Map(),
+              functions: new Map(),
+              branches: new Map(),
+            };
+            files.set(value, hits);
+          }
+          continue;
+        }
+        if (hits === undefined) continue;
+        const parts = value.split(",");
+        if (tag === "DA") {
+          const lineNo = Number(parts[0]);
+          hits.lines.set(lineNo, (hits.lines.get(lineNo) ?? 0) + (Number(parts[1]) || 0));
+        } else if (tag === "FN") {
+          const name = parts.slice(1).join(",");
+          hits.functionLines.set(name, parts[0] ?? "0");
+          hits.functions.set(name, hits.functions.get(name) ?? 0);
+        } else if (tag === "FNDA") {
+          const name = parts.slice(1).join(",");
+          hits.functions.set(name, (hits.functions.get(name) ?? 0) + (Number(parts[0]) || 0));
+        } else if (tag === "BRDA") {
+          const key = parts.slice(0, 3).join(",");
+          const taken = parts[3] === "-" ? 0 : Number(parts[3]) || 0;
+          hits.branches.set(key, (hits.branches.get(key) ?? 0) + taken);
+        }
+      }
+    }
+  }
+
+  const out: string[] = [];
+  for (const [file, hits] of files) {
+    const count = (map: Map<unknown, number>): number =>
+      [...map.values()].filter((value) => value > 0).length;
+    out.push("TN:", `SF:${file}`);
+    for (const [name, line] of hits.functionLines) out.push(`FN:${line},${name}`);
+    for (const [name, value] of hits.functions) out.push(`FNDA:${value},${name}`);
+    out.push(`FNF:${hits.functions.size}`, `FNH:${count(hits.functions)}`);
+    for (const [key, value] of hits.branches) out.push(`BRDA:${key},${value > 0 ? value : "-"}`);
+    out.push(`BRF:${hits.branches.size}`, `BRH:${count(hits.branches)}`);
+    for (const [lineNo, value] of [...hits.lines].sort(([a], [b]) => a - b)) {
+      out.push(`DA:${lineNo},${value}`);
+    }
+    out.push(`LF:${hits.lines.size}`, `LH:${count(hits.lines)}`, "end_of_record");
+  }
+  return out.join("\n") + "\n";
+}
+
 /**
  * Discovers coverage directories across packages/* and apps/*.
  */
@@ -138,6 +217,14 @@ export function findPackageCoverageDirs(repoRoot: string): Array<{ name: string;
       const covDir = path.join(groupDir, "coverage");
       if (existsSync(covDir)) {
         dirs.push({ name: "tests/integration", dir: covDir });
+      }
+      // The CI-tooling specs run under their own config (Issue 415, #611)
+      // and write to coverage/ci. Before that split they ran in the same
+      // coverage run as everything else here, so they count toward the same
+      // target; skipping their report dropped tests/integration by ~7%.
+      const ciCovDir = path.join(covDir, "ci");
+      if (existsSync(ciCovDir)) {
+        dirs.push({ name: "tests/integration", dir: ciCovDir });
       }
       continue;
     }
@@ -351,18 +438,25 @@ export function runCoverageMerge(
   mkdirSync(outputDir, { recursive: true });
 
   const pkgDirs = findPackageCoverageDirs(repoRoot);
-  const packageEntries: Array<{ name: string; files: Record<string, CoverageEntry> }> = [];
-  const mergedLcovParts: string[] = [];
+  // Several directories can report the same target (tests/integration has
+  // two runs), so collect per name and merge them line by line first.
+  const reportsByName = new Map<string, string[]>();
 
   for (const pkg of pkgDirs) {
     const lcovFile = path.join(pkg.dir, "lcov.info");
     if (existsSync(lcovFile)) {
-      const content = readFileSync(lcovFile, "utf-8");
-      mergedLcovParts.push(content);
-      const files = parseLcovString(content);
-      packageEntries.push({ name: pkg.name, files });
+      const reports = reportsByName.get(pkg.name) ?? [];
+      reports.push(readFileSync(lcovFile, "utf-8"));
+      reportsByName.set(pkg.name, reports);
     }
   }
+
+  const mergedLcovParts: string[] = [];
+  const packageEntries = [...reportsByName].map(([name, reports]) => {
+    const content = reports.length === 1 ? (reports[0] ?? "") : mergeLcovReports(reports);
+    mergedLcovParts.push(content);
+    return { name, files: parseLcovString(content) };
+  });
 
   const report = aggregateCoverage(packageEntries);
 

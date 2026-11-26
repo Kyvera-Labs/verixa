@@ -47,13 +47,15 @@ export default mergeConfig(
       },
     },
     test: {
-      exclude: ["e2e/**", "**/node_modules/**", "**/dist/**"],
       name: "@verixa/integration-tests",
 
-      // The CI-tooling specs run under `vitest.ci.config.ts` instead, with
-      // file parallelism: they touch no database, so the serial rule below
-      // does not apply to them (Issue 415).
-      exclude: [...configDefaults.exclude, "ci/**"],
+      // One `exclude`, not two: a second key in this object silently replaced
+      // the first, so after #611 the e2e specs ran in this suite too.
+      // - e2e/**: the end-to-end suite has its own config (`pnpm test:e2e`).
+      // - ci/**: the CI-tooling specs run under `vitest.ci.config.ts` instead,
+      //   with file parallelism: they touch no database, so the serial rule
+      //   below does not apply to them (Issue 415).
+      exclude: [...configDefaults.exclude, "**/dist/**", "e2e/**", "ci/**"],
 
       /**
        * Spec files run one at a time, not in parallel.
