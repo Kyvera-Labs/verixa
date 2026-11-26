@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  AccountLockedError,
+  AuthenticationError,
   AuthorizationError,
   ConflictError,
   DomainError,
@@ -110,5 +112,30 @@ describe("instanceof narrowing", () => {
     expect(new ValidationError("x").name).toBe("ValidationError");
     expect(new NotFoundError("x").name).toBe("NotFoundError");
     expect(new ConflictError("x").name).toBe("ConflictError");
+  });
+});
+
+/**
+ * Added in Issue 417: kills errors.ts:93, :96, :121 and :124, which the
+ * mutation-testing pilot found with no coverage in this package. The values
+ * are not labels: a lockout must be indistinguishable from a wrong password
+ * on the wire, or "fail five times and watch what changes" becomes an
+ * account-enumeration oracle (docs/security/authentication-flows.md).
+ */
+describe("AuthenticationError and AccountLockedError", () => {
+  it("carry the public code and generic message clients see", () => {
+    const failed = new AuthenticationError();
+    expect(failed.code).toBe("AUTHENTICATION_FAILED");
+    expect(failed.message).toBe("Invalid email or password.");
+  });
+
+  it("are identical on the wire, so a lockout reveals nothing", () => {
+    const failed = new AuthenticationError();
+    const locked = new AccountLockedError();
+    expect({ code: locked.code, message: locked.message, status: locked.httpStatusHint }).toEqual({
+      code: failed.code,
+      message: failed.message,
+      status: failed.httpStatusHint,
+    });
   });
 });

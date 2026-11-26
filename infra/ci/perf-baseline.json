@@ -1,0 +1,9 @@
+{
+  "description": "Test-suite wall-clock baseline for infra/ci/perf-budget.ts (Issue 415). A suite fails the check when it takes longer than baselineSeconds * (1 + tolerancePercent / 100). How these numbers were chosen, and how to update them: docs/guides/testing/performance-budget.md.",
+  "source": "TODO(measure): provisional. Measured locally on 2026-11-20 (Windows 10, Intel i3-7100U, 4 threads, 6 GB RAM, Node 22.14.0), database-backed tests skipped, first (cold-cache) run with maxWorkers 50%. Not from the CI runner. Replace with figures from the 'Upload test duration report' artifact of the first CI runs on main, then remove continue-on-error from the 'Check test duration budget' step in ci.yml.",
+  "tolerancePercent": 30,
+  "suites": {
+    "unit": { "baselineSeconds": 222.6 },
+    "integration": { "baselineSeconds": 138.8 }
+  }
+}

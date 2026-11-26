@@ -29,9 +29,17 @@ whole repo. This matters once packages import each other (Issue 007): a
 package's tests need to resolve its dependencies exactly the way that
 package would at runtime.
 
+How long each suite may take, how CI checks it, and why the worker pool is
+configured the way it is: [`testing/performance-budget.md`](./testing/performance-budget.md).
+
 Coverage uses the `v8` provider (`@vitest/coverage-v8`) and writes `text`
 (terminal), `html`, and `lcov` reports to each package's `coverage/`
 directory (git-ignored, regenerated on every `test:coverage` run).
+
+Coverage shows which lines ran, not whether a test would notice them being
+wrong. For `shared-kernel` and `identity`, mutation testing checks that
+(`pnpm run test:mutation` in the package):
+[`testing/mutation-testing.md`](./testing/mutation-testing.md).
 
 ## Unit vs. integration vs. e2e — where each lives here
 
@@ -119,6 +127,13 @@ exercises the exact same code path a real client hits.
 underlying HTTP server and closes it cleanly — the `afterEach` hook always
 calls it, including when the test itself fails (`afterEach` still runs), so
 a failing assertion never leaks an open server handle into the next test.
+
+### Snapshotting response shapes
+
+Stable response shapes (the error envelope, pagination wrappers) can be
+snapshotted through this harness to catch accidental shape drift. When to
+do that, when not to, and how to review a snapshot diff:
+[`testing/snapshot-testing.md`](./testing/snapshot-testing.md).
 
 ## Contract testing: one suite, multiple implementations
 
