@@ -37,6 +37,10 @@ export async function startTestRedis(): Promise<TestRedis | undefined> {
   }
 
   const client = new Redis(url, {
+    // Logical database 1 is this suite's alone (authorization policy cache). Packages run their
+    // tests in parallel against one Redis, and a suite that clears its keys
+    // between tests must never clear another suite's.
+    db: 1,
     // Fail fast rather than buffering commands behind a connection that may
     // never arrive: a test that hangs is worse than a test that fails.
     lazyConnect: true,

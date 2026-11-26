@@ -173,6 +173,53 @@ jobs:
       - name: Typecheck CI tooling
         run: pnpm typecheck:ci
 
+      # The same tests `pnpm test` runs, split into the two suites the
+      # performance budget tracks (Issue 415) and timed from outside, so the
+      # budget measures what a contributor waits for, not summed per-test
+      # durations. Each step still fails on a failing test: `measure` passes
+      # the command's exit code through. See
+      # docs/guides/testing/performance-budget.md.
+      - name: Test (unit, per-package suites)
+        run: >
+          pnpm perf:budget measure --suite unit --timings test-timings.json --
+          pnpm -r --filter "!@verixa/integration-tests" run test
+
+      - name: Test (integration)
+        run: >
+          pnpm perf:budget measure --suite integration --timings test-timings.json --
+          pnpm --filter @verixa/integration-tests run test
+
+      # Compares against the committed baseline and writes the duration table
+      # to the job summary. Fails on a suite more than the baseline's tolerance
+      # slower, or on a budgeted suite that was never timed.
+      #
+      # Report-only for now: the committed baseline was measured on a laptop,
+      # not on this runner, so a "regression" against it means nothing yet.
+      # The step still shows as failed and still writes the table. Remove
+      # `continue-on-error` once infra/ci/perf-baseline.json holds figures
+      # from this job (see its "source" field).
+      - name: Check test duration budget
+        continue-on-error: true
+        run: >
+          pnpm perf:budget check
+          --baseline infra/ci/perf-baseline.json
+          --timings test-timings.json
+          --summary "$GITHUB_STEP_SUMMARY"
+          --report test-duration-report.json
+
+      # Kept even when the budget check fails: the numbers are what a
+      # maintainer needs to decide between "this PR is slow" and "the baseline
+      # is out of date".
+      - name: Upload test duration report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: test-duration
+          path: |
+            test-timings.json
+            test-duration-report.json
+          if-no-files-found: ignore
+          retention-days: 30
       # Issue 414: Flaky test quarantine audit.
       # Scans the test suites to ensure no @quarantine tags have reached their
       # time-boxed expiration date. If a quarantined test's deadline has elapsed,
@@ -180,13 +227,10 @@ jobs:
       - name: Verify test quarantines
         run: pnpm flaky:track --scan-quarantines
 
-      - name: Test
-        run: pnpm test
-
       # packages/identity is the first fully-built bounded context, and
       # carries a per-package coverage floor (see vitest.config.ts) as the
       # template for future contexts — enforced here, separately from the
-      # plain `pnpm test` above, since coverage collection isn't free and
+      # timed test steps above, since coverage collection isn't free and
       # doesn't need to run for every package on every push yet.
       - name: Identity coverage gate
         run: pnpm --filter @verixa/identity run test:coverage

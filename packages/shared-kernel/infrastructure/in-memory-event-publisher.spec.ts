@@ -1,41 +1,74 @@
 import { describe, expect, it } from "vitest";
 
-import { BaseDomainEvent } from "../domain/domain-event.js";
+import type { DomainEvent } from "../domain/domain-event.js";
 
 import { InMemoryEventPublisher } from "./in-memory-event-publisher.js";
 
-class OrderCreatedEvent extends BaseDomainEvent {
-  readonly eventName = "order.created";
-  constructor(
-    aggregateId: string,
-    readonly total: number,
-  ) {
-    super(aggregateId);
-  }
-}
+/**
+ * Added in Issue 417: the mutation-testing spike found this publisher with no
+ * direct tests (every mutant "no coverage"). The composition root wires it up,
+ * and the audit subscriber depends on its two promises: every subscribed
+ * handler runs, and they run in subscription order, each finishing before the
+ * next starts.
+ */
+
+const event = (eventName: string): DomainEvent => ({
+  eventName,
+  aggregateId: "aggregate-1",
+  occurredAt: new Date("2026-01-01T00:00:00.000Z"),
+});
 
 describe("InMemoryEventPublisher", () => {
-  it("delivers published events to subscribers in order", async () => {
+  it("delivers a published event to its subscriber", async () => {
+    // Kills the emptied subscribe/publish blocks, the dropped push/set calls,
+    // and the `?? []` -> `&& []` mutants (which leave no handler to call).
     const publisher = new InMemoryEventPublisher();
-    const calls: number[] = [];
-
-    publisher.subscribe("order.created", async (event) => {
-      calls.push((event as OrderCreatedEvent).total);
-      await Promise.resolve();
+    const received: DomainEvent[] = [];
+    publisher.subscribe("user.registered", (e) => {
+      received.push(e);
     });
 
-    publisher.subscribe("order.created", async (event) => {
-      calls.push((event as OrderCreatedEvent).total * 2);
-      await Promise.resolve();
-    });
+    const published = event("user.registered");
+    await publisher.publish(published);
 
-    await publisher.publish(new OrderCreatedEvent("order-1", 50));
-
-    expect(calls).toEqual([50, 100]);
+    expect(received).toEqual([published]);
   });
 
-  it("safely handles publishing an event with no subscribers", async () => {
+  it("runs every handler for an event, in subscription order, awaiting each", async () => {
+    // Kills the `?? []` -> `["Stryker was here"]` mutant in subscribe (it
+    // would drop earlier handlers) and the emptied for-loop body.
     const publisher = new InMemoryEventPublisher();
-    await expect(publisher.publish(new OrderCreatedEvent("order-2", 10))).resolves.toBeUndefined();
+    const calls: string[] = [];
+    publisher.subscribe("user.registered", async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      calls.push("first");
+    });
+    publisher.subscribe("user.registered", () => {
+      calls.push("second");
+    });
+
+    await publisher.publish(event("user.registered"));
+
+    expect(calls).toEqual(["first", "second"]);
+  });
+
+  it("does not deliver an event to handlers subscribed to a different name", async () => {
+    const publisher = new InMemoryEventPublisher();
+    const calls: string[] = [];
+    publisher.subscribe("user.suspended", () => {
+      calls.push("suspended");
+    });
+
+    await publisher.publish(event("user.registered"));
+
+    expect(calls).toEqual([]);
+  });
+
+  it("publishes an event nobody subscribed to without failing", async () => {
+    // Kills the `?? []` -> `["Stryker was here"]` mutant in publish, which
+    // would try to call a string as a handler.
+    const publisher = new InMemoryEventPublisher();
+
+    await expect(publisher.publish(event("nobody.listens"))).resolves.toBeUndefined();
   });
 });
