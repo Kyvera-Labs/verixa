@@ -56,7 +56,13 @@ function dockerAvailable(): boolean {
 }
 
 function connect(url: string): Redis {
-  const client = new Redis(url, { maxRetriesPerRequest: 1, lazyConnect: false });
+  const client = new Redis(url, {
+    // Logical database 3 is this suite's alone (rate-limiting buckets); see the other
+    // Redis harnesses. Parallel suites must not clear each other's keys.
+    db: 3,
+    maxRetriesPerRequest: 1,
+    lazyConnect: false,
+  });
   client.on("error", () => {
     /* surfaced through the awaited command instead */
   });

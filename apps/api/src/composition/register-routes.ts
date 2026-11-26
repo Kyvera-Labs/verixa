@@ -13,6 +13,7 @@ import type {
 import type { Container } from "../composition-root.js";
 import { registerAuditRoutes } from "../routes/audit.js";
 import { registerAuthRoutes } from "../routes/auth.js";
+import { registerPolicyRoutes } from "../routes/policy.js";
 import { registerVerificationRoutes } from "../routes/verification.js";
 
 /**
@@ -34,7 +35,7 @@ export function registerContextRoutes<TLogger extends FastifyBaseLogger>(
   // Callbacks rather than `async` functions: these registrations only declare
   // routes and never await, and an `async` wrapper would add a promise nobody
   // consumes for the sole benefit of matching the plugin type.
-  const registrations: readonly RouteRegistration<FastifyPluginCallback>[] = [
+  const registrations: RouteRegistration<FastifyPluginCallback>[] = [
     {
       prefix: "/auth",
       plugin: (scope) => {
@@ -70,6 +71,15 @@ export function registerContextRoutes<TLogger extends FastifyBaseLogger>(
       },
     },
   ];
+
+  if (container.governancePolicies !== undefined) {
+    registrations.push({
+      prefix: "/admin",
+      plugin: (scope) => {
+        registerPolicyRoutes(scope, container.governancePolicies!);
+      },
+    });
+  }
 
   for (const registration of registrations) {
     app.register(registration.plugin, { prefix: registration.prefix });
