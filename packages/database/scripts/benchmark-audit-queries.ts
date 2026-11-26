@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { PrismaClient } from "@prisma/client";
+import { createPrismaClient } from "../index.js";
 
 /**
  * Seeds the audit log at scale and reports the plan each query path gets
@@ -46,7 +46,7 @@ interface PlanRow {
 }
 
 const databaseUrl = process.env["DATABASE_URL"] ?? "postgres://verixa:verixa@localhost:5432/verixa";
-const prisma = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
+const prisma = createPrismaClient(databaseUrl);
 
 async function seed(): Promise<void> {
   const batchSize = 5_000;

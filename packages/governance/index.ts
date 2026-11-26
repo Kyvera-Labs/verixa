@@ -81,3 +81,34 @@ export type {
   RetentionRunSummary,
 } from "./application/retention-enforcement-job.js";
 export { InMemoryRetentionActionLog } from "./infrastructure/in-memory-retention-action-log.js";
+
+export {
+  Policy,
+  PolicyVersion,
+  type PolicyId,
+  type PolicyStatus,
+  type Ruleset,
+} from "./domain/policy.js";
+
+export {
+  OrganizationMembership,
+  type OrganizationId,
+  type OrganizationMembershipId,
+  type OrganizationRole,
+  type UserId,
+} from "./domain/organization-membership.js";
+export {
+  AddMember,
+  ChangeMemberRole,
+  RemoveMember,
+  type MembershipRepository,
+} from "./application/use-cases/manage-membership.js";
+
+export {
+  PolicyToAbacRuleTranslator,
+  PolicyTranslationError,
+} from "./application/policy-to-abac-translator.js";
+export type {
+  GovernancePolicy,
+  TranslatedPolicy,
+} from "./application/policy-to-abac-translator.js";

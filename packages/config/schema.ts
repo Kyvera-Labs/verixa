@@ -11,10 +11,10 @@ import { z } from "zod";
  * empty value left by a half-filled `.env`) is a startup error listing the
  * variable by name.
  *
- * The `.default(...)` calls below are written in the *input* spelling —
- * `.default("true")`, not `.default(true)` — because a default is fed back
- * through the transform rather than returned as-is, so the boolean would never
- * typecheck and the string is what actually gets parsed.
+ * Defaults use `.prefault(...)` with the *input* spelling — `.prefault("true")`,
+ * not `.default(true)`. In Zod 4 `.default()` short-circuits with an output
+ * value, while `.prefault()` feeds the value through the enum and transform as
+ * Zod 3's `.default()` did, so an invalid default would still be rejected.
  */
 export const booleanFromEnv = z
   .enum(["true", "false", "1", "0"])
@@ -310,7 +310,7 @@ export const rawEnvSchema = z.object({
    * a stray wildcard record pointing at a plaintext host is the one that
    * nobody notices until a browser refuses to connect.
    */
-  HSTS_INCLUDE_SUBDOMAINS: booleanFromEnv.default("true"),
+  HSTS_INCLUDE_SUBDOMAINS: booleanFromEnv.prefault("true"),
 
   /**
    * Append `preload` to the directive.
@@ -327,7 +327,7 @@ export const rawEnvSchema = z.object({
    * `HSTS_INCLUDE_SUBDOMAINS` (the preload list rejects a directive without
    * it), checked at startup rather than discovered at submission time.
    */
-  HSTS_PRELOAD: booleanFromEnv.default("false"),
+  HSTS_PRELOAD: booleanFromEnv.prefault("false"),
 
   /**
    * Redirect plaintext requests to their HTTPS equivalent.
@@ -341,7 +341,7 @@ export const rawEnvSchema = z.object({
    * it when this process is the thing listening on port 80, or together with
    * `TRUST_PROXY`.
    */
-  ENFORCE_HTTPS: booleanFromEnv.default("false"),
+  ENFORCE_HTTPS: booleanFromEnv.prefault("false"),
 
   /**
    * Honour `X-Forwarded-Proto` / `X-Forwarded-For` from the immediate upstream
@@ -357,7 +357,7 @@ export const rawEnvSchema = z.object({
    * exactly that reason — it is a statement about network topology, and only
    * the operator knows it.
    */
-  TRUST_PROXY: booleanFromEnv.default("false"),
+  TRUST_PROXY: booleanFromEnv.prefault("false"),
 
   // ---------------------------------------------------------------------------
   // Cross-origin resource sharing — CORS policy (Issue 204)
@@ -419,7 +419,7 @@ export const rawEnvSchema = z.object({
    * Refused in combination with the wildcard origin; see
    * {@link corsConfigurationError}.
    */
-  CORS_ALLOW_CREDENTIALS: booleanFromEnv.default("false"),
+  CORS_ALLOW_CREDENTIALS: booleanFromEnv.prefault("false"),
 
   // ---------------------------------------------------------------------------
   // MFA enforcement — global defaults (Issue 114)
@@ -484,6 +484,12 @@ export const rawEnvSchema = z.object({
    * Logical service name attached to emitted OpenTelemetry resource attributes.
    */
   OTEL_SERVICE_NAME: z.string().min(1).default("verixa-api"),
+  /**
+   * Serve Prometheus metrics at GET /metrics. Off by default: the endpoint is
+   * unauthenticated and exposes route names, request volumes and error rates,
+   * so it is enabled only where an (internal) scraper needs it.
+   */
+  METRICS_ENABLED: booleanFromEnv.prefault("false"),
 
   /**
    * Collector-agnostic OTLP exporter endpoint URL (e.g. `http://localhost:4318`
@@ -543,7 +549,7 @@ export const rawEnvSchema = z.object({
       return Number(value);
     },
     z
-      .number({ invalid_type_error: "must be a number between 0 and 1" })
+      .number({ error: "must be a number between 0 and 1" })
       .finite("must be a finite number between 0 and 1")
       .min(0, "must be between 0 and 1")
       .max(1, "must be between 0 and 1")

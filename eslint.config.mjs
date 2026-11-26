@@ -7,6 +7,19 @@ import tseslint from "typescript-eslint";
 
 import { securityPlugin, securityRules } from "./infra/ci/security-lint-rules.mjs";
 
+/**
+ * `@verixa/testing-kit` is consumed only through its curated root (Issue 420),
+ * the same boundary the context packages keep (Issue 038). Declared once
+ * because two config blocks below need it, and a flat-config block setting
+ * `no-restricted-imports` replaces, rather than merges with, another block's
+ * options for the same file. Verified by packages/testing-kit/index.spec.ts.
+ */
+const TESTING_KIT_BOUNDARY = {
+  group: ["@verixa/testing-kit/*"],
+  message:
+    "Import from `@verixa/testing-kit`, not a deep path — only what its index.ts exports is public, and each export is documented in docs/guides/tutorials/testing-the-platform.md.",
+};
+
 export default tseslint.config(
   {
     // scripts/** holds standalone Node scripts that aren't part of any
@@ -44,6 +57,11 @@ export default tseslint.config(
       // as repository code would make `pnpm lint` fail on purpose-built
       // examples of the vulnerabilities the gate is meant to prevent.
       "infra/ci/lint-security-fixtures/**",
+      // VitePress build output and its pre-bundled dependency cache (Issue
+      // 422). Generated, gitignored, and large; docs/.vitepress/config.ts
+      // itself is linted, via docs/.vitepress/tsconfig.json.
+      "docs/.vitepress/cache/**",
+      "docs/.vitepress/dist/**",
     ],
   },
   js.configs.recommended,
@@ -101,6 +119,8 @@ export default tseslint.config(
       "packages/audit/**",
       "packages/authorization/**",
       "packages/verification/**",
+      "packages/observability/**",
+      "packages/testing-kit/**",
       // The integration suite deliberately exercises internals -- forging a
       // forked chain entry to prove the repository refuses it, for one. That
       // is the opposite of a production package quietly depending on them,
@@ -121,13 +141,26 @@ export default tseslint.config(
                 "@verixa/mfa/*",
                 "@verixa/sessions/*",
                 "@verixa/verification/*",
+                "@verixa/observability/*",
               ],
               message:
-                "Import from the package root (`@verixa/identity`, `@verixa/credentials`, `@verixa/mfa`, `@verixa/sessions`, `@verixa/audit`, `@verixa/authorization`, `@verixa/verification`), not a deep path — a context's domain/application internals are not part of its public API. See docs/guides/domain-modeling.md.",
+                "Import from the package root (`@verixa/identity`, `@verixa/credentials`, `@verixa/mfa`, `@verixa/sessions`, `@verixa/audit`, `@verixa/authorization`, `@verixa/verification`, `@verixa/observability`), not a deep path — a context's domain/application internals are not part of its public API. See docs/guides/domain-modeling.md.",
             },
+            TESTING_KIT_BOUNDARY,
           ],
         },
       ],
+    },
+  },
+  {
+    // The integration suite is exempt from the block above so it can reach
+    // *context* internals on purpose. That reason does not extend to
+    // testing-kit, whose internals hold nothing a test needs to forge, and
+    // tests/examples/ consumes it. No other block sets
+    // `no-restricted-imports` for tests/**, so this one overrides nothing.
+    files: ["tests/**/*.ts"],
+    rules: {
+      "no-restricted-imports": ["error", { patterns: [TESTING_KIT_BOUNDARY] }],
     },
   },
   {
@@ -173,7 +206,9 @@ export default tseslint.config(
     // the rule working as intended on code that is not the attack surface it
     // targets, so it stays visible as a warning instead of failing a correct
     // build.
-    files: ["tests/**/*.ts", "**/*.spec.ts", "infra/ci/**/*.ts"],
+    // The docs site config (Issue 422) is the same case: it reads docs/ at
+    // build time to list sidebar pages, and never runs in a deployment.
+    files: ["tests/**/*.ts", "**/*.spec.ts", "infra/ci/**/*.ts", "docs/.vitepress/config.ts"],
     rules: {
       "security/detect-non-literal-fs-filename": "warn",
     },

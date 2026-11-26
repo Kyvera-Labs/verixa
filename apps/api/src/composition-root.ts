@@ -28,7 +28,7 @@ import {
   RequestEmailVerification,
   RequestPasswordReset,
 } from "@verixa/credentials";
-import { PrismaClient } from "@verixa/database";
+import { createPrismaClient, type PrismaClient } from "@verixa/database";
 import {
   GetComplianceCase,
   InMemoryComplianceCaseRepository,
@@ -67,6 +67,7 @@ import {
   WebAuthnAssertionVerifier,
   WebAuthnAttestationVerifier,
 } from "@verixa/mfa";
+import type { NotificationComposition, NotificationWorker } from "@verixa/notifications";
 import {
   InMemoryRevocationList,
   InMemorySessionAuditLogger,
@@ -93,8 +94,14 @@ import {
   type TransactionSigner,
 } from "@verixa/stellar-anchor";
 
+import {
+  createObservabilityComponents,
+  type ObservabilityContainer,
+} from "./composition/observability.js";
 import { createCredentialRateLimiter } from "./composition/rate-limiting.js";
 import { registerAuditSubscribers } from "./composition/register-audit-subscribers.js";
+import { registerNotificationSubscribers } from "./composition/register-notification-subscribers.js";
+import type { PolicyRouteDependencies } from "./routes/policy.js";
 
 /**
  * The composition root: the one place in the system allowed to know which
@@ -117,31 +124,21 @@ import { registerAuditSubscribers } from "./composition/register-audit-subscribe
  */
 
 /**
- * Applies pool settings to the connection string (Issue 053).
+ * Pool settings from validated config (Issue 053).
  *
- * Prisma has no constructor option for pool size — it reads
- * `connection_limit` and `pool_timeout` from the URL query string. Building
- * that here keeps the tuning knobs as ordinary validated config
- * (`DATABASE_POOL_SIZE`, `DATABASE_POOL_TIMEOUT_SECONDS`) instead of
- * requiring operators to hand-append query parameters to a URL and get the
- * spelling right.
- *
- * Existing query parameters are preserved; explicit ones in `DATABASE_URL`
- * win, so a deployment can still override per-environment without changing
- * code.
+ * Keeps the tuning knobs as ordinary validated config (`DATABASE_POOL_SIZE`,
+ * `DATABASE_POOL_TIMEOUT_SECONDS`) instead of requiring operators to
+ * hand-append query parameters to a URL and get the spelling right. Explicit
+ * `connection_limit` / `pool_timeout` parameters in `DATABASE_URL` still win,
+ * so a deployment can override per environment without changing code; see
+ * pgPoolConfig in @verixa/database for how they reach the driver.
  */
-function pooledDatabaseUrl(): string {
+function createConfiguredPrismaClient(): PrismaClient {
   const config = loadConfig();
-  const url = new URL(config.DATABASE_URL);
-
-  if (!url.searchParams.has("connection_limit")) {
-    url.searchParams.set("connection_limit", String(config.DATABASE_POOL_SIZE));
-  }
-  if (!url.searchParams.has("pool_timeout")) {
-    url.searchParams.set("pool_timeout", String(config.DATABASE_POOL_TIMEOUT_SECONDS));
-  }
-
-  return url.toString();
+  return createPrismaClient(config.DATABASE_URL, {
+    poolSize: config.DATABASE_POOL_SIZE,
+    poolTimeoutSeconds: config.DATABASE_POOL_TIMEOUT_SECONDS,
+  });
 }
 
 /**
@@ -310,6 +307,11 @@ export interface Container {
   readonly credentials: CredentialUseCases;
   readonly audit: AuditUseCases;
   readonly authorization: AuthorizationRepository;
+  /** Supplied when the governance persistence/use-case layer is enabled. */
+  readonly governancePolicies?: PolicyRouteDependencies;
+  readonly notifications: {
+    readonly worker: NotificationWorker | undefined;
+  };
   readonly sessions?: SessionUseCases;
   readonly rateLimiter?: RateLimiter;
   /** Compliance case management (Issue 314). Absent in partial test containers. */
@@ -319,6 +321,7 @@ export interface Container {
    * Call on shutdown.
    */
   readonly mfa: MfaUseCases;
+  readonly observability?: ObservabilityContainer;
   /** Releases the database connection. Call on shutdown. */
   readonly dispose: () => Promise<void>;
 }
@@ -342,6 +345,8 @@ export interface ContainerOverrides {
   readonly queryAuditEvents?: QueryAuditEvents | undefined;
   readonly exportAuditEvents?: ExportAuditEvents | undefined;
   readonly rateLimiter?: RateLimiter | undefined;
+  /** Notification subscribers and worker supplied by the notification phase. */
+  readonly notificationComposition?: NotificationComposition | undefined;
 }
 
 /**
@@ -382,8 +387,7 @@ export function buildContainer(
   prismaClient?: PrismaClient,
   overrides: ContainerOverrides = {},
 ): Container {
-  const prisma =
-    prismaClient ?? new PrismaClient({ datasources: { db: { url: pooledDatabaseUrl() } } });
+  const prisma = prismaClient ?? createConfiguredPrismaClient();
 
   const users = new PrismaUserRepository(prisma);
   const organizations = new PrismaOrganizationRepository(prisma);
@@ -477,6 +481,11 @@ export function buildContainer(
   // event it publishes. See `composition/register-audit-subscribers.ts`.
   const eventPublisher = new InMemoryEventPublisher();
   registerAuditSubscribers(eventPublisher, recordAuditEvent);
+  const notificationComposition = overrides.notificationComposition;
+  if (notificationComposition !== undefined) {
+    registerNotificationSubscribers(eventPublisher, notificationComposition.subscribers);
+    notificationComposition.worker.start();
+  }
 
   // Anchoring is wired only when a signing key is configured. See AuditUseCases
   // on why this is `undefined` rather than a no-op.
@@ -603,6 +612,9 @@ export function buildContainer(
     },
     authorization,
     governance: buildGovernance(authorization),
+    notifications: {
+      worker: notificationComposition?.worker,
+    },
     sessions: {
       issueSession: new IssueSession(
         new PrismaSessionRepository(prisma),
@@ -636,11 +648,16 @@ export function buildContainer(
       registerWebAuthnCredential,
       verifyWebAuthnAssertion,
     },
+    observability: createObservabilityComponents({
+      environment: process.env["NODE_ENV"],
+      prisma,
+    }),
     dispose: async () => {
       // Drained *before* disconnecting, and only because the batched writer
       // may hold entries that are not in the database yet. Skipping this is
       // the one way the queue's bounded delay becomes permanent data loss.
       await batchedWriter?.stop();
+      await notificationComposition?.worker.stop();
       await prisma.$disconnect();
     },
   };

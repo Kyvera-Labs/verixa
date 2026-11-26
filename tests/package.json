@@ -6,10 +6,10 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run",
+    "test": "vitest run && vitest run --config vitest.ci.config.ts",
     "test:e2e": "vitest run --config e2e/vitest.config.ts",
     "test:load": "vitest run --config vitest.load.config.ts",
-    "test:coverage": "vitest run --coverage",
+    "test:coverage": "vitest run --coverage && vitest run --config vitest.ci.config.ts --coverage --coverage.reportsDirectory=coverage/ci",
     "lint": "eslint ."
   },
   "devDependencies": {
@@ -28,7 +28,8 @@
     "@verixa/testing-kit": "workspace:*",
     "@vitest/coverage-v8": "^5.1.0",
     "supertest": "^7.3.2",
-    "testcontainers": "^12.2.0",
+    "@verixa/verification": "workspace:*",
+    "testcontainers": "^12.2.1",
     "typescript": "^6.0.3",
     "vitest": "^5.1.0"
   }

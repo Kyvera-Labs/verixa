@@ -35,7 +35,7 @@ describe.skipIf(redis === undefined)("RedisPolicyCache (real Redis)", () => {
   afterEach(async () => {
     // Each test starts from an empty keyspace, so a leftover entry can never make
     // a missing-invalidation bug look like a hit.
-    await test.client.flushall();
+    await test.client.flushdb();
   });
 
   afterAll(async () => {

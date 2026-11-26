@@ -13,6 +13,17 @@ permissions:
 
 jobs:
   ci:
+    # Node: the active LTS, 22, matching `engines.node: ">=22.13"` in
+    # package.json (Issue 361 / #473). Deliberately not a one-entry matrix:
+    # GitHub appends matrix values to the check name (`ci (22)`), even with an
+    # explicit `name:`, and branch protection requires a check named `ci`.
+    # To test a second LTS, add the matrix back and update the required checks
+    # in the same change.
+    # - OS: deliberately collapsed to `ubuntu-latest` for runner cost and
+    #   because Linux containers are the sole production target; macOS/Windows
+    #   runners add 5-10x minute cost without catching production regressions.
+    # - Caching: delegated to `.github/actions/setup-workspace`, which keys the
+    #   pnpm store on `pnpm-lock.yaml` hash (~5-15s warm vs ~60-90s cold).
     runs-on: ubuntu-latest
     services:
       # Backs tests/integration/database.spec.ts (Issue 041) — a real
@@ -69,7 +80,7 @@ jobs:
       # report green. This turns "no Redis" into a hard failure in CI only.
       REQUIRE_REDIS_TESTS: "1"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Issue 215. Runs before the install it guards, and deliberately invoked
       # as `node` rather than `pnpm run check:lockfile`: the gate has to work on
@@ -87,55 +98,13 @@ jobs:
       - name: Check for malware indicators
         run: node infra/ci/check-malware-indicators.mjs
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
         with:
           node-version: 22
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
 
       - name: Validate OpenAPI contract
         run: npx --yes @redocly/cli@2.53.3 lint --extends minimal apps/api/openapi/openapi.yaml
-
-      # The Prisma client is generated, not committed (it's platform-specific
-      # — see .gitignore), so it has to be generated before anything that
-      # imports @verixa/database is built, typechecked, or tested. Same
-      # ordering principle as the build step below, one level earlier.
-      - name: Generate Prisma client
-        run: pnpm db:generate
-
-      # Every workspace package must be built before anything that imports
-      # it can be reliably linted, typechecked, or tested — see
-      # docs/guides/typescript-conventions.md and docs/guides/ci-cd.md for
-      # why this isn't just belt-and-suspenders: package.json "exports"
-      # subpaths (unlike "main") have no fallback when the target file is
-      # missing, so type-aware linting fails outright, not gracefully, on
-      # an unbuilt dependency.
-      - name: Build
-        run: pnpm build
-
-      # Re-sync injected workspace packages after building them.
-      #
-      # `injectWorkspacePackages: true` (required for `pnpm deploy`, which
-      # builds the Docker image) makes pnpm *copy* some workspace packages into
-      # their dependents' node_modules rather than symlinking. Which ones get
-      # copied is decided by peer-dependency resolution -- @verixa/audit and
-      # @verixa/stellar-anchor are copied because the Stellar SDK pulls
-      # `debug`/`supports-color` peers, while @verixa/identity is symlinked.
-      #
-      # Those copies are made during install, when no package has a `dist` yet.
-      # pnpm refreshes them before running a dependent's own script, so a
-      # package that builds gets fresh copies -- but `tests` has no build
-      # script, so its copies stayed empty and every integration spec failed
-      # with "Failed to resolve entry for package @verixa/audit".
-      #
-      # Invisible locally, because a developer's node_modules has been through
-      # an install *after* a build at some point. Only a clean checkout hits it.
-      - name: Re-link workspace packages
-        run: pnpm install --frozen-lockfile
 
       # Proves the migration pipeline actually works end to end against a
       # real Postgres: Prisma connects using DATABASE_URL, creates its
@@ -203,6 +172,53 @@ jobs:
       - name: Typecheck CI tooling
         run: pnpm typecheck:ci
 
+      # The same tests `pnpm test` runs, split into the two suites the
+      # performance budget tracks (Issue 415) and timed from outside, so the
+      # budget measures what a contributor waits for, not summed per-test
+      # durations. Each step still fails on a failing test: `measure` passes
+      # the command's exit code through. See
+      # docs/guides/testing/performance-budget.md.
+      - name: Test (unit, per-package suites)
+        run: >
+          pnpm perf:budget measure --suite unit --timings test-timings.json --
+          pnpm -r --filter "!@verixa/integration-tests" run test
+
+      - name: Test (integration)
+        run: >
+          pnpm perf:budget measure --suite integration --timings test-timings.json --
+          pnpm --filter @verixa/integration-tests run test
+
+      # Compares against the committed baseline and writes the duration table
+      # to the job summary. Fails on a suite more than the baseline's tolerance
+      # slower, or on a budgeted suite that was never timed.
+      #
+      # Report-only for now: the committed baseline was measured on a laptop,
+      # not on this runner, so a "regression" against it means nothing yet.
+      # The step still shows as failed and still writes the table. Remove
+      # `continue-on-error` once infra/ci/perf-baseline.json holds figures
+      # from this job (see its "source" field).
+      - name: Check test duration budget
+        continue-on-error: true
+        run: >
+          pnpm perf:budget check
+          --baseline infra/ci/perf-baseline.json
+          --timings test-timings.json
+          --summary "$GITHUB_STEP_SUMMARY"
+          --report test-duration-report.json
+
+      # Kept even when the budget check fails: the numbers are what a
+      # maintainer needs to decide between "this PR is slow" and "the baseline
+      # is out of date".
+      - name: Upload test duration report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-duration
+          path: |
+            test-timings.json
+            test-duration-report.json
+          if-no-files-found: ignore
+          retention-days: 30
       # Issue 414: Flaky test quarantine audit.
       # Scans the test suites to ensure no @quarantine tags have reached their
       # time-boxed expiration date. If a quarantined test's deadline has elapsed,
@@ -210,13 +226,10 @@ jobs:
       - name: Verify test quarantines
         run: pnpm flaky:track --scan-quarantines
 
-      - name: Test
-        run: pnpm test
-
       # packages/identity is the first fully-built bounded context, and
       # carries a per-package coverage floor (see vitest.config.ts) as the
       # template for future contexts — enforced here, separately from the
-      # plain `pnpm test` above, since coverage collection isn't free and
+      # timed test steps above, since coverage collection isn't free and
       # doesn't need to run for every package on every push yet.
       - name: Identity coverage gate
         run: pnpm --filter @verixa/identity run test:coverage
@@ -273,11 +286,11 @@ jobs:
       REQUIRE_DATABASE_TESTS: "1"
       DATABASE_URL: postgres://verixa:verixa@localhost:5432/verixa_placeholder
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: pnpm
@@ -351,11 +364,11 @@ jobs:
       REQUIRE_DATABASE_TESTS: "1"
       REQUIRE_REDIS_TESTS: "1"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: pnpm
@@ -400,11 +413,11 @@ jobs:
     env:
       DATABASE_URL: postgres://verixa:verixa@localhost:5432/verixa
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: pnpm
@@ -489,7 +502,7 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Build production target image
         run: docker build -f apps/api/Dockerfile --target production -t verixa-api:ci .
@@ -497,9 +510,9 @@ jobs:
       # The waiver validator parses YAML with the workspace's `yaml` package,
       # which this job otherwise never installs. Scripts are skipped: nothing
       # here needs Prisma or the git hooks, only the module on disk.
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: pnpm
@@ -538,7 +551,7 @@ jobs:
 
       - name: Archive image scan reports
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: trivy-ci-${{ github.run_number }}
           path: |
@@ -723,6 +736,50 @@ jobs:
         if: always()
         run: docker rm -f verixa-api-drill || true
 
+  # Docs-as-code (Issue 422): the VitePress site under docs/ is built on every
+  # push, so a broken docs link fails CI the same way a broken import does.
+  #
+  # `ignoreDeadLinks` is off in docs/.vitepress/config.ts, so a link to a page
+  # that doesn't exist fails the build. That's what makes this a check rather
+  # than a formality: without it, renaming a doc would quietly break every page
+  # linking to it, and the docs would drift from the code in exactly the way
+  # docs-as-code exists to prevent. Tutorials also import code regions from
+  # real test files (`<<< @/...#region`), so a renamed region fails here too.
+  #
+  # Needs no workspace build or database: the site reads Markdown and source
+  # files, never compiled output. The static site is uploaded so a reviewer
+  # can open the rendered docs for a PR without running anything locally.
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The site config is TypeScript but belongs to no workspace package, so
+      # `pnpm typecheck` (recursive over packages) never sees it.
+      - name: Typecheck the docs site config
+        run: pnpm exec tsc -p docs/.vitepress/tsconfig.json
+
+      - name: Build the docs site
+        run: pnpm docs:build
+
+      - name: Upload the built docs site
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: docs-site-${{ github.run_number }}
+          path: docs/.vitepress/dist/
+          retention-days: 14
+
   # Issue 385 / #497. The `docker` job builds the image; this job proves the
   # *overlay* actually produces a production topology when combined with the
   # dev file. Resolving the config first catches merge mistakes (a surviving
@@ -739,11 +796,11 @@ jobs:
       VERIXA_API_IMAGE: verixa-api:ci
       VERIXA_MIGRATION_IMAGE: verixa-migration:ci
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: pnpm
@@ -771,6 +828,39 @@ jobs:
         if: always()
         run: docker compose -f docker-compose.yml -f docker-compose.prod.yml down --volumes || true
 
+  # README quickstart smoke test (Issue 421). Runs the quickstart a newcomer
+  # follows (install, Postgres from docker-compose.yml, migrations, `pnpm dev`)
+  # and then one real auth flow, register then log in, failing on any non-2xx.
+  #
+  # The steps live in scripts/quickstart-smoke.sh, not inline here, so a person
+  # can run exactly what CI runs; the script also fails if README.md stops
+  # showing any command it runs, which is what keeps the two from drifting. A
+  # README whose first command is broken costs every first-time visitor, and
+  # nothing else in this pipeline would notice: the `ci` job uses a service
+  # container and builds before it tests, which is not what the README says.
+  #
+  # Deliberately no `pnpm build` beforehand. Starting from a fresh checkout is
+  # the point.
+  quickstart:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Run the README quickstart and one auth flow
+        run: bash scripts/quickstart-smoke.sh
+
+      - name: Stop the compose stack
+        if: always()
+        run: docker compose down -v
+
   # Issue 386 / #498. This is a restore drill, not a file-existence check:
   # seed data, back it up, recreate the containers without their volumes to
   # prove the data was really in the named volumes, then destroy the volumes
@@ -791,11 +881,11 @@ jobs:
       REDISCLI_AUTH: ci-redis-password
       VERIXA_RESTORE_CONFIRM: "1"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: pnpm
@@ -865,7 +955,7 @@ jobs:
       PORT_HTTP: "18080"
       PORT_HTTPS: "18443"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Assert HTTP redirect, TLS handshake and upstream forwarding
         run: node infra/ci/compose-tls-smoke.mjs

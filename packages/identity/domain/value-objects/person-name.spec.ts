@@ -59,3 +59,41 @@ describe("PersonName", () => {
     expect(Result.isOk(a) && Result.isOk(c) && a.value.equals(c.value)).toBe(false);
   });
 });
+
+/** Added in Issue 417: kills mutants the mutation-testing spike found surviving in person-name.ts. */
+describe("PersonName: limits at the edges, and which part they name", () => {
+  it("accepts a given and a family name of exactly the maximum length", () => {
+    // Kills :35 and :39 (`>` -> `>=`).
+    expect(Result.isOk(PersonName.create("g".repeat(128), "f".repeat(128)))).toBe(true);
+  });
+
+  it("names the given name when it is too long", () => {
+    // Kills :36 (the `too_long` array emptied).
+    const result = PersonName.create("g".repeat(129));
+    expect(Result.isErr(result) && result.error).toMatchObject({
+      fieldErrors: { givenName: ["too_long"] },
+    });
+  });
+
+  it("names the family name when it is too long", () => {
+    // Kills :40 (the `too_long` array emptied).
+    const result = PersonName.create("Grace", "f".repeat(129));
+    expect(Result.isErr(result) && result.error).toMatchObject({
+      fieldErrors: { familyName: ["too_long"] },
+    });
+  });
+
+  it("does not consider names equal when either part differs", () => {
+    // Kills :58, each side of the `&&` replaced with `true` in turn: a
+    // different given name alone, and a different family name alone, must
+    // each make the names unequal.
+    const grace = PersonName.create("Grace", "Hopper");
+    const ada = PersonName.create("Ada", "Hopper");
+    const graceKelly = PersonName.create("Grace", "Kelly");
+    if (!Result.isOk(grace) || !Result.isOk(ada) || !Result.isOk(graceKelly)) {
+      throw new Error("fixture setup failed");
+    }
+    expect(grace.value.equals(ada.value)).toBe(false);
+    expect(grace.value.equals(graceKelly.value)).toBe(false);
+  });
+});

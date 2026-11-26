@@ -22,12 +22,12 @@ WORKDIR /repo
 FROM base AS deps
 
 # Only the files pnpm resolves the dependency graph from, plus the Prisma
-# schema the root `prepare` script needs for `db:generate`. `--parents` keeps
+# schema and config the root `prepare` script needs for `db:generate`. `--parents` keeps
 # their workspace-relative paths without an enumerated list that would rot
 # the moment a new package is added (Issue 050). Copying `packages/` whole
 # used to invalidate this layer on every package source edit; now a
 # source-only commit reuses the install layer untouched.
-COPY --parents pnpm-workspace.yaml pnpm-lock.yaml package.json tests/package.json apps/*/package.json packages/*/package.json packages/*/tsconfig.json packages/*/prisma/schema.prisma ./
+COPY --parents pnpm-workspace.yaml pnpm-lock.yaml package.json tests/package.json apps/*/package.json packages/*/package.json packages/*/tsconfig.json packages/*/prisma/schema.prisma packages/database/prisma.config.ts ./
 
 # The pnpm store is a cache, not build output: its contents are derived from
 # the lockfile and can be reused across builds and branches. A layer holding
@@ -81,9 +81,14 @@ RUN --mount=type=cache,id=verixa-pnpm-store,target=/root/.local/share/pnpm/store
 # the deployed package gives it both, so it falls back to installing
 # @prisma/client from the network to recover — in a build stage, offline.
 # The artefact already exists and is correct. Moving it is the whole job.
+#
+# The patterns match `@prisma+client@<version>` exactly: Prisma 7 also
+# installs @prisma/client-runtime-utils, whose store directory
+# (`@prisma+client-runtime-utils@...`) the looser `*@prisma+client*` matched
+# first, so the client was copied into the wrong package.
 RUN set -eu; \
-    src="$(find /repo/node_modules/.pnpm -maxdepth 5 -type d -path '*@prisma+client*/node_modules/.prisma' -print -quit)"; \
-    dest="$(find /out/node_modules/.pnpm -maxdepth 4 -type d -path '*@prisma+client*/node_modules' -print -quit)"; \
+    src="$(find /repo/node_modules/.pnpm -maxdepth 5 -type d -path '*/@prisma+client@*/node_modules/.prisma' -print -quit)"; \
+    dest="$(find /out/node_modules/.pnpm -maxdepth 4 -type d -path '*/@prisma+client@*/node_modules' -print -quit)"; \
     test -n "$src"; \
     test -n "$dest"; \
     rm -rf "$dest/.prisma"; \
@@ -113,15 +118,21 @@ COPY scripts/prune-runtime-bundle.mjs scripts/
 RUN node scripts/prune-runtime-bundle.mjs /out
 
 # `@prisma/client` declares the `prisma` CLI and `typescript` as optional peers,
-# and the workspace's `autoInstallPeers` makes `pnpm deploy --prod` install
-# them. Neither is read at runtime — the client loads only the generated
-# `.prisma` output copied above — and both are dev tooling the image must not
-# ship (CI's dev-dependency check). Removed before the load proof below, so a
-# client that did need either one fails the build here rather than in a
-# running container. The symlinks that pointed at them go too.
-RUN set -eu; \
-    find /out/node_modules/.pnpm -mindepth 1 -maxdepth 1 -type d \( -name 'prisma@*' -o -name 'typescript@*' \) -print -exec rm -rf {} +; \
-    find /out/node_modules -type l \( -name prisma -o -name typescript \) -print -delete
+# and the lockfile resolves them, so `pnpm deploy --prod` installs them. Neither
+# is read at runtime (the client loads only the generated `.prisma` output
+# copied above), and both are dev tooling the image must not ship (CI's
+# dev-dependency check). Deleting the two directories by name was enough for
+# Prisma 6; the Prisma 7 CLI brings ~130 packages of its own (Prisma Studio,
+# React, charting libraries and their @types), which stayed behind.
+#
+# So the script walks the bundle from the app's own node_modules, never into
+# `prisma`, `typescript` or `@types/*` (declarations only, never loaded), and
+# deletes every store entry the walk cannot reach, plus links left dangling.
+# Unit-tested in tests/integration/prune-unreachable-packages.spec.ts. Runs
+# before the load proof below, so if the app did need something removed here
+# the build fails at that line rather than in a running container.
+COPY scripts/prune-unreachable-packages.mjs scripts/
+RUN node scripts/prune-unreachable-packages.mjs /out
 
 # Prove the bundle actually loads before shipping it.
 #
@@ -134,11 +145,11 @@ RUN set -eu; \
 # container logs. It runs against the pruned tree, so what is proven here is
 # byte-for-byte what ships.
 #
-# The URL is a placeholder: PrismaClient's constructor requires one but does
-# not connect, and connecting is not what is being tested.
+# The URL is a placeholder: building the client (and its pg driver adapter)
+# needs one but does not connect, and connecting is not what is being tested.
 RUN cd /out \
       && DATABASE_URL="postgresql://verixa:verixa@127.0.0.1:5432/verixa" \
-         node --input-type=module -e "const { PrismaClient } = await import('@verixa/database'); new PrismaClient(); console.log('deploy bundle loads and the prisma client initialises');"
+         node --input-type=module -e "const { createPrismaClient } = await import('@verixa/database'); createPrismaClient(process.env.DATABASE_URL); console.log('deploy bundle loads and the prisma client initialises');"
 
 # ---- production: minimal image, non-root, only the deployed bundle ----
 FROM ${NODE_IMAGE} AS production

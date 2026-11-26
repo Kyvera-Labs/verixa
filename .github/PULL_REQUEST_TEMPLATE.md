@@ -15,5 +15,6 @@
 
 - [ ] `pnpm build && pnpm lint && pnpm typecheck && pnpm test` all pass locally
 - [ ] Documentation updated (README/docs/guides) if behavior or setup changed
+- [ ] Snapshot diffs (`__snapshots__/*.snap`) reviewed and explained in the description, or none changed ([why](../docs/guides/testing/snapshot-testing.md#reviewing-a-snapshot-diff))
 - [ ] Commit messages follow [Conventional Commits](../docs/guides/conventional-commits.md)
 - [ ] Time and randomness in application code use an injected clock/RNG; no unreviewed direct `Date.now()` or `Math.random()` calls

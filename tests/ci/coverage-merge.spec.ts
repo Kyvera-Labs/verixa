@@ -7,6 +7,7 @@ import {
   aggregateCoverage,
   generateHtmlDashboard,
   generateMarkdownSummary,
+  mergeLcovReports,
   parseLcovString,
   runCoverageMerge,
 } from "../../infra/ci/coverage-merge.js";
@@ -178,5 +179,59 @@ describe("coverage-merge (Issue 412)", () => {
     expect(summary.total.lines.pct).toBe(83.33);
     expect(summary.packages["@verixa/pkg-a"]?.lines.pct).toBe(66.67);
     expect(summary.packages["@verixa/pkg-b"]?.lines.pct).toBe(100);
+  });
+
+  it("counts the CI-tooling specs' report (tests/coverage/ci) toward tests/integration", () => {
+    // Since #611 the ci/** specs run under their own config and write to
+    // coverage/ci; both runs are the tests package's coverage.
+    mkdirSync(path.join(tmpDir, "tests/coverage/ci"), { recursive: true });
+    writeFileSync(path.join(tmpDir, "tests/coverage/lcov.info"), FIXTURE_LCOV_1);
+    writeFileSync(path.join(tmpDir, "tests/coverage/ci/lcov.info"), FIXTURE_LCOV_2);
+
+    const report = runCoverageMerge({ repoRoot: tmpDir, outputDir: path.join(tmpDir, "out") });
+
+    expect(Object.keys(report.packages)).toEqual(["tests/integration"]);
+    expect(report.packages["tests/integration"]?.lines).toMatchObject({ covered: 5, total: 6 });
+    expect(report.totalFiles).toBe(2);
+  });
+
+  it("unions two reports of the same file line by line", () => {
+    // Run one covers lines 1-2 and one branch; run two covers line 3 and the
+    // other branch. Neither alone is complete; together they are.
+    const runTwo = `
+TN:
+SF:packages/pkg-a/src/a.ts
+FN:1,funcA
+FNDA:0,funcA
+FNF:1
+FNH:0
+BRDA:5,0,0,-
+BRDA:5,0,1,3
+BRF:2
+BRH:1
+DA:1,0
+DA:2,0
+DA:3,4
+LF:3
+LH:1
+end_of_record
+`;
+
+    const merged = parseLcovString(mergeLcovReports([FIXTURE_LCOV_1, runTwo]));
+    const file = merged["packages/pkg-a/src/a.ts"];
+
+    expect(file?.lines).toMatchObject({ covered: 3, total: 3 });
+    expect(file?.functions).toMatchObject({ covered: 1, total: 1 });
+    expect(file?.branches).toMatchObject({ covered: 2, total: 2 });
+  });
+
+  it("keeps files that only one report contains", () => {
+    const merged = parseLcovString(mergeLcovReports([FIXTURE_LCOV_1, FIXTURE_LCOV_2]));
+
+    expect(Object.keys(merged).sort()).toEqual([
+      "packages/pkg-a/src/a.ts",
+      "packages/pkg-b/src/b.ts",
+    ]);
+    expect(merged["packages/pkg-b/src/b.ts"]?.lines).toMatchObject({ covered: 3, total: 3 });
   });
 });

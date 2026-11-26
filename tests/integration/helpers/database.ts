@@ -1,4 +1,4 @@
-import { PrismaClient } from "@verixa/database";
+import { createPrismaClient, type PrismaClient } from "@verixa/database";
 
 import { canConnect } from "./tcp-connect.js";
 
@@ -65,5 +65,5 @@ export async function databaseAvailability(): Promise<boolean> {
  * be one environment variable away from doing that to a developer's own data.
  */
 export function createTestPrismaClient(): PrismaClient {
-  return new PrismaClient({ datasources: { db: { url: testDatabaseUrl() } } });
+  return createPrismaClient(testDatabaseUrl());
 }

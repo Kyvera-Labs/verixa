@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { Prisma, PrismaClient, UserStatus, type UserRow } from "./index.js";
+import {
+  createPrismaClient,
+  pgPoolConfig,
+  Prisma,
+  PrismaClient,
+  UserStatus,
+  type UserRow,
+} from "./index.js";
 
 /**
  * These assert that the generated client exists and is exported correctly —
@@ -98,5 +105,56 @@ describe("UserRow type", () => {
     };
 
     expect(withPersonName.givenName).toBe("Alice");
+  });
+});
+
+describe("pgPoolConfig", () => {
+  const base = "postgresql://verixa:verixa@db.internal:5432/verixa";
+
+  it("applies the pool defaults when the URL sets none, leaving the URL untouched", () => {
+    expect(pgPoolConfig(base, { poolSize: 20, poolTimeoutSeconds: 5 })).toEqual({
+      connectionString: base,
+      max: 20,
+      connectionTimeoutMillis: 5000,
+    });
+  });
+
+  it("lets connection_limit and pool_timeout in the URL win, and strips them", () => {
+    const config = pgPoolConfig(`${base}?sslmode=require&connection_limit=3&pool_timeout=0`, {
+      poolSize: 20,
+      poolTimeoutSeconds: 5,
+    });
+
+    expect(config).toEqual({
+      connectionString: `${base}?sslmode=require`,
+      max: 3,
+      connectionTimeoutMillis: 0,
+    });
+  });
+
+  it("sets no pool options when neither the URL nor the defaults do", () => {
+    expect(pgPoolConfig(base)).toEqual({ connectionString: base });
+  });
+
+  it("rejects a connection_limit that is not a positive integer", () => {
+    expect(() => pgPoolConfig(`${base}?connection_limit=0`)).toThrow(/connection_limit/);
+    expect(() => pgPoolConfig(`${base}?pool_timeout=soon`)).toThrow(/pool_timeout/);
+  });
+});
+
+describe("createPrismaClient", () => {
+  it("builds a client on the pg driver adapter without connecting", async () => {
+    // Nothing listens on port 1: building the client must not connect.
+    // The client is never handed to expect() itself, which would recurse
+    // through its proxies (see the note at the top of this file).
+    const client = createPrismaClient("postgresql://verixa:verixa@127.0.0.1:1/verixa", {
+      poolSize: 2,
+      poolTimeoutSeconds: 1,
+    });
+
+    // The constructor returns a proxy, so check its surface, not instanceof.
+    expect(typeof client.$connect).toBe("function");
+    expect(typeof client.user.findMany).toBe("function");
+    await client.$disconnect();
   });
 });

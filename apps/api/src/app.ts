@@ -2,7 +2,15 @@ import { fileURLToPath } from "node:url";
 
 import fastifySwagger from "@fastify/swagger";
 import fastifySwaggerUi from "@fastify/swagger-ui";
-import { createLogger, type Logger } from "@verixa/shared-kernel";
+import {
+  createContextualLogger,
+  getSharedRegistry,
+  HealthCheckRegistry,
+  NoopMetricsRecorder,
+  PrometheusMetricsRecorder,
+  type Logger,
+  type MetricsRecorder,
+} from "@verixa/observability";
 import Fastify from "fastify";
 
 import { registerContextRoutes } from "./composition/register-routes.js";
@@ -16,7 +24,9 @@ import {
   registerBaselineResponseHeaders,
 } from "./plugins/baseline-response-headers.js";
 import { NO_CORS, registerCors, type CorsPolicy } from "./plugins/cors.js";
+import { registerHttpMetrics, type HttpMetricsOptions } from "./plugins/http-metrics.js";
 import { registerRateLimit, type RateLimitPluginOptions } from "./plugins/rate-limit.js";
+import { registerRequestContext } from "./plugins/request-context.js";
 import {
   NO_TRANSPORT_SECURITY,
   registerSecurityHeaders,
@@ -24,6 +34,7 @@ import {
   type SecurityHeadersOptions,
 } from "./plugins/security-headers.js";
 import { registerCspReportRoute } from "./routes/csp-report.js";
+import { registerHealthRoutes } from "./routes/health.js";
 import { registerSecurityTxtRoute } from "./routes/well-known/security-txt.js";
 
 /**
@@ -40,12 +51,14 @@ export type { HstsDirective, SecurityHeadersOptions };
  * into `src/plugins/`.
  */
 export type { CorsPolicy, RateLimitPluginOptions };
+export type { HttpMetricsOptions };
+export { registerHttpMetrics };
 
 /** Re-exported for the integration suite, which builds a GraphQL-only app around a test container. */
 export { createGraphQLApp } from "./graphql/server.js";
 
 export interface BuildAppOptions {
-  readonly logger?: Logger;
+  readonly logger?: Logger | undefined;
   /**
    * The object graph the routes call into.
    *
@@ -59,7 +72,7 @@ export interface BuildAppOptions {
    * server was not built with that capability", where a 500 says "it is
    * broken", and only one of those is true.
    */
-  readonly container?: Container;
+  readonly container?: Container | undefined;
   /**
    * Transport-security response controls (Issue 213).
    *
@@ -70,7 +83,7 @@ export interface BuildAppOptions {
    * Reading the environment here would put a second, unvalidated config path
    * next to `@verixa/config`, which is the thing this package exists to avoid.
    */
-  readonly securityHeaders?: SecurityHeadersOptions;
+  readonly securityHeaders?: SecurityHeadersOptions | undefined;
   /**
    * The cross-origin browser policy (Issue 204).
    *
@@ -80,7 +93,7 @@ export interface BuildAppOptions {
    * validated configuration. Reading the environment here would create a
    * second, unvalidated config path.
    */
-  readonly cors?: CorsPolicy;
+  readonly cors?: CorsPolicy | undefined;
   /**
    * Honour `X-Forwarded-Proto` / `X-Forwarded-For` from an upstream proxy.
    *
@@ -96,6 +109,22 @@ export interface BuildAppOptions {
    * Pass `false` to disable or pass a configuration object to tune limits.
    */
   readonly rateLimit?: boolean | RateLimitPluginOptions;
+  /**
+   * Operational metrics recorder (Phase 18 Observability, Issue 349 / #461).
+   * When provided, registers HTTP golden signal metrics hooks across all routes.
+   */
+  readonly metricsRecorder?: MetricsRecorder | undefined;
+  /**
+   * Health-check registry orchestrating dependency readiness probes.
+   */
+  readonly healthCheckRegistry?: HealthCheckRegistry | undefined;
+  /**
+   * Serve the Prometheus scrape endpoint at GET /metrics. Off by default:
+   * it exposes route names, request volumes and error rates, so it is
+   * enabled only where something (normally an internal scraper) needs
+   * it. Wired from METRICS_ENABLED.
+   */
+  readonly metricsEndpoint?: boolean | undefined;
 }
 
 /**
@@ -106,7 +135,14 @@ export interface BuildAppOptions {
  * for example) — the inferred type is more specific and equally safe.
  */
 export function buildApp(options: BuildAppOptions = {}) {
-  const logger = options.logger ?? createLogger({ name: "verixa-api" });
+  const isTest = process.env["NODE_ENV"] === "test";
+  const logger =
+    options.logger ??
+    options.container?.observability?.logger ??
+    createContextualLogger({
+      name: "verixa-api",
+      level: isTest ? "silent" : "info",
+    });
   const app = Fastify({
     loggerInstance: logger,
     trustProxy: options.trustProxy ?? false,
@@ -155,6 +191,32 @@ export function buildApp(options: BuildAppOptions = {}) {
   // deliberately not set here.
   registerBaselineResponseHeaders(app);
 
+  // Request context and correlation ID linkage (Issue 341, 342, 355)
+  registerRequestContext(app);
+
+  // Operational metrics recorder (Phase 18 Observability, Issue 349 / #461)
+  const metricsRecorder =
+    options.metricsRecorder ??
+    options.container?.observability?.metricsRecorder ??
+    (isTest ? new NoopMetricsRecorder() : new PrometheusMetricsRecorder());
+  registerHttpMetrics(app, { recorder: metricsRecorder });
+
+  // Health-check registry orchestrating liveness (/health/live, /health) and readiness (/health/ready) probes
+  const healthCheckRegistry =
+    options.healthCheckRegistry ??
+    options.container?.observability?.healthCheckRegistry ??
+    new HealthCheckRegistry();
+  registerHealthRoutes(app, { healthCheckRegistry });
+
+  // Prometheus scrape endpoint (Phase 18 Observability, Issue 351)
+  if (options.metricsEndpoint === true) {
+    app.get("/metrics", async (_request, reply) => {
+      const registry = getSharedRegistry();
+      const metrics = await registry.metrics();
+      return reply.header("content-type", registry.contentType).send(metrics);
+    });
+  }
+
   if (process.env["NODE_ENV"] !== "production") {
     app.register(fastifySwagger, {
       mode: "static",
@@ -180,14 +242,12 @@ export function buildApp(options: BuildAppOptions = {}) {
     app.get("/docs/openapi.json", () => app.swagger());
   }
 
-  app.get("/health", () => {
-    // Deliberately does not touch the database. This answers "is this process
-    // alive and serving", which is what a liveness probe needs; a probe that
-    // also checked Postgres would restart a healthy API during a brief
-    // database blip, turning one outage into two. A readiness endpoint that
-    // *does* check dependencies is a separate concern (Phase 18).
-    return { status: "ok" };
-  });
+  const notificationWorker = options.container?.notifications?.worker;
+  if (notificationWorker !== undefined) {
+    // Public and unauthenticated, so only the running flag: the worker's
+    // lastError can carry provider hostnames or connection details.
+    app.get("/health/notifications", () => ({ running: notificationWorker.health().running }));
+  }
 
   // Kept separate from liveness so deployments can verify which immutable
   // image is serving traffic without making health probes depend on metadata.

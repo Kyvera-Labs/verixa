@@ -15,6 +15,10 @@
       "types": "./dist/composition-root.d.ts",
       "default": "./dist/composition-root.js"
     },
+    "./plugins/http-metrics": {
+      "types": "./dist/plugins/http-metrics.d.ts",
+      "default": "./dist/plugins/http-metrics.js"
+    },
     "./shutdown": {
       "types": "./dist/shutdown.d.ts",
       "default": "./dist/shutdown.js"
@@ -42,6 +46,8 @@
     "@verixa/governance": "workspace:*",
     "@verixa/identity": "workspace:*",
     "@verixa/mfa": "workspace:*",
+    "@verixa/observability": "workspace:*",
+    "@verixa/notifications": "workspace:*",
     "@verixa/rate-limiting": "workspace:*",
     "@verixa/sessions": "workspace:*",
     "@verixa/shared-kernel": "workspace:*",
@@ -52,8 +58,7 @@
     "ioredis": "^5.4.1",
     "mercurius": "^16.12.1",
     "openapi-response-validator": "^12.1.3",
-    "zod": "^3.24.1",
-    "zod-to-json-schema": "^3.25.2"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

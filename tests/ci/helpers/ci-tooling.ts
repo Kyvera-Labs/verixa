@@ -33,6 +33,7 @@ const SBOM_GENERATOR = join(REPO_ROOT, "infra", "ci", "generate-sbom.ts");
 const DEPENDENCY_SCAN_GATE = join(REPO_ROOT, "infra", "ci", "dependency-scan.mjs");
 const QUALITY_GATE = join(REPO_ROOT, "infra", "ci", "quality-gate.mjs");
 export const QUALITY_GATES_CONFIG = join(REPO_ROOT, "infra", "ci", "quality-gates.json");
+const PERF_BUDGET = join(REPO_ROOT, "infra", "ci", "perf-budget.ts");
 const CHECK_ENV_MATRIX_GATE = join(REPO_ROOT, "infra", "ci", "check-env-matrix.ts");
 const CI_DASHBOARD_GENERATOR = join(REPO_ROOT, "scripts", "ci-dashboard", "generate.ts");
 const SECURITY_FIXTURE_CONFIG = join(
@@ -146,6 +147,11 @@ export function runDependencyScan(args: readonly string[]): ToolResult {
 /** `tsx infra/ci/generate-sbom.ts <args>` */
 export function runSbomGenerator(args: readonly string[]): ToolResult {
   return run(process.execPath, [TSX_CLI, SBOM_GENERATOR, ...args], REPO_ROOT);
+}
+
+/** `tsx infra/ci/perf-budget.ts <args>` — the Issue 415 suite-duration gate. */
+export function runPerfBudget(args: readonly string[]): ToolResult {
+  return run(process.execPath, [TSX_CLI, PERF_BUDGET, ...args], REPO_ROOT);
 }
 
 /** `tsx infra/ci/check-env-matrix.ts <args>` — the Issue 389 environment matrix check. */

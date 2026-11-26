@@ -37,8 +37,12 @@
     "check:env-matrix": "tsx infra/ci/check-env-matrix.ts",
     "check:migration-safety": "tsx infra/ci/check-migration-safety.ts",
     "sbom:generate": "tsx infra/ci/generate-sbom.ts",
+    "typecheck:ci": "tsc -p infra/ci/tsconfig.json --noEmit",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs",
     "release:dry-run": "semantic-release --dry-run --no-ci",
-    "typecheck:ci": "tsc -p infra/ci/tsconfig.json --noEmit"
+    "perf:budget": "tsx infra/ci/perf-budget.ts"
   },
   "lint-staged": {
     "*.{ts,tsx}": [
@@ -52,16 +56,18 @@
     "@commitlint/cli": "^21.2.4",
     "@commitlint/config-conventional": "^21.2.4",
     "@cyclonedx/cyclonedx-library": "^10.5.1",
-    "@eslint/js": "^9.17.0",
+    "@eslint/js": "^10.0.1",
     "@semantic-release/commit-analyzer": "^13.0.1",
     "@semantic-release/github": "^11.0.6",
     "@semantic-release/release-notes-generator": "^14.1.1",
+    "@stryker-mutator/core": "^10.1.1",
+    "@stryker-mutator/vitest-runner": "^10.1.1",
     "@types/node": "^22.10.0",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
     "ajv-formats-draft2019": "^1.6.1",
     "conventional-changelog-conventionalcommits": "^8.0.0",
-    "eslint": "^9.17.0",
+    "eslint": "^10.14.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-import-resolver-typescript": "^4.4.5",
     "eslint-plugin-import-x": "^4.18.1",
@@ -73,6 +79,7 @@
     "tsx": "^4.23.15",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.73.0",
+    "vitepress": "^1.6.4",
     "yaml": "^2.9.1"
   }
 }

@@ -1,0 +1,82 @@
+name: Setup Workspace
+description: >-
+  Installs pnpm, configures Node.js with lockfile-keyed pnpm store caching,
+  installs workspace dependencies, and optionally generates the Prisma client
+  and builds workspace packages.
+
+inputs:
+  node-version:
+    description: "Node.js version to install (defaults to active LTS 22)."
+    required: false
+    default: "22"
+  build:
+    description: "Whether to generate the Prisma client, build all workspace packages, and re-link injected packages."
+    required: false
+    default: "true"
+  ignore-scripts:
+    description: "Pass --ignore-scripts to pnpm install (useful for lightweight tooling jobs)."
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    # Install the exact pnpm version declared in package.json#packageManager.
+    - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
+    # Cache the pnpm content-addressable store keyed on `pnpm-lock.yaml` hash
+    # (via actions/setup-node's built-in `cache: pnpm`).
+    #
+    # Why lockfile hash rather than branch name:
+    # - Correctness: a branch-keyed cache serves stale tarballs whenever a PR
+    #   updates dependencies or rebases onto main.
+    # - Security: broad fallback keys (e.g. prefixing by branch) allow an
+    #   untrusted PR branch to poison or pollute cache entries shared across
+    #   runs. Keying strictly on the lockfile hash guarantees that a cache hit
+    #   corresponds to the exact dependency graph verified by
+    #   `check-lockfile-integrity.mjs`.
+    #
+    # Cached baseline: `pnpm install --frozen-lockfile` completes in ~5-15s on
+    # a warm pnpm store cache versus ~60-90s uncached from the npm registry.
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: pnpm
+
+    - name: Install dependencies
+      shell: bash
+      run: |
+        if [ "${{ inputs.ignore-scripts }}" = "true" ]; then
+          pnpm install --frozen-lockfile --ignore-scripts
+        else
+          pnpm install --frozen-lockfile
+        fi
+
+    # The Prisma client is generated, not committed (platform-specific query
+    # engine), so it must exist before anything importing @verixa/database is
+    # built, linted, typechecked, or tested.
+    - name: Generate Prisma client
+      if: ${{ inputs.build == 'true' }}
+      shell: bash
+      run: pnpm db:generate
+
+    # Every workspace package must be built before anything that imports it can
+    # be reliably linted, typechecked, or tested — package.json `exports`
+    # subpaths have no fallback to raw `.ts` source when `dist/` is missing.
+    - name: Build workspace packages
+      if: ${{ inputs.build == 'true' }}
+      shell: bash
+      run: pnpm build
+
+    # Re-sync injected workspace packages after building them.
+    #
+    # `injectWorkspacePackages: true` (required for `pnpm deploy`, which builds
+    # the Docker image) causes pnpm to copy certain workspace packages into
+    # dependents' node_modules during the initial install — before `dist/`
+    # exists. Re-running `--frozen-lockfile` after `pnpm build` refreshes those
+    # copies so packages without their own build script (like `tests`) resolve
+    # built entries cleanly on a fresh checkout.
+    - name: Re-link workspace packages
+      if: ${{ inputs.build == 'true' }}
+      shell: bash
+      run: pnpm install --frozen-lockfile

@@ -1,7 +1,10 @@
+import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createConnection } from "node:net";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-import { PrismaClient } from "@verixa/database";
+import { createPrismaClient, type PrismaClient } from "@verixa/database";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { MfaMethod, type UserId } from "../../domain/entities/mfa-method.js";
@@ -37,6 +40,36 @@ async function databaseUrl(): Promise<string | undefined> {
 
 const database = await databaseUrl();
 
+/**
+ * This file runs against a scratch database of its own, created in `beforeAll`
+ * and dropped in `afterAll`, for the same reason as
+ * `packages/sessions/infrastructure/testing/prisma-session-repository.spec.ts`:
+ * `pnpm -r run test` runs packages concurrently, and the identity, credentials
+ * and verification suites call `user.deleteMany({})` between tests. On the
+ * shared database that wiped this file's fixture users mid-test, so saves
+ * failed with "MfaMethod references a record that does not exist".
+ */
+function scratchDatabaseName(): string {
+  return `verixa_mfa_it_${process.pid}_${randomUUID().replaceAll("-", "").slice(0, 8)}`;
+}
+
+function urlForDatabase(base: string, name: string): string {
+  const url = new URL(base);
+  url.pathname = `/${name}`;
+  return url.toString();
+}
+
+/** `migrate deploy` so the tests exercise the schema the migrations really produce. */
+function applyMigrations(databaseUrl: string): void {
+  const databasePackageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../database");
+  execFileSync("pnpm", ["exec", "prisma", "migrate", "deploy"], {
+    cwd: databasePackageRoot,
+    env: { ...process.env, DATABASE_URL: databaseUrl },
+    stdio: "ignore",
+    shell: process.platform === "win32",
+  });
+}
+
 describe.skipIf(database === undefined)("PrismaMfaMethodRepository (real Postgres)", () => {
   // The client is created in `beforeAll`, not eagerly: Vitest still executes a
   // skipped suite's body to collect its tests, so constructing `PrismaClient`
@@ -44,6 +77,7 @@ describe.skipIf(database === undefined)("PrismaMfaMethodRepository (real Postgre
   // configured — turning the intended skip into a red `pnpm test` on a machine
   // without Docker. Mirrors `@verixa/identity`'s harness.
   let prisma: PrismaClient;
+  let databaseName: string;
 
   beforeAll(async () => {
     // The repository encrypts secrets on the way in, and `encrypt` refuses to
@@ -51,13 +85,32 @@ describe.skipIf(database === undefined)("PrismaMfaMethodRepository (real Postgre
     // is irrelevant here as long as it is a valid 32-byte AES-256 key.
     process.env["MFA_ENCRYPTION_KEY"] ??= Buffer.alloc(32, 7).toString("base64");
 
-    prisma = new PrismaClient({ datasources: { db: { url: database as string } } });
+    databaseName = scratchDatabaseName();
+    const admin = createPrismaClient(database as string);
+    try {
+      // DDL: Postgres cannot bind a database name. `databaseName` comes only from
+      // `scratchDatabaseName()` (fixed prefix, pid, random hex), never from input.
+      // eslint-disable-next-line no-restricted-syntax
+      await admin.$executeRawUnsafe(`CREATE DATABASE "${databaseName}"`);
+    } finally {
+      await admin.$disconnect();
+    }
+    const scratchUrl = urlForDatabase(database as string, databaseName);
+    applyMigrations(scratchUrl);
+    prisma = createPrismaClient(scratchUrl);
     await prisma.$connect();
-  }, 60_000);
+  }, 120_000);
 
   afterAll(async () => {
     await prisma.$disconnect();
-  }, 60_000);
+    const admin = createPrismaClient(database as string);
+    try {
+      // eslint-disable-next-line no-restricted-syntax
+      await admin.$executeRawUnsafe(`DROP DATABASE IF EXISTS "${databaseName}" WITH (FORCE)`);
+    } finally {
+      await admin.$disconnect();
+    }
+  }, 120_000);
 
   async function setupUser(): Promise<UserId> {
     const id = randomUUID();
