@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { fileURLToPath } from "node:url";
 
-import { PrismaClient } from "@prisma/client";
+import { createPrismaClient, type PrismaClient } from "../index.js";
 
 const DEFAULT_PERMISSIONS = [
   ["users:read", "View users"],
@@ -111,7 +112,20 @@ async function seedDefaultRoles(prisma: PrismaClient): Promise<void> {
  * looks like a real one.
  */
 
-const prisma = new PrismaClient();
+// Prisma 6 read DATABASE_URL from .env by itself; Prisma 7 does not, and
+// `pnpm db:seed` runs this file directly. Variables already set win.
+const rootEnvFile = fileURLToPath(new URL("../../../.env", import.meta.url));
+try {
+  process.loadEnvFile(rootEnvFile);
+} catch (error) {
+  // No .env is fine (CI and containers pass variables directly).
+  if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+}
+const databaseUrl = process.env["DATABASE_URL"];
+if (databaseUrl === undefined || databaseUrl === "") {
+  throw new Error("DATABASE_URL must be set to seed the database (see .env.example)");
+}
+const prisma = createPrismaClient(databaseUrl);
 
 /**
  * Fixed ids, not random ones.
