@@ -29,7 +29,7 @@ describe.skipIf(redis === undefined)("RedisRevocationList (real Redis)", () => {
 
   afterEach(async () => {
     // Keep each test's keys from leaking into the next.
-    await test.client.flushall();
+    await test.client.flushdb();
   });
 
   afterAll(async () => {
