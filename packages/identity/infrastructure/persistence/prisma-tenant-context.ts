@@ -4,25 +4,17 @@ import { assertValidTenantId, TENANT_CONTEXT_SETTING } from "@verixa/shared-kern
 import type { OrganizationId } from "../../domain/entities/organization.js";
 
 /**
- * Runs work with the Row-Level Security tenant context set (Issue 052).
- *
- * Everything inside the callback executes in one transaction with
- * `app.current_organization_id` bound to `organizationId`, so the RLS
- * policies restrict every statement to that tenant's rows. See
- * `docs/security/multi-tenancy.md`.
+ * Runs work in one transaction with `app.current_organization_id` set, so Row-Level Security
+ * restricts every statement to that tenant (see docs/security/multi-tenancy.md).
  *
  * ```ts
  * const rows = await withTenantContext(prisma, orgId, (tx) =>
- *   tx.organizationMembership.findMany(),   // no WHERE needed — and none trusted
+ *   tx.organizationMembership.findMany(), // no WHERE needed, and none trusted
  * );
  * ```
  *
- * The transaction is not optional. `set_config(..., true)` is scoped to the
- * surrounding transaction, which is exactly what stops a tenant's context
- * leaking onto a pooled connection and being applied to someone else's
- * request later — the failure mode that makes session-scoped `SET` unusable
- * here. Outside a transaction the setting would be discarded before the next
- * statement, and queries would return nothing.
+ * The transaction is required: `set_config(..., true)` is transaction-scoped, so the setting can
+ * never leak onto a pooled connection used by another request.
  */
 export async function withTenantContext<T>(
   prisma: PrismaClient,

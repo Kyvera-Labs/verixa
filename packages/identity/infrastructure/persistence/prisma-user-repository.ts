@@ -8,16 +8,8 @@ import { withMappedErrors } from "./error-mapper.js";
 import { UserMapper } from "./user-mapper.js";
 
 /**
- * Prisma-backed `UserRepository`. Satisfies exactly the same port — and the
- * same behavioral contract (`user-repository.contract.ts`) — as
- * `InMemoryUserRepository`, which is what makes them substitutable rather
- * than merely similar.
- *
- * Takes a `PrismaClient` rather than constructing one. That's what lets a
- * caller hand it a transaction client instead (`prisma.$transaction(tx =>
- * ...)`), which Issue 048 relies on for multi-aggregate atomicity — a
- * repository that owned its own connection could never participate in
- * someone else's transaction.
+ * Prisma-backed `UserRepository`, held to the same contract as `InMemoryUserRepository`. Takes a
+ * client so it can run inside a caller's transaction.
  */
 export class PrismaUserRepository implements UserRepository {
   constructor(private readonly prisma: PrismaClient) {}

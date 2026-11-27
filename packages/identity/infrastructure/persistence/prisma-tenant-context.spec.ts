@@ -7,23 +7,10 @@ import type { OrganizationId } from "../../domain/entities/organization.js";
 import { withTenantContext } from "./prisma-tenant-context.js";
 
 /**
- * The injection surface of the tenant context (Issue 210).
- *
- * `withTenantContext` is the one place in the codebase where a value from a
- * request ends up inside a SQL statement, and it is the place where a mistake
- * is worst: `SET` cannot take bind parameters, so the tempting version of this
- * code concatenated the organization id into the statement text. That would
- * hand anyone who controls a tenant id the ability to say something to
- * Postgres *as the application role*, on every query that follows.
- *
- * So these tests do not check that the payload is harmless — they check that
- * it never reaches the statement at all. The assertion that would fail if
- * someone refactored to concatenation is the one about the SQL *text* being
- * fixed, with the payload arriving only as a bound value.
- *
- * No database here on purpose: this is about how the statement is built, and a
- * unit test is the only version that runs on a machine without Postgres, which
- * is where the refactor would happen.
+ * Tests that a tenant ID never becomes part of SQL text. `SET` cannot take bind parameters, so
+ * concatenating the organization ID would allow SQL injection as the application role. These tests
+ * assert the statement text is fixed and the value arrives only as a bound parameter. No database
+ * is needed.
  */
 
 /**
@@ -47,14 +34,9 @@ interface CapturedQuery {
 }
 
 /**
- * A Prisma client that records instead of connecting.
- *
- * `$transaction` is stubbed to run its callback immediately, and the
- * transaction client's `$executeRaw` renders whatever it is handed with
- * Prisma's own template function — so the test asserts against the same
- * `{ text, values }` split the driver would send, rather than a reconstruction
- * of it. That is the whole point: the payload must be in `values` and nowhere
- * in `text`.
+ * A Prisma client that records queries instead of connecting. `$transaction` runs its callback
+ * immediately and `$executeRaw` renders with Prisma's own template function, so the test sees the
+ * same `{ text, values }` split the driver would send.
  */
 function capturingClient(): { prisma: PrismaClient; queries: CapturedQuery[] } {
   const queries: CapturedQuery[] = [];

@@ -166,15 +166,9 @@ export class User {
   }
 
   /**
-   * Soft-deletes the user: marks the status `deleted` and stamps
-   * {@link deletedAt}. The row is never removed.
-   *
-   * Terminal — see {@link ALLOWED_TRANSITIONS}. Deleting keeps the row so
-   * that everything referencing this user by id stays resolvable: an audit
-   * entry saying "user X suspended user Y" is unreadable if Y's row is gone,
-   * and every foreign key pointing at it would have to be nulled or cascaded.
-   * See docs/guides/database.md on the tradeoffs, including why Phase 24
-   * still needs genuine erasure on top of this.
+   * Soft-deletes the user: sets status `deleted` and stamps {@link deletedAt}. Terminal. The row is
+   * kept so audit entries and foreign keys referencing the user stay resolvable; genuine erasure is
+   * a separate concern (see docs/guides/database.md).
    */
   delete(reason?: string): Result<User, ValidationError> {
     const transitioned = this.transitionTo("deleted", reason);

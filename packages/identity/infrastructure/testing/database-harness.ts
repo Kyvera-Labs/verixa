@@ -8,34 +8,13 @@ import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testconta
 import { createPrismaClient, type PrismaClient } from "@verixa/database";
 
 /**
- * Provides a real Postgres for integration tests, by whichever route is
- * available, and reports honestly when neither is.
+ * Provides a real Postgres for integration tests:
  *
- * Two strategies, in priority order:
+ * 1. With `TEST_DATABASE_URL` (CI's service container, or `docker compose up postgres` locally), a
+ *    private scratch database is created from it, migrated, and dropped by `stop()`.
+ * 2. Otherwise an ephemeral Testcontainers Postgres, if Docker is available.
  *
- * 1. **An already-running database** named by `TEST_DATABASE_URL`. Used by
- *    CI, where a Postgres service container is already up and migrated, and
- *    by anyone running `docker compose up postgres` locally. Fastest, since
- *    nothing has to start.
- * 2. **A Testcontainers-managed ephemeral container** (Issue 047), started on
- *    demand and destroyed afterwards. Requires a working Docker daemon.
- *
- * Neither available means database-backed tests skip — a fresh clone with no
- * Docker still gets a green `pnpm test`. `REQUIRE_DATABASE_TESTS=1` converts
- * that skip into a failure so CI can't quietly lose the coverage.
- *
- * ### Why both, rather than only Testcontainers
- *
- * Testcontainers gives stronger isolation: every run gets a pristine
- * database, so tests cannot leak state into each other and a corrupted local
- * database can't produce failures that reproduce nowhere else. That's the
- * better default for correctness.
- *
- * It also costs a container start — image pull on a cold cache, then
- * initdb — on every run, and it requires Docker, which the CI job already
- * solves more cheaply with a service container that starts once for the whole
- * job. Preferring an existing database when one is offered keeps CI fast
- * without giving up the isolation guarantee for everyone else.
+ * With neither, database tests skip, unless `REQUIRE_DATABASE_TESTS=1` makes that a failure.
  */
 
 const CONNECT_TIMEOUT_MS = 2000;
@@ -89,14 +68,8 @@ function dockerAvailable(): boolean {
 }
 
 /**
- * Applies the migration history to a freshly-started container.
- *
- * `migrate deploy`, not `db push`. `db push` would be faster — it derives the
- * schema straight from schema.prisma and skips migration files entirely — and
- * that is exactly why it's wrong here: it would test a schema that no
- * migration ever produced, so a broken or missing migration would still pass.
- * Replaying real migrations means these tests exercise the same schema
- * production will get.
+ * Applies the migration history with `migrate deploy`, not `db push`, so tests run against the
+ * schema real migrations produce and a broken migration fails.
  */
 function applyMigrations(databaseUrl: string): void {
   const databasePackageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../database");

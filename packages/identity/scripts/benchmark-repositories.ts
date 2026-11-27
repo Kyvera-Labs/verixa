@@ -9,33 +9,9 @@ import { Email } from "../domain/value-objects/email.js";
 import { PrismaUserRepository } from "../infrastructure/persistence/prisma-user-repository.js";
 
 /**
- * Measures latency of the core repository operations (Issue 059).
- *
- *   pnpm db:benchmark
- *
- * ## What a baseline is for
- *
- * You cannot say something "got slower" without a number from before. This
- * script exists so that when Phase 23 starts optimizing, there is a recorded
- * starting point rather than an argument about whether the current behavior
- * was always like this.
- *
- * ## Why p95 and not just an average
- *
- * A mean hides the tail, and the tail is what users experience as "the app is
- * slow". One request in twenty taking 400ms is a real problem that a 12ms
- * average conceals completely. p50 says what a typical request costs; p95 says
- * what a bad one costs. Both are reported because optimizing one at the
- * expense of the other is a common and invisible mistake.
- *
- * ## What these numbers are *not*
- *
- * They are not a performance target, and they are not comparable across
- * machines. Latency here is dominated by the round trip to Postgres, so a
- * local container, a shared CI runner, and a production instance across a
- * network will differ by an order of magnitude for reasons that have nothing
- * to do with the code. A baseline is only meaningful compared against itself,
- * measured the same way on the same hardware.
+ * Measures p50 and p95 latency of the core repository operations (`pnpm db:benchmark`) to give
+ * later optimization a baseline. p95 shows the slow tail an average hides. Results are dominated by
+ * the Postgres round trip, so they are only comparable on the same hardware, measured the same way.
  */
 
 const ITERATIONS = Number(process.env["BENCH_ITERATIONS"] ?? 200);
