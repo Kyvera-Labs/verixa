@@ -14,18 +14,9 @@ const EVIDENCE_TYPES: readonly EvidenceTypeValue[] = [
 ];
 
 /**
- * Which evidence types are meaningful for each verification type.
- *
- * A closed table rather than "any evidence type for any request", because
- * the pairing is a domain invariant: a selfie attached to an
- * `identity-document` request is not a collectible item that happens to be
- * missing, it is a request the reviewer cannot act on. Rejecting it at
- * attachment time keeps a nonsensical combination out of the reviewer queue
- * entirely, rather than surfacing it as a confusing "insufficient evidence"
- * later.
- *
- * The order of each list is the order evidence is considered complete, which
- * is the order a UI should prompt for it.
+ * Which evidence types are valid for each verification type. Invalid pairings are rejected when
+ * evidence is attached, keeping them out of the review queue. Each list is in the order a UI should
+ * prompt for it.
  */
 // A Map rather than a plain object so the lookup is never a dynamic property
 // access on an object — the same reasoning `ValidationErrorAggregator` uses.

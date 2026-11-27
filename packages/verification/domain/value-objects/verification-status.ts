@@ -1,7 +1,7 @@
 import { Result, ValidationError } from "@verixa/shared-kernel";
 
 /**
- * The lifecycle of a `VerificationRequest`.
+ * Lifecycle of a `VerificationRequest`.
  *
  * ```
  * pending_evidence ──► submitted ──► in_review ──┬──► approved   (terminal)
@@ -11,24 +11,15 @@ import { Result, ValidationError } from "@verixa/shared-kernel";
  *              (re-submission re-enters the evidence flow)
  * ```
  *
- * The `needs_more_info → pending_evidence` loop is why this is not a strictly
- * forward state machine. Real verification work is not linear — a blurry
- * document is rejected and re-uploaded, repeatedly — and modelling that as a
- * brand-new request would discard the decision history and re-queue the
- * subject behind everyone else. See Issue 176.
+ * The `needs_more_info` loop keeps the decision history and queue position when evidence must be
+ * re-uploaded.
  */
 export type VerificationStatusValue =
   "pending_evidence" | "submitted" | "in_review" | "needs_more_info" | "approved" | "rejected";
 
 /**
- * The transition table, written once.
- *
- * This is the entire reason the status lives in a value object instead of
- * being a string column the use cases mutate directly: every caller that
- * asks "can I move this to X?" gets the same answer, and a new status is
- * added in exactly one place. Terminal states map to an empty set, so
- * `approved` and `rejected` reject *every* further transition without a
- * special case.
+ * The transition table, defined once so every caller gets the same answer. Terminal states map to
+ * an empty set.
  */
 const ALLOWED_TRANSITIONS: Readonly<
   Record<VerificationStatusValue, ReadonlySet<VerificationStatusValue>>

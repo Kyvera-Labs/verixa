@@ -75,17 +75,10 @@ export class PrismaVerificationRequestRepository implements VerificationRequestR
   }
 
   /**
-   * The filtered, paginated queue read.
-   *
-   * The `assignment` filter is the only part worth reading twice. A claim is a
-   * lease, so "is this row assigned?" is not `assigned_reviewer_id IS NOT NULL`
-   * — a row whose `claim_expires_at` has passed still carries its reviewer id
-   * (nothing clears it on expiry, there is no scheduled job) and is back in the
-   * queue. `assigned` therefore requires a live lease, and `unassigned` is the
-   * `OR` of "never claimed" and "claimed but lapsed". Both spellings of
-   * *unassigned* are matched so the predicate lines up with
-   * `VerificationRequest.isClaimableAt` and with the in-memory fake, which the
-   * shared contract suite asserts.
+   * Filtered, paginated queue read. A claim is a lease, so `assigned` requires a live claim, and
+   * `unassigned` matches both never-claimed rows and rows whose claim expired (the reviewer column
+   * is not cleared on expiry). This matches `VerificationRequest.isClaimableAt` and the in-memory
+   * fake, as the contract suite checks.
    */
   async findQueueCandidates(options: QueueCandidateOptions = {}): Promise<VerificationRequest[]> {
     const now = options.now ?? new Date();
@@ -127,26 +120,9 @@ export class PrismaVerificationRequestRepository implements VerificationRequestR
   }
 
   /**
-   * The race-safe claim, and the reason this adapter exists rather than only
-   * the in-memory fake.
-   *
-   * The candidate is selected with `FOR UPDATE SKIP LOCKED`, which is the
-   * standard "many workers, one queue, no double-processing" pattern:
-   *
-   * - `FOR UPDATE` locks the chosen row, so a concurrent claim by another
-   *   reviewer blocks on it rather than reading a stale value.
-   * - `SKIP LOCKED` makes that concurrent claim *step over* the locked row
-   *   instead of waiting, then find the next candidate. Waiting would be
-   *   correct but needlessly slow — a queue claim is not a critical section
-   *   worth serialising reviewers over.
-   *
-   * Combined with the `status = 'in_review'` filter and the expiry check, two
-   * reviewers calling this at the same instant can never be handed the same
-   * request. Doing the equivalent with an application-level read-then-write
-   * would leave a window between the two in which both read the same row.
-   *
-   * Everything is inside one transaction so the lock is held only as long as
-   * the claim itself takes, and released with the commit.
+   * Race-safe claim using `FOR UPDATE SKIP LOCKED` in one transaction: the selected row is locked,
+   * and a concurrent claim skips it and takes the next candidate instead of waiting. With the
+   * status and expiry filters, two reviewers can never be handed the same request.
    */
   async claimNextInReview(params: ClaimNextInReviewParams): Promise<ClaimNextOutcome> {
     return this.prisma.$transaction(async (tx): Promise<ClaimNextOutcome> => {

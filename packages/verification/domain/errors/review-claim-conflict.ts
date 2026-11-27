@@ -4,14 +4,8 @@ import type { ReviewerId } from "../entities/review-assignment.js";
 import type { VerificationRequestId } from "../entities/verification-request.js";
 
 /**
- * A claim was attempted on a request that another reviewer is already
- * actively working.
- *
- * A conflict, not a validation failure: the caller's request was fine, and
- * the case existed; the queue simply moved on. Returning this rather than
- * silently overwriting the existing claim is the whole point of the
- * assignment model — two reviewers must never be looking at the same case
- * believing they own it.
+ * A claim was attempted on a request another reviewer is actively working. A conflict rather than a
+ * validation error; the existing claim is never overwritten.
  */
 export class ReviewClaimConflictError extends DomainError {
   readonly code = "REVIEW_CLAIM_CONFLICT";

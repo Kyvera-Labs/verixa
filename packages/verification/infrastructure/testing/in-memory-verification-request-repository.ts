@@ -15,21 +15,10 @@ import type {
 } from "../../domain/entities/verification-request.js";
 
 /**
- * A `VerificationRequestRepository` backed by a `Map`, satisfying the same
- * port a real Postgres adapter does. Exists so the claim and decision use
- * cases can be tested without a database.
- *
- * ## Why the fake can honour an atomicity guarantee
- *
- * JavaScript runs one turn of the event loop at a time, and every method here
- * is synchronous inside its `async` wrapper. `claimNextInReview` therefore
- * reads the candidate, transitions it, and writes it back with no `await` in
- * between — no other call can interleave, so two concurrent attempts from two
- * reviewers cannot observe the same candidate. That is a *simulation* of the
- * guarantee, not a proof of it: it says nothing about whether the SQL adapter
- * actually locks. The real race is exercised against Postgres in
- * `prisma-verification-request-repository.spec.ts`, which is where the
- * guarantee genuinely lives. See `docs/guides/testing.md`.
+ * Map-backed `VerificationRequestRepository` for testing use cases without a database.
+ * `claimNextInReview` has no `await` between read and write, so run-to-completion simulates
+ * atomicity; the real locking is tested against Postgres in
+ * `prisma-verification-request-repository.spec.ts`.
  */
 export class InMemoryVerificationRequestRepository implements VerificationRequestRepository {
   private readonly requests = new Map<VerificationRequestId, VerificationRequest>();

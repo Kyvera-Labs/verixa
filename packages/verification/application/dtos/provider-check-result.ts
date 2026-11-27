@@ -1,13 +1,6 @@
 /**
- * The three things an automated provider check can conclude.
- *
- * `inconclusive` is the one that matters and the one vendor SDKs usually do
- * not have. It means "the provider could not decide" — not passed, not
- * failed. Without it, a provider that returns a low-confidence "maybe" has to
- * be squeezed into a pass or a fail by the adapter, and a wrong guess here is
- * a real person denied a service or a fraudster waved through. Making it a
- * first-class outcome lets the workflow route it to a human, which is what
- * the manual-review default provider does for *every* check.
+ * What an automated provider check can conclude. `inconclusive` means the provider could not
+ * decide, so the case goes to a human instead of being forced into a wrong pass or fail.
  */
 export type ProviderCheckOutcome = "passed" | "failed" | "inconclusive";
 

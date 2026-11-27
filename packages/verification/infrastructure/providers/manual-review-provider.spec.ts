@@ -3,15 +3,9 @@ import { describe, expect, it } from "vitest";
 import { ManualReviewProvider } from "./manual-review-provider.js";
 
 /**
- * The safety property of the default provider, asserted directly rather than
- * only through the shared contract (which cannot assume any particular
- * outcome, or it could not also fit a real vendor).
- *
- * If any of these ever fail, the consequence is severe and silent: a
- * deployment with no vendor configured would begin auto-passing or
- * auto-failing identity checks instead of routing them to a human. That is
- * why the expectation is spelled out explicitly and not left to the generic
- * shape test.
+ * Asserts the default provider's safety property directly: it must always route checks to a human.
+ * If it ever passed or failed checks on its own, every deployment without a vendor would start
+ * deciding identity checks automatically.
  */
 describe("ManualReviewProvider", () => {
   it("returns inconclusive for a document check, never a verdict", async () => {

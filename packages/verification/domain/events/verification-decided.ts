@@ -23,22 +23,9 @@ export interface VerificationDecidedParams {
 }
 
 /**
- * A reviewer reached a terminal decision on a request.
- *
- * ## Why it carries more than the request id
- *
- * The audit trail (Phase 10) is the primary consumer, and it records an event
- * *after the fact*, possibly in a different process, possibly days later if
- * delivery was retried. An event holding only `requestId` would force the
- * audit writer to make a follow-up query to learn what was decided, by whom,
- * and why — and that query would read the request's *current* state, which may
- * already have moved on (a re-opened request, a re-run of the queue). The
- * event would then be recorded against a state that never existed.
- *
- * So the event is self-contained and immutable: it is a statement about what
- * happened at a moment, and it stays true regardless of what the aggregate
- * does next. `note` is included specifically because the rationale is the
- * thing a regulator or a subject dispute actually turns on — see Issue 175.
+ * A reviewer reached a terminal decision. The event carries the decision, reviewer and `note`
+ * rather than just the request ID, so the audit trail records what happened at that moment even if
+ * it is processed later, after the request has changed.
  */
 export class VerificationDecided extends BaseDomainEvent {
   readonly eventName = "verification.request.decided";

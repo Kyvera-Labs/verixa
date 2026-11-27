@@ -22,31 +22,12 @@ export type ApproveVerificationError =
   ValidationError | NotFoundError | InvalidStatusTransitionError | ReviewDecisionNotPermittedError;
 
 /**
- * Records a reviewer's decision to approve a verification request.
+ * Records a reviewer's approval. A rationale note is mandatory so the decision can be defended to
+ * an auditor, a regulator or the subject later; the requirement is on this action, not the
+ * aggregate.
  *
- * ## Why the rationale note is mandatory
- *
- * This is a governance requirement, not UX polish. A verification approval
- * grants a person a trusted status that later has to be defensible — to an
- * auditor, to a regulator, or to the subject if the decision is disputed
- * months later. "Who approved this and on what basis" is exactly the kind of
- * question a decision log exists to answer, and a decision recorded with no
- * reason cannot answer it.
- *
- * The requirement lives here rather than on the aggregate for the same reason
- * `SuspendUser`'s reason does (see `docs/guides/use-cases.md`): a
- * `VerificationRequest` *can* be approved without a note — what is forbidden
- * is this administrative *action* being taken without one.
- *
- * ## Why the request is loaded then decided
- *
- * Authorization ("you hold this case") and legality ("this request is in a
- * state that can be approved") are checked by the aggregate from its own
- * current state, not re-derived here. The use case loads the current
- * aggregate, asks it to decide, and persists the result — so two reviewers
- * racing on the same case both load `in_review`, and the second one's
- * aggregate decision fails on the claim check rather than silently
- * double-deciding. See Issue 175.
+ * The aggregate checks the claim and the transition from its current state, so of two reviewers
+ * racing on one case, the second fails the claim check instead of deciding twice.
  */
 export class ApproveVerification {
   constructor(private readonly requests: VerificationRequestRepository) {}

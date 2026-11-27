@@ -27,19 +27,10 @@ function makeEvidence(verificationType: string, evidenceType: string): Evidence 
 }
 
 /**
- * The behavioural contract every `VerificationProvider` implementation must
- * satisfy — run against `ManualReviewProvider` today, and against any future
- * vendor adapter, in the same test bodies. This is the "one suite, many
- * implementations" approach the repository ports use (see
- * `docs/guides/testing.md`), applied to an outbound integration.
- *
- * The assertions are intentionally about the *shape and invariants* the port
- * promises, not about a particular verdict: a real vendor may pass, fail, or
- * be inconclusive for any given input, and a contract that demanded one
- * answer would only ever fit one vendor. What must hold for every adapter is
- * that the answer is well-formed, that a document check and a liveness check
- * are both answerable, and that neither throws for an ordinary
- * unable-to-judge case.
+ * Behavioural contract for every `VerificationProvider`, run against `ManualReviewProvider` and any
+ * vendor adapter (see docs/guides/testing.md). It checks shape and invariants, not a particular
+ * verdict: results are well-formed, document and liveness checks are both answerable, and neither
+ * throws when the provider cannot judge.
  */
 export function verificationProviderContract(createProvider: () => VerificationProvider): void {
   describe("VerificationProvider contract", () => {

@@ -3,15 +3,9 @@ import type { VerificationRetentionStore } from "../application/ports/verificati
 type VerificationRetentionAction = "delete" | "archive";
 
 /**
- * Verification retention for governance's retention enforcement.
- *
- * Implements governance's `RetentionTarget` contract structurally, with no
- * import of it, so this context does not depend on governance. The composition
- * root joins the two and the compiler checks the fit there.
- *
- * Supports `delete` and `archive`. `anonymize` is refused: a verification
- * request is meaningful only in connection with the person it verifies, and
- * stripping that link would leave a record that proves nothing.
+ * Verification retention for governance's retention enforcement. Implements `RetentionTarget`
+ * structurally, without importing governance. Supports `delete` and `archive`; `anonymize` is
+ * refused because a verification record means nothing without its subject.
  */
 export class VerificationRetentionTarget {
   readonly resourceType = "verification" as const;

@@ -23,23 +23,10 @@ export interface ClaimNextReviewCasePolicy {
 }
 
 /**
- * Hands the oldest claimable `in_review` request to the calling reviewer.
- *
- * ## Why this is not "list the queue and pick one"
- *
- * A shared list that reviewers browse and click is the obvious design and the
- * wrong one: two reviewers open the same case, both start work, and whichever
- * saves last silently overwrites the other. The collision is invisible in
- * development (one reviewer) and routine in production (many).
- *
- * So the *assignment* happens inside the repository, atomically, over a
- * locked candidate row. This use case stays deliberately thin — it owns the
- * policy (how long a claim lasts, whether one case at a time) and nothing
- * else, because the part that must be race-free cannot be expressed in
- * application code at all. See the port's `claimNextInReview` contract.
- *
- * The outcome is returned, not thrown: an empty queue and "you already hold a
- * case" are both ordinary, and neither is an error.
+ * Assigns the oldest claimable `in_review` request to the calling reviewer. Assignment happens
+ * atomically in the repository, so two reviewers can never work the same case; this use case only
+ * sets the claim policy (duration, one case at a time). An empty queue or an existing claim is
+ * returned as an outcome, not an error.
  */
 export class ClaimNextReviewCase {
   constructor(

@@ -18,16 +18,9 @@ import {
 } from "../../domain/value-objects/verification-type.js";
 
 /**
- * The single translation between the domain's `identity-document` and the
- * database's `identity_document`.
- *
- * Prisma enum member names cannot contain a hyphen, so it cannot match the
- * domain spelling exactly. Written as an explicit pair of tables rather than
- * a `.replace("-", "_")` so a future value that legitimately contains a
- * hyphen is a visible addition, not a silent mangling.
- *
- * `VerificationStatus` needs no equivalent: its values are already valid
- * Prisma member names, so they pass through untouched.
+ * Maps the domain's `identity-document` to the database's `identity_document`, since Prisma enum
+ * names cannot contain hyphens. An explicit table rather than string replacement, so new values are
+ * deliberate. Status values need no mapping.
  */
 const DOMAIN_TO_DB_TYPE: ReadonlyMap<VerificationTypeValue, DbVerificationType> = new Map([
   ["identity-document", "identity_document"],

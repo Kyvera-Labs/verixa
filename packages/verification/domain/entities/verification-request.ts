@@ -47,30 +47,13 @@ export interface VerificationRequestProps {
 }
 
 /**
- * The verification aggregate root: one subject's request to prove one thing,
- * from first evidence to terminal decision.
+ * Verification aggregate root: one subject's request to prove one thing, from first evidence to
+ * terminal decision. Separate from `User`, which it references by ID, so identity consumers never
+ * carry verification state.
  *
- * ## Why an aggregate and not fields on `User`
- *
- * Identity (`packages/identity`) is a bounded context with its own lifecycle;
- * verification is a different one. Putting `verificationStatus` on `User`
- * would mean every consumer of the identity aggregate carries PII-adjacent
- * verification state it has no business knowing, and would tie the two
- * contexts' release cycles together. `User` is referenced by id for the same
- * reason `Credential` references it by id.
- *
- * ## Why behaviour methods and not setters
- *
- * Every status change goes through a method that consults the transition
- * table (`VerificationStatus`) and the claim (`ReviewAssignment`) before it
- * returns a new instance. There is no `setStatus`. That is what makes
- * "deciding an unclaimed request" or "re-deciding an approved one"
- * structurally impossible rather than a rule each use case has to remember —
- * see Issue 162.
- *
- * The aggregate is immutable: every operation returns a new
- * `VerificationRequest`, and `pullDomainEvents` exposes only what the action
- * that produced *this* instance recorded, exactly like `User`.
+ * Status changes only go through methods that check the transition table and the claim, so deciding
+ * an unclaimed request or re-deciding a terminal one is impossible. Immutable; `pullDomainEvents`
+ * returns only the events of the action that produced this instance.
  */
 export class VerificationRequest {
   readonly id: VerificationRequestId;

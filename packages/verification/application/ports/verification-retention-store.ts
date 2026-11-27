@@ -1,12 +1,7 @@
 /**
- * The storage operations verification retention needs.
- *
- * Only requests that reached a final decision (approved or rejected) are ever
- * candidates. A request still pending, in review or waiting for more
- * information is live work and is never returned, however old it is.
- *
- * Every method is scoped to `organizationId`; a request of another
- * organization is invisible to it.
+ * Storage operations for verification retention. Only finally decided requests (approved or
+ * rejected) are candidates; live work never is, however old. Every method is scoped to
+ * `organizationId`.
  */
 export interface VerificationRetentionStore {
   /**
