@@ -81,7 +81,6 @@ export class ConsumeBackupCode {
     // Match found. Consume the code by removing its hash.
     hashes.splice(matchedIndex, 1);
 
-    // Update the record with the remaining hashes.
     backupMethod.updateSecret(JSON.stringify(hashes));
     await this.mfaMethodRepository.save(backupMethod);
 

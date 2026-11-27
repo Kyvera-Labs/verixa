@@ -330,7 +330,6 @@ describe("password reset (Issues 069 and 070)", () => {
     });
 
     it("rejects reuse of a password from history", async () => {
-      // Set up a credential with password history
       const user = await loadUser();
       const credential = await unitOfWork.repositories.credentials.findByUserId(user.id);
       if (credential === undefined) throw new Error("fixture setup failed");

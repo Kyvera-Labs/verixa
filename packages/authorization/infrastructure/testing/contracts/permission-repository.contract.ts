@@ -50,7 +50,6 @@ export function permissionRepositoryContract(createRepository: () => PermissionR
 
       await expect(repository.save(perm2)).rejects.toThrow(ConflictError);
 
-      // Verify catalog remains consistent with exactly 1 entry
       const all = await repository.findAll();
       expect(all).toHaveLength(1);
       expect(all[0]?.value).toBe("audit:export");

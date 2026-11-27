@@ -17,7 +17,6 @@ describe("GenerateBackupCodes", () => {
 
     const userId = "user-123" as UserId;
 
-    // Create an existing backup_codes method
     const oldMethod = MfaMethod.create(userId, "backup_codes", "old-hashes");
     oldMethod.activate();
     await repo.save(oldMethod);

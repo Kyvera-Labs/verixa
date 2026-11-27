@@ -199,7 +199,6 @@ export function checkMigrationSql(sql: string, filePath = "migration.sql"): Migr
     });
   }
 
-  // Check each statement against safety policies
   for (const stmt of cleanedStatements) {
     const text = stmt.text;
 

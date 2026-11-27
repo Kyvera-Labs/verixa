@@ -426,7 +426,6 @@ export function runFlakyTracker(options: FlakyCliOptions = {}): number {
     ];
   }
 
-  // Check if report file was passed
   if (options.reportPath) {
     const reportFile = resolve(rootDir, options.reportPath);
     if (existsSync(reportFile)) {

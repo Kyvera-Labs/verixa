@@ -31,13 +31,10 @@ export class EnrollTotp {
   async execute(command: EnrollTotpCommand): Promise<Result<EnrollTotpResult, Error>> {
     const userId = asId<"UserId">(command.userId);
 
-    // Generate the CSPRNG secret and URI for the user
     const totpSecret = await this.totpAlgorithm.generateSecret(command.accountName);
 
-    // Create the method in a 'pending' state
     const method = MfaMethod.createPendingTotp(userId, totpSecret);
 
-    // Persist it
     await this.mfaMethodRepository.save(method);
 
     // Return the secret exactly once. It is never retrievable again in plaintext

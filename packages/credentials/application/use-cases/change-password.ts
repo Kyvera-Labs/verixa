@@ -75,7 +75,6 @@ export class ChangePassword {
         return { kind: "wrong_current_password" as const };
       }
 
-      // Check for password reuse (Issue 072)
       const isReused = await credential.isPasswordReused(command.newPassword, (plain, hash) =>
         this.passwordHasher.verify(plain, hash),
       );

@@ -460,11 +460,9 @@ export function runCoverageMerge(
 
   const report = aggregateCoverage(packageEntries);
 
-  // Write merged LCOV
   const mergedLcovPath = path.join(outputDir, "lcov.info");
   writeFileSync(mergedLcovPath, mergedLcovParts.join("\n"), "utf-8");
 
-  // Write summary JSON
   const summaryJsonPath = options.jsonSummaryPath ?? path.join(outputDir, "coverage-summary.json");
   writeFileSync(
     summaryJsonPath,
@@ -472,11 +470,9 @@ export function runCoverageMerge(
     "utf-8",
   );
 
-  // Write HTML dashboard
   const htmlPath = path.join(outputDir, "index.html");
   writeFileSync(htmlPath, generateHtmlDashboard(report), "utf-8");
 
-  // Generate markdown summary
   const markdown = generateMarkdownSummary(report);
   if (options.markdownSummaryPath) {
     writeFileSync(options.markdownSummaryPath, markdown, "utf-8");

@@ -335,7 +335,6 @@ export class AuthenticateWithPassword {
 
     const verified = { user: outcome.user, credential: outcome.credential };
 
-    // Reset rate limit counter on successful authentication
     await this.rateLimiter.reset(rateLimitKey);
 
     // Deliberately outside the transaction above.

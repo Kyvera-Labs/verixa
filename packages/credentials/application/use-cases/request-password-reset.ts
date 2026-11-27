@@ -129,7 +129,6 @@ export class RequestPasswordReset {
       // Intentionally ignored. See above.
     }
 
-    // Reset rate limit counter on successful reset request
     await this.rateLimiter.reset(rateLimitKey);
 
     return Result.ok({ issued: true });

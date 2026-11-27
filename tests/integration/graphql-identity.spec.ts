@@ -309,7 +309,6 @@ describe("GraphQL Identity & Organization Types (Issue 243 / Roadmap 184)", () =
     );
     await orgRepo.save(org);
 
-    // Create 5 member users
     const users: User[] = [];
     for (let i = 1; i <= 5; i++) {
       const u = User.register({

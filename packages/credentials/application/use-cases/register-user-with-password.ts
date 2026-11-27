@@ -125,7 +125,6 @@ export class RegisterUserWithPassword {
       return Result.ok({ user, credential });
     });
 
-    // Reset rate limit counter on successful registration
     if (Result.isOk(result)) {
       await this.rateLimiter.reset(rateLimitKey);
     }

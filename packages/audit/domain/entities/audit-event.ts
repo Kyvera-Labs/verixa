@@ -138,14 +138,12 @@ export class AuditEvent {
     metadata?: Record<string, unknown>;
     timestamp?: Date;
   }): AuditEvent {
-    // Validate action is in the known set
     if (!isAuditAction(params.action)) {
       throw new Error(
         `Invalid audit action: "${params.action}". Action must be registered in AuditAction type.`,
       );
     }
 
-    // Validate and normalize metadata according to action's schema
     const validatedMetadata = validateAuditMetadata(params.action, params.metadata ?? {});
 
     return new AuditEvent({

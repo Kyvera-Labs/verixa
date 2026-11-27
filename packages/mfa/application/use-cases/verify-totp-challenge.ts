@@ -79,7 +79,7 @@ export class VerifyTotpChallenge {
       return Result.err(new Error("MFA method is missing its secret."));
     }
 
-    // Verify code, allowing �1 drift window (30s past or future)
+    // Accept one 30-second step of clock drift either side.
     const matchedStep = await this.totpAlgorithm.verify(method.secret, command.code, 1);
 
     if (matchedStep === null) {

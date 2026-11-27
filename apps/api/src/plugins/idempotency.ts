@@ -184,7 +184,6 @@ export function registerIdempotency<TLogger extends FastifyBaseLogger = FastifyB
       return payload;
     }
 
-    // Save successful / client response in idempotency store
     const serializedPayload =
       typeof payload === "string"
         ? payload

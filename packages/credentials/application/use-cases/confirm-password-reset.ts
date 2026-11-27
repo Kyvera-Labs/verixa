@@ -162,7 +162,6 @@ export class ConfirmPasswordReset {
       // otherwise strand a valid token against a missing row.
       const existing = await repositories.credentials.findByUserId(user.id);
 
-      // Check for password reuse before updating (Issue 072)
       if (existing !== undefined) {
         const isReused = await existing.isPasswordReused(command.newPassword, (plain, hash) =>
           this.passwordHasher.verify(plain, hash),
@@ -226,7 +225,6 @@ export class ConfirmPasswordReset {
       );
     }
 
-    // Reset rate limit counter on successful password reset confirmation
     await this.rateLimiter.reset(rateLimitKey);
 
     return Result.ok({ user: outcome.user });

@@ -217,7 +217,6 @@ export class Credential {
     candidatePassword: string,
     comparePassword: (plain: string, hash: string) => Promise<boolean>,
   ): Promise<boolean> {
-    // Check current password first
     const matchesCurrent = await comparePassword(candidatePassword, this.passwordHash);
     if (matchesCurrent) return true;
 

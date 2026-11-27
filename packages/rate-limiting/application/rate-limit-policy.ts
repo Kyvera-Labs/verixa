@@ -177,7 +177,6 @@ export class RateLimitPolicyRegistry {
       });
     }
 
-    // Set default fallback policy
     const defaultRaw = customPolicies["default"] ?? DEFAULT_ROUTE_POLICIES["default"]!;
     const validatedDefault = routePolicyConfigSchema.parse(defaultRaw);
     const defaultCapacity = validatedDefault.capacity ?? validatedDefault.limit;

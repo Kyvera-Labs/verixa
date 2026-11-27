@@ -30,7 +30,6 @@ describe("PermissionChecker", () => {
     assignmentRepo = new InMemoryUserRoleAssignmentRepository();
     checker = new PermissionChecker(assignmentRepo, roleRepo);
 
-    // Create test roles
     const readerRes = Role.create({
       name: "reader",
       permissions: ["documents:read", "comments:read"],
