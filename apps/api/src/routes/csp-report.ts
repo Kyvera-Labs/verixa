@@ -7,14 +7,8 @@ import type {
 } from "fastify";
 
 /**
- * Collection endpoint for Content-Security-Policy violation reports
- * (Issue 212).
- *
- * A CSP policy nobody reads is a policy nobody fixes. `report-uri` in
- * `plugins/security-headers.ts` points here so that a blocked script leaves a
- * trace instead of silently doing nothing — which is also how a legitimate
- * page breaks under a tightened policy: the developer sees nothing, the user
- * sees a page that half works.
+ * Receives Content-Security-Policy violation reports, so blocked scripts and pages broken by a
+ * tightened policy leave a trace.
  */
 
 /**
@@ -37,16 +31,9 @@ const CSP_REPORT_MEDIA_TYPE = "application/csp-report";
 const MAX_REPORT_BYTES = 16_384;
 
 /**
- * The fields this endpoint understands.
- *
- * `additionalProperties` is deliberately **not** false here, unlike every
- * other schema in this API. The rest of the API rejects unknown properties
- * because a client that believes it set `status: "active"` needs to be told it
- * did not. A CSP report is the opposite shape of problem: the sender is a
- * browser, not a client of ours, and browsers emit fields we do not model
- * (`script-sample`, `referrer`, per-engine variations). Rejecting a report
- * because it contains an interesting extra field throws away exactly the
- * evidence a violation is most likely to be explained by.
+ * Fields this endpoint understands. Unlike other schemas it allows unknown properties, because
+ * reports come from browsers that send fields we do not model, and those fields are often the
+ * evidence.
  */
 const reportSchema = {
   type: "object",

@@ -12,25 +12,10 @@ import {
 } from "./baseline-response-headers.js";
 
 /**
- * Coverage for the global baseline response headers (Issue 203).
- *
- * These assert on real HTTP responses rather than on the options object, since
- * the property that matters is "every response a client can receive carries
- * these headers" — which depends on Fastify's hook inheritance and helmet's
- * serialisation, neither of which reading `BASELINE_RESPONSE_HEADERS` back would
- * exercise.
- *
- * The fixture below is a fixture rather than `buildApp()` for one reason, and it
- * is a real limitation worth stating plainly: `buildApp()` cannot be imported
- * while `main` carries the parse errors in `../routes/verification.ts` and
- * `../../../../packages/authorization/interface/admin-roles.routes.ts`, so this
- * suite would be red for someone else's syntax. What that costs is the
- * integration claim — that `buildApp()` really registers this plugin, and that
- * `app.ts` really passes `DOCS_CONTENT_SECURITY_POLICY` as swagger-ui's
- * `staticCSP`. Both are one line to read in `../app.ts`, and the wiring here
- * deliberately mirrors those two lines so that the header behaviour asserted
- * below is the behaviour that wiring produces. If that mirror stops matching,
- * the `/docs` tests in this file are asserting a fiction: keep them in step.
+ * Asserts the baseline headers on real HTTP responses, since the property under test depends on
+ * Fastify hook inheritance and helmet serialization. The fixture mirrors how `../app.ts` registers
+ * this plugin and passes `DOCS_CONTENT_SECURITY_POLICY` as swagger-ui's `staticCSP`; keep the two
+ * in step.
  */
 function buildHeaderFixture() {
   const app = Fastify({ logger: false });

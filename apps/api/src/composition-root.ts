@@ -104,34 +104,16 @@ import { registerNotificationSubscribers } from "./composition/register-notifica
 import type { PolicyRouteDependencies } from "./routes/policy.js";
 
 /**
- * The composition root: the one place in the system allowed to know which
- * concrete implementations exist.
- *
- * Everything else depends on interfaces. `RegisterUser` knows it needs *a*
- * `UserRepository`; it has no idea one is backed by Prisma. That's what makes
- * the whole application layer testable without a database — and it only holds
- * because the knowledge of "which implementation" is concentrated here rather
- * than scattered across the modules that use them.
- *
- * The rule to preserve: **nothing outside this file imports a `Prisma*`
- * class.** The moment a route handler constructs its own repository, the
- * dependency inversion is gone and that handler can no longer be tested
- * without a database. Wiring is deliberately boring and explicit for the same
- * reason — a DI container would hide these edges behind runtime resolution,
- * where a missing dependency becomes a runtime failure instead of a compile
- * error. At this size, explicit construction costs a few lines and buys
- * complete type safety.
+ * The composition root: the only place that knows which concrete implementations exist. Nothing
+ * outside this file may import a `Prisma*` class, which keeps the application layer testable
+ * without a database. Wiring is explicit rather than a DI container, so a missing dependency is a
+ * compile error.
  */
 
 /**
- * Pool settings from validated config (Issue 053).
- *
- * Keeps the tuning knobs as ordinary validated config (`DATABASE_POOL_SIZE`,
- * `DATABASE_POOL_TIMEOUT_SECONDS`) instead of requiring operators to
- * hand-append query parameters to a URL and get the spelling right. Explicit
- * `connection_limit` / `pool_timeout` parameters in `DATABASE_URL` still win,
- * so a deployment can override per environment without changing code; see
- * pgPoolConfig in @verixa/database for how they reach the driver.
+ * Creates the Prisma client with pool settings from validated config (`DATABASE_POOL_SIZE`,
+ * `DATABASE_POOL_TIMEOUT_SECONDS`). Explicit `connection_limit` and `pool_timeout` parameters in
+ * `DATABASE_URL` still win (see `pgPoolConfig` in @verixa/database).
  */
 function createConfiguredPrismaClient(): PrismaClient {
   const config = loadConfig();
@@ -142,16 +124,9 @@ function createConfiguredPrismaClient(): PrismaClient {
 }
 
 /**
- * Binds the audit append's compare-and-set to a real database transaction
- * (Issue #128).
- *
- * `PrismaAuditLogRepository` takes the transaction as an injected function
- * rather than a client it can call `$transaction` on, so that this package
- * never has to name Prisma. This closure is the one place where that
- * translation happens, and it is deliberately a *transaction runner* rather
- * than a transaction object: the repository decides where the boundary goes,
- * and a composition root that handed it an open transaction would move that
- * decision to the wiring layer, where nobody is testing it.
+ * Transaction runner for the audit log's compare-and-set append. A runner rather than an open
+ * transaction, so the repository decides where the boundary goes, and the audit package never
+ * references Prisma.
  */
 function auditTransaction(prisma: PrismaClient): AuditTransaction {
   return <T>(work: (entries: AuditDelegate) => Promise<T>): Promise<T> =>
@@ -177,23 +152,15 @@ function positiveIntFromEnv(name: string, fallback: number): number {
 }
 
 /**
- * Resolves the anchoring signing backend (Issue #129).
+ * Resolves the anchoring signer from `STELLAR_SIGNING_BACKEND`.
  *
- * `STELLAR_SIGNING_BACKEND` chooses between the two `TransactionSigner`
- * implementations:
+ * - `local`: the key is in this process's environment. Refused on the public network unless
+ *   `STELLAR_ALLOW_LOCAL_SIGNING=1`.
+ * - `kms`: the key never enters this process; the deployment supplies the signer through
+ *   `ContainerOverrides.signer`. Missing it is a startup error rather than silently disabling
+ *   anchoring.
  *
- * - `local` — the key is in this process's environment. Testnet and development
- *   only; on the public network it is refused unless
- *   `STELLAR_ALLOW_LOCAL_SIGNING=1` states the risk explicitly.
- * - `kms` — the key never enters this process. Cannot be built here: the cloud
- *   SDK that talks to the key service belongs to the deployment, so the
- *   signer is supplied through `ContainerOverrides.signer`. Setting `kms`
- *   without supplying one is a startup failure rather than a silent downgrade
- *   to no anchoring, because "I configured hardware-backed signing and got
- *   nothing" is the worst possible outcome to discover during an audit.
- *
- * Unset means: `local` if `STELLAR_ANCHOR_SECRET_KEY` is present (the
- * pre-#129 arrangement, kept working), otherwise no signer at all.
+ * When unset: `local` if `STELLAR_ANCHOR_SECRET_KEY` is present, otherwise no signer.
  */
 function resolveSigner(
   overrides: ContainerOverrides,
@@ -401,25 +368,9 @@ export function buildContainer(
   const passwordHasher = new Argon2PasswordHasher();
   const credentialsUnitOfWork = new PrismaCredentialsUnitOfWork(prisma);
 
-  // Both of these are placeholders for later phases, and both are wired to
-  // real call sites rather than left as TODOs.
-  //
-  // `NullCredentialNotifier` delivers nothing — mail is Phase 14. It is
-  // deliberately silent rather than a stub that logs "would have sent:
-  // <token>", which is the version that survives in production for a
-  // fortnight while every reset token in the system lands in a log
-  // aggregator.
-  //
-  // `NoSessionsRevoker` is *correct* today, not a stub: sessions are Phase
-  // 05, so revoking all of them is genuinely a no-op. Having the call site
-  // exist now is what stops "invalidate sessions on password reset" becoming
-  // a step someone has to remember to add later — the most commonly missed
-  // part of a reset flow.
-  //
-  // `NoopRateLimiter` always allows requests — rate limiting is Phase 15.
-  // It is wired as the default adapter so use cases work before the real
-  // limiter exists. No changes to use cases required when the real one
-  // arrives — only a new adapter and a new wire in composition root.
+  // Default adapters until the real ones are wired: `NullCredentialNotifier` delivers nothing and
+  // never logs tokens, `NoSessionsRevoker` revokes nothing, and `NoopRateLimiter` allows every
+  // request. The call sites already exist, so wiring the real adapters needs no use-case changes.
   const credentialNotifier = new NullCredentialNotifier();
   const sessionRevoker = new NoSessionsRevoker();
   const rateLimiter: RateLimiter =

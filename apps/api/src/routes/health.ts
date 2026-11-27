@@ -15,17 +15,12 @@ export interface HealthRouteOptions {
 }
 
 /**
- * Registers Liveness (/health/live, /health) and Readiness (/health/ready) endpoints.
+ * Registers liveness (`/health/live`, `/health`) and readiness (`/health/ready`).
  *
- * Liveness (/health/live):
- * Evaluates whether the Node.js event loop is alive and responding. Never queries
- * external dependencies (Postgres, Redis) to avoid cascading container restarts
- * during transient infrastructure blips.
- *
- * Readiness (/health/ready):
- * Validates connectivity to required external dependencies (Postgres, Redis)
- * using lightweight pings with bounded timeouts. Returns 200 only when all
- * required dependencies report up; otherwise returns 503 with per-dependency status.
+ * Liveness only checks that the event loop responds and never touches dependencies, so a transient
+ * database blip does not restart every container. Readiness pings the required dependencies
+ * (Postgres, Redis) with bounded timeouts and returns 503 with per-dependency status unless all are
+ * up.
  */
 export function registerHealthRoutes<
   Server extends RawServerBase = RawServerDefault,

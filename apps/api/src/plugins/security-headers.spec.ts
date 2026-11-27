@@ -19,17 +19,8 @@ const productionHsts: SecurityHeadersOptions = {
 };
 
 /**
- * Integration coverage for the global security-headers plugin (Issue 203).
- *
- * These assert on real HTTP responses rather than on the config object, since
- * the property that matters is "every response a client can receive carries
- * these headers" — which depends on Fastify's hook inheritance and helmet's
- * serialisation, neither of which a unit test of the options would exercise.
- *
- * `/health` is the sample route because it is the one endpoint guaranteed to
- * exist without a database: `buildApp()` with no container registers it and
- * nothing else, so this suite runs on a fresh clone the same way `app.spec.ts`
- * does.
+ * Asserts the security headers on real HTTP responses, since coverage depends on Fastify hook
+ * inheritance and helmet serialization. Uses `/health`, which exists without a database.
  */
 describe("security headers", () => {
   const app = buildApp({ securityHeaders: productionHsts });
