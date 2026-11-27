@@ -24,28 +24,13 @@ export interface RefreshedAccessToken {
 export type RefreshAccessTokenError = AuthenticationError;
 
 /**
- * Redeems a refresh token for a new access/refresh token pair, rotating the
- * refresh token in the process.
+ * Redeems a refresh token for a new token pair, rotating the refresh token. Every failure (unknown,
+ * expired, revoked session or reused token) is the same {@link AuthenticationError}, so a stolen
+ * token's holder learns nothing (see docs/security/authentication-flows.md). The rate limiter is
+ * checked first.
  *
- * One error for every failure reason — an unknown token, an expired one, one
- * belonging to a revoked session, and a *reused* one (see below) are all
- * reported identically as {@link AuthenticationError}. Distinguishing them on
- * the wire would tell a caller holding a stolen token exactly what's wrong
- * with it, which is information that only helps whoever isn't supposed to
- * have it. See `AuthenticationError` and `docs/security/authentication-flows.md`.
- *
- * Consults the {@link RateLimiter} port before validating the token to prevent
- * rapid-fire token enumeration or replay guessing attacks.
- *
- * ## Reuse detection
- *
- * Rotation marks the presented token {@link RefreshToken.markUsed}. If this
- * token has *already* been marked used, that is not "the client sent a stale
- * request" — a legitimate client discards a token the moment rotation
- * replaces it, so presenting an already-consumed one means someone else has
- * a copy. The response is to revoke the whole session, not just the token:
- * see `Session.revokeDueToRefreshTokenReuse` and
- * `docs/security/threat-model-sessions.md`.
+ * Presenting an already-rotated token means someone else has a copy, so the whole session is
+ * revoked (see `Session.revokeDueToRefreshTokenReuse`).
  */
 export class RefreshAccessToken {
   constructor(

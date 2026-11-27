@@ -20,30 +20,11 @@ export type LogoutError = ValidationError;
 const DEFAULT_REVOCATION_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Logs a single session out: revokes it, and records it on the
- * `RevocationList` so its still-valid access token stops working
- * immediately rather than merely at its next natural expiry.
+ * Logs one session out: revokes it and adds it to `RevocationList`, so its stateless access token
+ * stops working immediately rather than at expiry.
  *
- * ## Why both tokens have to be handled, not just one
- *
- * Verixa's access tokens are stateless JWTs — accepted on their signature
- * alone, without a database or Redis round trip, which is the entire reason
- * to use them. Revoking only the refresh token would leave the access token
- * fully functional for however long its remaining lifetime is: "log out"
- * would not actually log anyone out, it would just prevent the *next*
- * token. Denylisting by `sessionId` on `RevocationList` closes that gap —
- * the access token payload carries `sessionId`, so one revocation entry
- * closes every access token that session ever issued.
- *
- * ## Idempotence
- *
- * Logging out twice, or logging out a session that never existed, both
- * succeed rather than erroring. A logout failing because the user is
- * "already logged out" is not a state worth surfacing to a client whose
- * only intent was "make sure I am not signed in" — the property that
- * matters is achieved either way. Returning `NotFoundError` here would let a
- * caller enumerate valid session ids by trying random ones and watching
- * which come back 404 vs. 200.
+ * Idempotent: logging out twice, or logging out an unknown session, succeeds. Returning
+ * `NotFoundError` would let callers probe for valid session IDs.
  */
 export class Logout {
   constructor(

@@ -11,18 +11,10 @@ function makeSession(userId: SessionUserId, now = new Date()): Session {
 }
 
 /**
- * Behavioral contract every `SessionRepository` implementation must satisfy —
- * run against `InMemorySessionRepository` and, when a database is available,
- * `PrismaSessionRepository`, via the same test bodies. This is **contract
- * testing**: one shared suite, multiple implementations, each proven to
- * behave identically rather than merely "compile against the same
- * interface." See `docs/guides/testing.md`.
- *
- * `setupUser` supplies the `userId` each test builds a session against.
- * The in-memory fake doesn't care whether a user actually exists, so the
- * default just mints an id; `PrismaSessionRepository`'s own spec overrides
- * this to insert a real `User` row first — `sessions.user_id` carries a
- * foreign key, and a real Postgres enforces it even though the fake can't.
+ * Behavioural contract for every `SessionRepository`, run against the in-memory repository and,
+ * when a database is available, `PrismaSessionRepository` (see docs/guides/testing.md). `setupUser`
+ * provides the user ID; the Prisma spec inserts a real user because `sessions.user_id` has a
+ * foreign key.
  */
 export function sessionRepositoryContract(
   createRepository: () => SessionRepository,

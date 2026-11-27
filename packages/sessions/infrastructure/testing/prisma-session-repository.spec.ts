@@ -124,21 +124,9 @@ describe.skipIf(!available)("PrismaSessionRepository (Issue 083)", () => {
   const createdUserIds: string[] = [];
 
   /**
-   * Runs against a database of this file's own, created here and dropped in
-   * `afterAll`, rather than the shared test database.
-   *
-   * `pnpm -r run test` runs packages concurrently, and several suites in this
-   * workspace deliberately start from an empty store: `packages/identity`'s
-   * Prisma contract suite and half of `tests/integration` call
-   * `user.deleteMany({})` in `afterEach`. `sessions.user_id` is
-   * `ON DELETE CASCADE`, so those wipes delete this file's fixture rows while
-   * it is still asserting on them — CI failed here with "expected [] to have
-   * a length of 1" on a test whose fixture had been verified moments before,
-   * and no amount of ordering inside this file can close that window.
-   *
-   * A per-file database removes the interference instead of narrowing it: no
-   * other suite can reach these rows, because no other suite is connected to
-   * this database.
+   * Uses a scratch database created here and dropped in `afterAll`. Other suites clear the shared
+   * `users` table between tests, and `sessions.user_id` cascades on delete, so a shared database
+   * lets them delete this file's rows mid-test.
    */
   beforeAll(async () => {
     databaseName = scratchDatabaseName();

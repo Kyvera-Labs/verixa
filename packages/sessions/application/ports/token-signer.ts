@@ -7,16 +7,7 @@ export interface AccessTokenPayload {
 }
 
 /**
- * Signs and verifies access tokens. A **port**: the application layer knows
- * it needs *a* signer, not that it is backed by a JWT — see
- * `docs/guides/domain-modeling.md`.
- *
- * `verify` is not called by any use case in this package yet (Issue 095's
- * dependency chain has no route layer to guard); it exists now, alongside a
- * real adapter and its own tests, because Phase 12's route guard is the
- * consumer and should not have to invent the interface it needs — the same
- * "domain skeleton ahead of its delivery mechanism" pattern as
- * `packages/identity`'s `Invitation`.
+ * Signs and verifies access tokens. `verify` is for the route guard that authenticates requests.
  */
 export interface TokenSigner {
   /** Signs `payload`, expiring `ttlSeconds` after signing. */

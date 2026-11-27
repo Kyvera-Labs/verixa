@@ -39,15 +39,8 @@ interface RefreshTokenProps {
 }
 
 /**
- * One link in a session's refresh-token rotation chain.
- *
- * Refresh tokens rotate: every successful `RefreshAccessToken` call consumes
- * the presented token (marks it {@link usedAt}) and issues a brand-new one.
- * Keeping consumed tokens around, rather than deleting them, is what makes
- * reuse detection possible — presenting a token that is already `usedAt` is
- * the strongest available signal that it was copied and is being replayed,
- * since a legitimate client discards a token the moment rotation replaces it.
- * See `RefreshTokenReuseDetected` and `docs/security/threat-model-sessions.md`.
+ * One link in a session's refresh-token rotation chain. Consumed tokens are kept, not deleted, so
+ * presenting one again can be detected as reuse (see `RefreshTokenReuseDetected`).
  */
 export class RefreshToken {
   readonly id: RefreshTokenId;

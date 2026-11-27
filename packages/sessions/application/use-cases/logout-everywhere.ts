@@ -13,34 +13,12 @@ export type LogoutEverywhereError = ValidationError;
 const DEFAULT_REVOCATION_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Revokes every active session belonging to a user: the blunt-force tool
- * behind "log out all devices," password-change flows (`ConfirmPasswordReset`
- * in `@verixa/credentials`, via its `SessionRevoker` port — Issue 070), and
- * admin-initiated account lockdown.
+ * Revokes all of a user's active sessions: "log out all devices", password reset (through
+ * credentials' `SessionRevoker`) and admin lockdown. Idempotent.
  *
- * Idempotent, same reasoning as `Logout`: a user with no active sessions is
- * a successful (trivial) "logout everywhere", not an error.
- *
- * ## Why this loads every active session instead of a single bulk update
- *
- * A bulk `UPDATE sessions SET revoked_at = now() WHERE user_id = ...` would
- * be one round trip instead of `N`, but denylisting each session's access
- * tokens on `RevocationList` needs each session's `id` regardless — the
- * same gap `Logout` closes for a single session. Once the data has to be
- * read anyway, going through `findActiveByUserId` keeps this consistent
- * with every other use case here rather than adding a second read path.
- *
- * ## Why new logins after the call are unaffected
- *
- * Only *existing* rows returned by `findActiveByUserId` at the moment this
- * runs are touched. A session created by a concurrent `IssueSession` call
- * that lands after this method has already read the list is a different
- * row this call never sees — which is exactly Issue 092's second acceptance
- * criterion: "new logins after the call are unaffected." That is not a
- * synchronization gap to close; a user who logs back in immediately after
- * "log out everywhere" is not the scenario this defends against, and a
- * fix would mean holding a lock across the entire user's session table for
- * no benefit.
+ * It loads each session rather than running one bulk UPDATE because each session ID must be added
+ * to `RevocationList` anyway. Sessions created concurrently after the read are not affected, which
+ * is intended.
  */
 export class LogoutEverywhere {
   constructor(

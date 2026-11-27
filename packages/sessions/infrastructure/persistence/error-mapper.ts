@@ -2,28 +2,10 @@ import { PrismaClientKnownRequestError } from "@verixa/database";
 import { ConflictError, NotFoundError } from "@verixa/shared-kernel";
 
 /**
- * Translates Prisma errors into the domain error hierarchy — an
- * **anti-corruption layer** at the persistence boundary.
+ * Translates Prisma errors into domain errors so use cases never depend on Prisma error codes.
  *
- * Without this, a `PrismaClientKnownRequestError` with `code: "P2002"` travels
- * all the way up to a use case, which then has to know what "P2002" means to
- * decide anything. At that point the application layer depends on Prisma in
- * the one way the ports were built to prevent: not by importing it, but by
- * understanding it. Swapping the ORM would mean rewriting every error branch
- * in every use case.
- *
- * So Prisma's vocabulary stops here. Above this line there are only
- * `ConflictError`, `NotFoundError`, and the rest of the domain hierarchy.
- *
- * ## What is deliberately *not* mapped
- *
- * Only errors a caller can act on are translated. A dropped connection,
- * a timeout, a syntax error in a generated query — these are rethrown
- * untouched. They are not part of any use case's contract: there is no
- * sensible `err` branch for "the database is unreachable", and flattening
- * them into a domain error would discard the diagnostic detail an operator
- * needs while pretending the failure was expected. They belong at a top-level
- * error boundary, as exceptions. See `docs/guides/error-handling.md`.
+ * Only errors a caller can act on are mapped. Connection failures, timeouts and query errors are
+ * rethrown unchanged for the top-level error boundary (see docs/guides/error-handling.md).
  */
 
 /** Unique constraint violation. */

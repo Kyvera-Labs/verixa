@@ -10,15 +10,9 @@ type SessionRetentionAction = "delete" | "anonymize";
 export type OrganizationUserLookup = (organizationId: string) => Promise<readonly string[]>;
 
 /**
- * Session retention for governance's retention enforcement.
- *
- * Implements governance's `RetentionTarget` contract structurally, with no
- * import of it, so this context does not depend on governance: the composition
- * root is where the two are joined, and the compiler checks the fit there.
- *
- * Supports `delete` and `anonymize`. Archiving a session has no meaning (it is
- * short-lived credential state, not a record anyone consults later), so it is
- * refused rather than quietly treated as one of the others.
+ * Session retention for governance's retention enforcement. Implements `RetentionTarget`
+ * structurally, without importing governance. Supports `delete` and `anonymize`; `archive` is
+ * refused because archived session state has no use.
  */
 export class SessionRetentionTarget {
   readonly resourceType = "sessions" as const;

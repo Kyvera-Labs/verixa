@@ -11,18 +11,9 @@ function createSessionId(): SessionId {
 const ONE_MINUTE_MS = 60 * 1000;
 
 /**
- * Behavioral contract every {@link RevocationList} implementation must satisfy —
- * run against {@link import("../in-memory-revocation-list.js").InMemoryRevocationList}
- * and, when a Redis is available, against `RedisRevocationList`, through the same
- * test bodies. Contract testing (see `docs/guides/testing.md`): one suite,
- * every adapter, each proven to *behave* the same rather than merely to
- * implement the same interface.
- *
- * `createList` may be async so an adapter can spin up its backing store. The
- * time-dependent guarantees (TTL expiry, fail-closed) are deliberately left to
- * each adapter's own spec, because they cannot be exercised identically without
- * either sleeping or reaching into implementation details — this suite covers
- * the behavior that is genuinely common and instantaneous.
+ * Behavioural contract for every {@link RevocationList}, run against the in-memory list and, when
+ * available, `RedisRevocationList` (see docs/guides/testing.md). `createList` may be async. TTL
+ * expiry and fail-closed behaviour are tested in each adapter's own spec.
  */
 export function revocationListContract(
   createList: () => RevocationList | Promise<RevocationList>,

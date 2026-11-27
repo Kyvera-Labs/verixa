@@ -36,24 +36,11 @@ interface SessionProps {
 }
 
 /**
- * A single logged-in session for a user: one browser, device or client that
- * authenticated and hasn't logged out. Holds no token material itself — the
- * bearer secret lives on {@link RefreshToken}, rotated independently — so
- * that listing or displaying a `Session` (Issue 095) can never leak
- * something a token thief could replay. See `docs/security/token-storage.md`.
+ * One logged-in browser, device or client. Holds no token material, so listing sessions can never
+ * leak a replayable secret; the bearer secret lives on {@link RefreshToken}.
  *
- * Revocation here only stops the *refresh* token from working; its current
- * access token is a self-contained JWT that stays valid until its own
- * `exp`. Closing that window is `RevocationList`'s job, keyed by this
- * session's own `id` — not something tracked on the entity, since the JWT
- * payload (`AccessTokenPayload`) already carries `sessionId` for exactly
- * this check. See `Logout`/`LogoutEverywhere`/`IssueSession`'s eviction.
- *
- * ## No setters
- *
- * Same discipline as `AuditLogEntry` and `User`: every state change returns
- * a new `Session`, and there is no way to mutate `revokedAt` from outside
- * this class.
+ * Revocation stops the refresh token; the current access token is blocked by `RevocationList`,
+ * keyed by this session's `id`. Immutable: every change returns a new `Session`.
  */
 export class Session {
   readonly id: SessionId;
