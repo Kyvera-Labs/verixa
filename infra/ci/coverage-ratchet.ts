@@ -326,15 +326,10 @@ export function formatRatchetMarkdown(result: RatchetComparisonResult): string {
 }
 
 /**
- * Adapts the summary `coverage-merge.ts` writes to the shape the ratchet
- * compares.
- *
- * The merge writes the workspace totals under `aggregate` and keys packages
- * by directory (`packages/audit`). The baseline, and therefore the ratchet,
- * key them by package name (`@verixa/audit`) and read totals from `total`.
- * Without this, every target read as 0% and the ratchet failed on every run.
- * A directory key is renamed to the `name` in its `package.json`; a key that
- * is already a name, or whose manifest cannot be read, is kept as it is.
+ * Converts the summary `coverage-merge.ts` writes into the shape the ratchet compares: totals from
+ * `aggregate` become `total`, and directory keys (`packages/audit`) become package names
+ * (`@verixa/audit`) from each `package.json`. Keys that are already names, or whose manifest cannot
+ * be read, are kept.
  */
 export function normalizeCoverageSummary(
   raw: unknown,

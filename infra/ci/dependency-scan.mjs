@@ -1,45 +1,21 @@
 /**
- * Dependency-scanning gate (issue 207).
+ * Dependency-scanning gate. Reads a `pnpm audit --json` report and fails on high or critical
+ * advisories not covered by an unexpired entry in `infra/ci/security-exceptions.json`. Exceptions
+ * are explicit and dated, so accepted risks come up for review.
  *
- * Reads a `pnpm audit --prod --json` report and fails when a high or critical
- * advisory affects a production dependency and is not covered by an unexpired
- * entry in `infra/ci/security-exceptions.json`.
+ * ```
+ * node infra/ci/dependency-scan.mjs \
+ *   --audit dependency-audit.json \
+ *   --exceptions infra/ci/security-exceptions.json \
+ *   [--baseline base-audit.json] \
+ *   [--today 2026-10-17]
+ * ```
  *
- * ## Why this exists as its own script rather than a shell one-liner in the
- * workflow
+ * `--baseline` is the audit of the pull request's target branch. Findings also present there are
+ * reported but do not fail the pull request; the nightly scan runs without a baseline, so they
+ * still fail there.
  *
- * `pnpm audit` already exits non-zero when it finds anything at or above the
- * audit level, so a gate could be `pnpm audit --audit-level=high`. That gate
- * cannot express the exception process: a maintainer who has reviewed an
- * advisory and decided a fix is not available yet has no way to say so except
- * to stop auditing. This script makes that decision explicit and dated, so it
- * comes up for review instead of living forever in a comment.
- *
- * It also has to be testable. The behaviour that matters is "which findings
- * fail", and a fixture report can exercise every branch of that in
- * milliseconds — including the two that matter most, an exception that covers
- * a finding and one that has expired.
- *
- * ## Usage
- *
- *   node infra/ci/dependency-scan.mjs \
- *     --audit dependency-audit.json \
- *     --exceptions infra/ci/security-exceptions.json \
- *     [--baseline base-audit.json] \
- *     [--today 2026-10-17]
- *
- * `--baseline` is the audit report of the branch a pull request targets. A
- * finding that is also present there was not introduced by the pull request,
- * so it is reported but does not fail the gate. Without this, an advisory
- * published against a dependency already on `main` failed every pull request
- * that touched the lockfile until someone fixed `main`, however unrelated the
- * change. Pre-existing findings stay visible here and still fail the nightly
- * scan, which runs without a baseline, so they cannot be forgotten.
- *
- * Exit codes: 0 pass, 1 unexcepted or expired high/critical findings, 2 the
- * inputs are malformed. The split is deliberate: a misconfigured exceptions
- * file must not look like a vulnerability, and a vulnerability must not look
- * like a typo in the workflow.
+ * Exit codes: 0 pass, 1 unexcepted or expired high/critical findings, 2 malformed inputs.
  */
 
 import { readFileSync } from "node:fs";
@@ -127,14 +103,9 @@ function readJson(path, description) {
 }
 
 /**
- * Advisory identifiers for one reported finding.
- *
- * `pnpm audit` and `npm audit` disagree about where the identifier lives
- * depending on version and on whether the advisory came from the npm registry
- * or GitHub. Rather than guess, every plausible field is mined and the union
- * kept, so an exceptions file can name whichever spelling it saw in the report.
- * The npm numeric `source` becomes `npm:<id>`, which is the only identifier
- * available when GitHub has not published a GHSA for the advisory.
+ * Advisory identifiers for one finding. `pnpm audit` and `npm audit` store them in different fields
+ * depending on version and source, so every plausible field is collected. The npm numeric source
+ * becomes `npm:<id>` when no GHSA exists.
  */
 function advisoryIdentifiers(source) {
   const identifiers = new Set();

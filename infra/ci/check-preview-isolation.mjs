@@ -1,25 +1,18 @@
 #!/usr/bin/env node
 /**
- * Preview environment secrets & config isolation validator
- * (Phase 19, Issue #489 / roadmap 377).
+ * Validates isolation between PR preview deployments and production:
  *
- * Enforces the security invariants between ephemeral PR preview deployments
- * and production:
- *   1. Preview deploy/teardown jobs are scoped to the `preview` GitHub
- *      Environment (never `production`, never unscoped).
- *   2. The preview workflow never uses `pull_request_target` (prevents
- *      untrusted fork code from executing with secret access).
- *   3. Secret-bearing preview jobs explicitly gate out fork-originated PRs
- *      (`head.repo.full_name == github.repository`).
- *   4. Only preview-scoped secret names (`PREVIEW_*`) are referenced; no
- *      `PROD_*`, `PRODUCTION_*`, or `LIVE_*` secrets appear.
- *   5. No production connection strings or live API keys appear in workflow
- *      config, environment manifests, or runtime environment variables.
- *   6. Per-PR Redis namespace isolation (`preview:pr-...`) is configured.
+ * 1. Preview deploy and teardown jobs use the `preview` GitHub Environment.
+ * 2. The preview workflow never uses `pull_request_target`.
+ * 3. Secret-bearing preview jobs exclude fork pull requests (`head.repo.full_name ==
+ *    github.repository`).
+ * 4. Only `PREVIEW_*` secrets are referenced, never `PROD_*`, `PRODUCTION_*` or `LIVE_*`.
+ * 5. No production connection strings or live API keys appear in workflow config, environment
+ *    manifests or runtime variables.
+ * 6. Each pull request gets its own Redis namespace (`preview:pr-...`).
  *
- * Usage:
- *   node infra/ci/check-preview-isolation.mjs              # static config check
- *   node infra/ci/check-preview-isolation.mjs --check-env  # also validate process.env
+ * Usage: `node infra/ci/check-preview-isolation.mjs [--check-env]` (`--check-env` also validates
+ * `process.env`).
  */
 
 import { existsSync, readFileSync } from "node:fs";

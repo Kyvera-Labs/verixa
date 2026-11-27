@@ -1,34 +1,14 @@
 #!/usr/bin/env node
 /**
- * Lockfile integrity gate (Issue 215).
+ * Lockfile integrity gate. Before anything else in CI runs, checks that `pnpm-lock.yaml` is
+ * committed and matches every manifest.
  *
- * Answers one question before anything else in CI is allowed to run: does
- * `pnpm-lock.yaml` describe exactly what the manifests declare, and is it
- * committed at all? If it does not, `--frozen-lockfile` fails with a
- * pnpm-internal resolution message, `--no-frozen` silently rewrites the
- * lockfile, and either way the build that follows is of a dependency graph
- * nobody reviewed.
+ * It adds to `pnpm install --frozen-lockfile` by reporting every mismatch in one pass, rejecting
+ * floating ranges (`*`, `latest`, `4.x`) that let the graph change on rebuild, and failing when the
+ * lockfile is not committed.
  *
- * Why this exists when CI already runs `pnpm install --frozen-lockfile`:
- *
- * - `--frozen-lockfile` stops at the first mismatch it hits. This reports every
- *   mismatch across the workspace in one pass, naming the manifest file and the
- *   dependency.
- * - `--frozen-lockfile` says nothing about floating ranges (`*`, `latest`,
- *   `4.x`). A lockfile can satisfy one perfectly and still describe a graph
- *   that changes underneath a rebuild, because the next resolution of the same
- *   manifest is free to pick something newer. Rejecting floats at the manifest
- *   is the only point where that choice is still cheap to reverse.
- * - `--frozen-lockfile` says nothing about whether the lockfile is *committed*,
- *   which is check 3 below and the failure mode with the widest blast radius.
- *
- * Why plain JavaScript with no dependencies, when its sibling `generate-sbom.ts`
- * is TypeScript: this has to run *before* `pnpm install`, so it cannot be
- * installed — a missing `node_modules` is one of the states it exists to
- * diagnose. Same reason the lockfile reader below is hand-written for the shape
- * pnpm emits rather than a general YAML parser: it errors out on a shape it does
- * not recognise instead of guessing. A gate that cannot verify should fail, not
- * pass on a misread.
+ * Dependency-free JavaScript because it runs before `pnpm install`. The lockfile reader handles
+ * only the shape pnpm emits and fails on anything else rather than guessing.
  *
  * Usage: node infra/ci/check-lockfile-integrity.mjs [--repo <path>]
  */
@@ -81,26 +61,22 @@ function isFloatingSpecifier(specifier) {
 }
 
 /**
- * Reads pnpm's lockfile text into `{ lockfileVersion, importers, packageKeys }`.
+ * Reads pnpm's lockfile into `{ lockfileVersion, importers, packageKeys }`. `importers` maps a
+ * workspace path (`.` for the root) to each dependency section and its `{ specifier, version }`
+ * entries; `packageKeys` lists every key of the top-level `packages:` block. A state machine over
+ * indentation for the fixed shape pnpm emits:
  *
- * `importers` maps a workspace-relative path (`.` for the root, `apps/api` for
- * a member, always forward-slash separated the way pnpm writes it) to each
- * dependency section, and each section to `{ specifier, version }` per package.
- * `packageKeys` is every key of the top-level `packages:` block — pnpm's record
- * of the resolved identity of everything that will actually be installed.
- *
- * The reader is a state machine over indentation, because pnpm emits one fixed
- * shape rather than arbitrary YAML:
- *
- *   lockfileVersion: '9.0'
- *   importers:
- *     <path>:
- *       <section>:
- *         <package>:
- *           specifier: <range>
- *           version: <resolved>
- *   packages:
- *     <package>@<resolved>:
+ * ```
+ * lockfileVersion: '9.0'
+ * importers:
+ *   <path>:
+ *     <section>:
+ *       <package>:
+ *         specifier: <range>
+ *         version: <resolved>
+ * packages:
+ *   <package>@<resolved>:
+ * ```
  */
 function readLockfile(text) {
   const lines = text.split(/\r?\n/u);
@@ -370,14 +346,9 @@ function assertLockfileIsCommitted(repoRoot) {
 }
 
 /**
- * Keys that appear more than once in the same JSON object, as dotted paths.
- *
- * `JSON.parse` accepts duplicates and silently keeps the last one, so a merge
- * that leaves two `"typescript"` entries behind installs whichever came
- * second, usually the stale one, with no error anywhere. A merge of #612 did
- * exactly that to @vitest/coverage-v8 and broke coverage on main. Strings are
- * skipped as whole tokens, so braces or colons inside values cannot confuse
- * the scan.
+ * Keys repeated within the same JSON object, as dotted paths. `JSON.parse` silently keeps the last
+ * duplicate, so a bad merge can install a stale version with no error. Strings are skipped as whole
+ * tokens, so braces or colons inside values cannot confuse the scan.
  */
 export function findDuplicateKeys(text) {
   const scopes = [];

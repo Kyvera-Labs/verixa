@@ -1,37 +1,19 @@
 #!/usr/bin/env node
 /**
- * Code quality gate for contributor pull requests.
+ * Code quality gate for contributor pull requests. Each measurement the workflow takes is turned
+ * into a result file by a subcommand, and `report` judges all results against `quality-gates.json`:
  *
- * The quality workflow runs a few measurements (coverage of the changed
- * packages, coverage of the changed lines, complexity of the changed code,
- * the pull request title) and hands each one to a subcommand here, which
- * turns it into a uniform result file. `report` then reads every result
- * against `quality-gates.json` and decides.
+ * ```
+ * node infra/ci/quality-gate.mjs patch-coverage --diff d.txt --lcov a.info [--lcov b.info] --min 80 --out r/patch.json
+ * node infra/ci/quality-gate.mjs package-coverage --status s.txt --out r/coverage.json
+ * node infra/ci/quality-gate.mjs complexity --eslint e.json --out r/complexity.json
+ * node infra/ci/quality-gate.mjs pr-title --exit-code 1 --output o.txt --title "..." --out r/title.json
+ * node infra/ci/quality-gate.mjs report --config infra/ci/quality-gates.json --results r/
+ * ```
  *
- *     node infra/ci/quality-gate.mjs patch-coverage --diff d.txt --lcov a.info [--lcov b.info] --min 80 --out r/patch.json
- *     node infra/ci/quality-gate.mjs package-coverage --status s.txt --out r/coverage.json
- *     node infra/ci/quality-gate.mjs complexity --eslint e.json --out r/complexity.json
- *     node infra/ci/quality-gate.mjs pr-title --exit-code 1 --output o.txt --title "..." --out r/title.json
- *     node infra/ci/quality-gate.mjs report --config infra/ci/quality-gates.json --results r/
- *
- * ## Why a mode per gate, in a file
- *
- * A new check that blocks from day one blocks good pull requests on its
- * false positives, and a check that only ever warns is ignored. So every gate
- * has a mode, `off`, `warn` or `block`, read from `quality-gates.json`, and a
- * gate moves from `warn` to `block` by editing one line once its warnings
- * have proved trustworthy. CODEOWNERS covers `infra/ci/`, so loosening a gate
- * is a reviewed change like any other.
- *
- * ## Fail closed for blocking gates
- *
- * A `block` gate whose result file is missing or unreadable fails the report.
- * A measurement that crashed has not passed; treating it as a pass would let
- * a broken step quietly disable the gate. A `warn` gate in the same state is
- * reported as not having run.
- *
- * Dependency-free on purpose, like the other gates here: it only reads files
- * the workflow produced.
+ * Each gate has a mode, `off`, `warn` or `block`, so a new check can warn until it proves reliable.
+ * A `block` gate with a missing or unreadable result fails; a `warn` gate in that state is reported
+ * as not run. Dependency-free; it only reads files the workflow produced.
  */
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";

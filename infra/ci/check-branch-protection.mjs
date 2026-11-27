@@ -1,14 +1,12 @@
 #!/usr/bin/env node
 /**
- * Validates `.github/branch-protection.json` against `.github/workflows/*.yml`.
+ * Validates `.github/branch-protection.json` against `.github/workflows/*.yml`:
  *
- * Ensures that:
  * 1. The ruleset targets the default branch and is active.
- * 2. Deletion, force-push, PR review (>= 1 approving review, dismiss stale
- *    reviews), and strict required status checks are all enabled.
- * 3. Every required status check context actually exists as a job name (or job
- *    key when `name` is omitted) in `.github/workflows/*.yml`, preventing a
- *    workflow refactor from silently hanging PRs on a non-existent check.
+ * 2. Deletion and force-push are blocked, and pull request review and strict required status checks
+ *    are enabled.
+ * 3. Every required status check exists as a job name (or job key when `name` is omitted), so a
+ *    workflow refactor cannot leave pull requests waiting on a check that never runs.
  */
 import fs from "node:fs";
 import path from "node:path";

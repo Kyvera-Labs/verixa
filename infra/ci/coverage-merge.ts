@@ -1,16 +1,9 @@
 /**
- * Workspace-wide coverage aggregation (Issue 412).
+ * Merges every package's coverage (`lcov.info`) into one workspace report with aggregate and
+ * per-package metrics, writing `coverage/lcov.info`, `coverage/coverage-summary.json`,
+ * `coverage/index.html` and a Markdown summary for PR comments and CI step summaries.
  *
- * Scans all packages and apps for per-package coverage artifacts (coverage-final.json,
- * lcov.info), merges them into a single monorepo-wide coverage report, calculates
- * both aggregate metrics and a per-package breakdown, and outputs:
- * - Merged LCOV file (`coverage/lcov.info`)
- * - Unified JSON summary (`coverage/coverage-summary.json`)
- * - Standalone HTML dashboard (`coverage/index.html`)
- * - Formatted Markdown summary table for PR comments and CI step summaries.
- *
- * Usage:
- *   tsx infra/ci/coverage-merge.ts [--output-dir <path>] [--summary-markdown <path>]
+ * Usage: `tsx infra/ci/coverage-merge.ts [--output-dir <path>] [--summary-markdown <path>]`
  */
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";

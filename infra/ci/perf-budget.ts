@@ -1,7 +1,5 @@
 /**
- * Test-suite performance budget (Issue 415).
- *
- * Two subcommands, both run by `ci.yml` and both usable locally:
+ * Test-suite performance budget, run by `ci.yml` and usable locally.
  *
  * ```
  * tsx infra/ci/perf-budget.ts measure --suite <name> --timings <file> -- <command...>
@@ -9,31 +7,14 @@
  *                                   [--summary <file>] [--report <file>]
  * ```
  *
- * `measure` runs one suite's command and records its **wall-clock** time. It
- * times the process from outside, not by summing Vitest's per-test durations:
- * under parallel workers those overlap, so their sum says how much CPU the
- * tests used, not how long a contributor waits, and it shrinks whenever
- * parallelism grows. The command's exit code is passed through unchanged, so
- * a failing suite still fails its step.
+ * `measure` runs a suite's command and records its wall-clock time, timing the process from outside
+ * because summed per-test durations overlap under parallel workers. The command's exit code is
+ * passed through.
  *
- * `check` compares the recorded timings to the committed baseline. A suite
- * over `baselineSeconds × (1 + tolerancePercent / 100)` is a regression. It
- * writes a Markdown table (appended to `$GITHUB_STEP_SUMMARY` in CI) and a
- * JSON report (uploaded as an artifact), then exits:
- *
- * - `0`: every budgeted suite is within tolerance
- * - `1`: at least one suite regressed, or a budgeted suite was never measured
- * - `2`: the baseline or timings file is missing or malformed, or the
- *   arguments are wrong. Same convention as `dependency-scan.mjs`: a gate
- *   that cannot read its input fails, it does not pass.
- *
- * Everything between reading the files and writing the output is a pure
- * function of its inputs (`parseBaseline` → `parseTimings` → `evaluate` →
- * `renderMarkdown`), so the rules are explicit and the subprocess tests in
- * `tests/ci/perf-budget.spec.ts` can pin each one down.
- *
- * Why the baseline is committed rather than fetched from the last `main` run
- * is in `docs/guides/testing/performance-budget.md`.
+ * `check` compares timings with the committed baseline; a suite over `baselineSeconds × (1 +
+ * tolerancePercent / 100)` regressed. It writes a Markdown table and a JSON report, then exits `0`
+ * when within budget, `1` on a regression or an unmeasured budgeted suite, or `2` when inputs are
+ * missing or malformed. See docs/guides/testing/performance-budget.md.
  */
 
 import { spawnSync } from "node:child_process";
@@ -174,16 +155,9 @@ const round = (value: number, places = 1): number => {
 };
 
 /**
- * Compares timings to the baseline.
- *
- * - A suite in the baseline with no timing is a failure (`not-measured`). That
- *   is either a CI step that stopped running or a baseline entry that went
- *   stale, and both need someone to look. Passing would let a suite drop out
- *   of the budget without anyone noticing.
- * - A timed suite with no baseline entry is reported (`unbudgeted`) but does
- *   not fail. A new suite has no history yet, and blocking the PR that
- *   introduces it would force a number to be made up before one has been
- *   measured.
+ * Compares timings with the baseline. A budgeted suite with no timing fails (`not-measured`), so a
+ * suite cannot silently drop out of the budget. A timed suite with no baseline is reported
+ * (`unbudgeted`) but passes, since a new suite has no history yet.
  */
 function evaluate(baseline: Baseline, timings: Timings): Evaluation {
   const factor = 1 + baseline.tolerancePercent / 100;

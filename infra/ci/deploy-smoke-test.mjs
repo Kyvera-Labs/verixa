@@ -1,16 +1,14 @@
 #!/usr/bin/env node
 
 /**
- * Post-deploy smoke test for Verixa staging and production deployments.
+ * Post-deploy smoke test:
  *
- * Verifies two invariants before a deployment is marked successful:
- *   1. Readiness: GET <baseUrl>/health returns HTTP 200 within the retry budget.
- *   2. Version:   when --expected-version is supplied, GET <baseUrl>/version
- *                 returns HTTP 200 and includes the expected tag or commit SHA.
+ * 1. `GET <baseUrl>/health` returns 200 within the retry budget.
+ * 2. With `--expected-version`, `GET <baseUrl>/version` returns 200 and contains the expected tag
+ *    or commit SHA.
  *
- * Checking /version alongside /health prevents a common false positive where a
- * failed container replacement leaves the previous healthy container serving
- * traffic, causing a /health-only check to report a broken deploy as green.
+ * Checking the version catches a failed rollout where the previous container keeps serving a
+ * healthy `/health`.
  */
 
 import { pathToFileURL } from "node:url";
