@@ -7,22 +7,10 @@ import {
 } from "../../application/ports/transaction-signer.js";
 
 /**
- * Signs with a key held in this process, from a secret passed in at
- * construction.
- *
- * ## This is the development path, and it is named for that
- *
- * `TransactionSigner` exists because holding a secret key in the application is
- * the thing being designed away (see
- * `docs/security/stellar-key-management.md`). This class still does exactly
- * that, and deliberately so: requiring a KMS to run the test suite, a
- * contributor's first local demo, or a throwaway testnet account would make the
- * secure path the *only* path — so it gets worked around, which is worse.
- *
- * The distinction is preserved by construction rather than by convention:
- * `describe()` identifies this as local, so any log line about anchoring says
- * which kind of key produced it, and a mainnet deployment wires up
- * `KmsTransactionSigner` instead.
+ * Signs with a key held in this process: the development path. It lets tests, local demos and
+ * testnet run without a KMS. `describe()` identifies it as local so logs show which kind of key
+ * signed; mainnet deployments use `KmsTransactionSigner` (see
+ * docs/security/stellar-key-management.md).
  */
 export class LocalTransactionSigner implements TransactionSigner {
   private readonly keypair: Keypair;

@@ -45,17 +45,10 @@ const TRANSACTION_TIMEOUT_SECONDS = 60;
 
 export interface StellarHashAnchorOptions {
   /**
-   * Where the anchoring account's signature comes from.
-   *
-   * Optional because the two halves of this adapter have genuinely different
-   * credential needs: `verify` reads public ledger data and must work with no
-   * credentials at all, while `anchor` spends from an account. Omitting the
-   * signer therefore produces an adapter that can verify and refuses to anchor,
-   * rather than one that throws on construction — which is what the CLI's
-   * throwaway-keypair workaround was pretending to need.
-   *
-   * The adapter never sees a secret key. See
-   * `application/ports/transaction-signer.ts`.
+   * Source of the anchoring account's signature. Optional because `verify` reads public data and
+   * needs no credentials, while `anchor` spends from the account; without a signer the adapter
+   * verifies but refuses to anchor. The adapter never sees a secret key (see
+   * `application/ports/transaction-signer.ts`).
    */
   readonly signer?: TransactionSigner;
   readonly network: StellarNetwork;
@@ -73,23 +66,9 @@ export interface StellarHashAnchorOptions {
 }
 
 /**
- * Anchors hashes to Stellar by submitting a minimal transaction whose
- * `MEMO_HASH` memo *is* the hash.
- *
- * Why a memo rather than a smart contract: the entire requirement is "record
- * 32 bytes on an append-only public ledger, cheaply, and be able to read
- * them back." Stellar's `MEMO_HASH` field is exactly 32 bytes — the exact
- * size of a SHA-256 digest, so the hash goes in whole, with no truncation
- * or encoding workaround. No Soroban contract, no token, no on-chain logic:
- * less to deploy, less to audit, and nothing that can be exploited beyond
- * the transaction itself.
- *
- * **Only ever anchor a hash.** A hash is a one-way commitment — it proves
- * the underlying record existed unchanged, while revealing nothing about
- * its contents. The audit log itself stays entirely in the operator's own
- * database. Putting audit *content* on a public ledger would be an
- * irreversible data leak, so this adapter accepts nothing but a validated
- * SHA-256 digest.
+ * Anchors a hash by submitting a minimal Stellar transaction whose 32-byte `MEMO_HASH` is the
+ * SHA-256 digest itself: no smart contract, token or on-chain logic. Only validated SHA-256 digests
+ * are accepted, never content, because anything on a public ledger is permanent.
  */
 export class StellarHashAnchor implements HashAnchor {
   private readonly signer: TransactionSigner | undefined;

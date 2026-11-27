@@ -111,37 +111,12 @@ export interface AnchorBalanceMonitorOptions {
 export const DEFAULT_BALANCE_THRESHOLD_XLM = 1;
 
 /**
- * Watches the anchoring account's funding and shouts when it runs down.
+ * Watches the anchoring account's funding and alerts before it runs out. When the account is empty
+ * the ledger refuses anchors, and without monitoring the audit log silently stops being anchored.
  *
- * ## The failure mode this exists for
- *
- * Anchoring is a background control. When the account runs out of XLM the
- * ledger refuses the transaction, a caller that treats anchoring failures as
- * retryable logs it at `warn` and moves on, and the audit log goes on
- * appearing anchored while the last external commitment quietly stops moving.
- * Nobody looks, because nothing asks to be looked at. An integrity control
- * that fails silently is worse than never enabling it: the assurance is
- * unchanged, and the protection is gone.
- *
- * So this monitor's job is to make the absence of anchoring loud, and to do it
- * *before* the balance reaches zero rather than at the moment a transaction
- * finally fails.
- *
- * ## Why an unreadable balance is treated as alarming
- *
- * "Could not determine the balance" and "the balance is fine" are not the same
- * statement, and reporting the first as the second is how monitoring turns
- * into a lie. `check()` surfaces `unknown`, which emits a metric and raises an
- * alert on the first occurrence, because a Horizon outage during the exact
- * window an account is draining is when not knowing matters most.
- *
- * ## Alert deduplication
- *
- * Repeated checks while the balance stays below the threshold emit metrics
- * every time and alert once. A gauge that fires a page every five minutes for
- * the same condition trains operators to ignore it, which is functionally the
- * silent failure this file is about. The state clears on `recovered`, so an
- * account that drops back down later alerts again.
+ * An unreadable balance is reported as `unknown` and alerts on first occurrence, since not knowing
+ * is not the same as fine. Metrics are emitted on every check, but an alert fires once per
+ * low-balance episode; `recovered` resets it so a later drop alerts again.
  */
 export class AnchorBalanceMonitor implements AnchorFundingGuard {
   readonly #reader: AnchorAccountBalanceReader;
@@ -376,17 +351,10 @@ export interface StructuredErrorLogger {
 }
 
 /**
- * An alerter that writes each alert as one structured log record.
- *
- * The alert's fields go in as fields, with no assembled message at all. A
- * funding alert carries values that originated outside this process (a balance
- * string off Horizon, a public key off configuration), and a log line built by
- * concatenation is a line someone can shape — see
- * `docs/security/audit-log-integrity.md`.
- *
- * `error` level rather than `warn` deliberately: `warn` is what a scheduler
- * already logs for a retryable ledger hiccup, and a control that has stopped
- * working is not that.
+ * Alerter that writes each alert as one structured log record, with values as fields and no
+ * assembled message, since some values come from outside the process (see
+ * docs/security/audit-log-integrity.md). Logged at `error`, not `warn`, because a stopped control
+ * is not a retryable hiccup.
  */
 export function loggingFundingAlerter(logger: StructuredErrorLogger): AnchorFundingAlerter {
   return {

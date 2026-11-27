@@ -10,17 +10,9 @@ function sha256Hex(input: string): string {
 }
 
 /**
- * Behavioral contract every `HashAnchor` implementation must satisfy. Run
- * against `InMemoryHashAnchor` on every test run, and against the real
- * `StellarHashAnchor` in the network-dependent integration suite — the same
- * one-suite-many-implementations approach the repository ports use (see
- * `docs/guides/testing.md`).
- *
- * That matters more here than usual. The in-memory fake is what almost every
- * other test will run against, so "the fake behaves like the real ledger" is
- * load-bearing: if `verify` returned `true` for a non-matching hash in one
- * implementation and `false` in the other, every test built on the fake
- * would be quietly meaningless.
+ * Behavioural contract for every `HashAnchor`, run against `InMemoryHashAnchor` and, in the network
+ * suite, `StellarHashAnchor` (see docs/guides/testing.md). Most tests use the in-memory fake, so it
+ * must behave exactly like the real ledger, especially `verify` on a non-matching hash.
  */
 export function hashAnchorContract(createAnchor: () => HashAnchor): void {
   describe("HashAnchor contract", () => {

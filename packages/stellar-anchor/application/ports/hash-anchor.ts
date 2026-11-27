@@ -31,22 +31,11 @@ export class AnchorError extends DomainError {
 }
 
 /**
- * Commits a hash to an append-only external ledger, and checks a previously
- * committed one.
- *
- * The point is **external** verifiability. Verixa's audit log is made
- * tamper-*evident* internally by hash chaining, but a chain stored in a
- * database can, in principle, be rewritten wholesale by anyone with
- * sufficient access to that database — the rewritten chain would still be
- * internally consistent. Committing the chain tip somewhere outside that
- * trust boundary removes that possibility: a rewrite would also have to
- * alter a record the attacker does not control. See
- * `docs/adr/0003-stellar-audit-anchoring.md`.
- *
- * Deliberately ledger-agnostic. Nothing in this interface mentions Stellar,
- * so a deployment can swap in a different anchor (or none at all) without
- * anything upstream changing — the same ports-and-adapters discipline every
- * repository in this codebase follows.
+ * Commits a hash to an append-only external ledger and checks a committed one. Hash chaining makes
+ * the audit log tamper-evident, but someone with database access could rewrite the whole chain
+ * consistently; committing the head outside that trust boundary prevents it (see
+ * docs/adr/0003-stellar-audit-anchoring.md). Ledger-agnostic, so a deployment can use a different
+ * anchor or none.
  */
 export interface HashAnchor {
   /**
@@ -57,14 +46,10 @@ export interface HashAnchor {
   anchor(hash: string): Promise<Result<AnchorReceipt, AnchorError>>;
 
   /**
-   * Confirms that `anchorRef` really does commit to `hash`. Resolves `false`
-   * for a well-formed lookup that simply doesn't match (wrong hash, or the
-   * reference points at something else); returns an `AnchorError` only when
-   * the check itself couldn't be completed.
-   *
-   * `anchorRef` is the transaction hash `anchor()` returned. Implementations
-   * that reach a public network validate it as a 64-character hex digest first,
-   * because it becomes part of an outbound request.
+   * Confirms that `anchorRef` commits to `hash`. Resolves `false` when it does not match, and
+   * returns `AnchorError` only when the check could not complete. `anchorRef` is the transaction
+   * hash from `anchor()`; network implementations validate it as 64 hex characters before using it
+   * in a request.
    */
   verify(hash: string, anchorRef: string): Promise<Result<boolean, AnchorError>>;
 }

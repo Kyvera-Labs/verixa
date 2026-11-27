@@ -11,17 +11,10 @@ function digestOf(label: string): Buffer {
 }
 
 /**
- * Behavioral contract every `TransactionSigner` implementation must satisfy,
- * local or remote.
- *
- * The verification assertions are the substance: a signer that returns 64
- * plausible bytes which do not verify against its own advertised account would
- * pass any test that only checked types, and would fail at submission — after a
- * fee was spent and after the operator had recorded an anchor that never
- * landed. The redaction assertions are equally load-bearing but easy to write
- * carelessly, so the contract requires a `secretMarker` (a substring guaranteed
- * to appear in whatever key material the implementation holds) and then proves
- * that substring never reaches any string the object can emit.
+ * Behavioural contract for every `TransactionSigner`, local or remote. Signatures must verify
+ * against the signer's own advertised account. Redaction is proven with a `secretMarker`, a
+ * substring present in the implementation's key material that must never appear in any string the
+ * object produces.
  */
 export function transactionSignerContract(params: {
   createSigner: () => TransactionSigner;

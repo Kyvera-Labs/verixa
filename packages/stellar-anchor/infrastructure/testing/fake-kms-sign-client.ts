@@ -3,14 +3,9 @@ import { Keypair } from "@stellar/stellar-sdk";
 import type { KmsSignClient, KmsSignRequest } from "../signing/kms-transaction-signer.js";
 
 /**
- * A `KmsSignClient` that signs in-process, so `KmsTransactionSigner` can be
+ * A `KmsSignClient` that signs in-process with a real Ed25519 key, replacing the KMS transport so
+ * `KmsTransactionSigner`'s own behaviour (length validation, error summarization, redaction) can be
  * tested without a cloud account.
- *
- * It stands in for the *transport*, not for the port: what is under test is the
- * adapter's own behaviour — length validation, error summarization, refusing to
- * echo key material — and a `sign()` that always returned a fixed buffer would
- * never exercise any of it. Signing with a real Ed25519 key is what lets the
- * contract suite check the signature the way the network would.
  */
 export interface FakeKmsClient {
   readonly client: KmsSignClient;

@@ -47,32 +47,17 @@ export class BalanceUnavailableError extends DomainError {
 }
 
 /**
- * Reads an account's spendable balance from the ledger.
- *
- * Deliberately free of any reference to Stellar, Horizon, or an SDK type —
- * the same discipline `HashAnchor` follows, so a deployment reading balances
- * from a different RPC endpoint, a different ledger, or a cached metric
- * supplies the same interface.
- *
- * Implementations must return an error rather than a zero balance when the
- * reading fails. The two look identical in a `number`, and confusing them
- * turns an outage into a false alarm — or, worse, an outage reported as
- * "account empty" and pages someone who has nothing to fix.
+ * Reads an account's spendable balance from the ledger, with no Stellar or SDK types.
+ * Implementations must return an error, never zero, when the read fails, so an outage is not
+ * reported as an empty account.
  */
 export interface AnchorAccountBalanceReader {
   read(publicKey: string): Promise<Result<AnchorAccountBalance, BalanceUnavailableError>>;
 }
 
 /**
- * A funding observation, pushed to whatever the deployment uses for
- * dashboards and alert rules.
- *
- * Metrics rather than only alerts, because an alert tells you the moment a
- * threshold was crossed while a gauge tells you the slope. Anchoring runs on
- * a schedule, so the balance falls in a predictable stairway; the number that
- * actually wants watching is how fast the stairs are being climbed, which is
- * how an operator learns their anchoring interval is wrong before the account
- * is empty rather than after.
+ * A funding observation pushed to dashboards and alert rules. A gauge shows how fast scheduled
+ * anchoring drains the account, so an operator can fix the interval before the account is empty.
  */
 export interface AnchorBalanceMetric {
   readonly name: "verixa_stellar_anchor_balance_xlm";
@@ -93,14 +78,13 @@ export interface AnchorBalanceMetricSink {
 }
 
 /**
- * Why the monitor is shouting.
+ * Alert reason.
  *
- * - `below_threshold` — funded, but under the configured alert level.
- * - `unfundable` — the account cannot pay for the next anchoring transaction.
- * - `balance_unreadable` — the monitor could not establish the balance at all.
- * - `unfundable_anchor_attempt` — an anchor was attempted and refused for
- *   want of funds, reported by the ledger itself rather than inferred.
- * - `recovered` — the balance is back above the threshold after an alert.
+ * - `below_threshold`: funded, but under the alert level.
+ * - `unfundable`: cannot pay for the next anchoring transaction.
+ * - `balance_unreadable`: the balance could not be read.
+ * - `unfundable_anchor_attempt`: the ledger refused an anchor for lack of funds.
+ * - `recovered`: back above the threshold after an alert.
  */
 export type AnchorFundingAlertKind =
   | "below_threshold"

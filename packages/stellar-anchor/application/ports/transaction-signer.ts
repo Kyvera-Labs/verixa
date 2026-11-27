@@ -1,16 +1,9 @@
 import { DomainError, type Result } from "@verixa/shared-kernel";
 
 /**
- * Signing failed remotely, or the key was unusable.
- *
- * Returned rather than thrown because a deployment whose KMS is briefly
- * unreachable should skip an anchoring tick and try again, not take down the
- * process — the same reasoning that keeps `AnchorError` a `Result`. A signing
- * failure is an *infrastructure* state, and infrastructure state changes.
- *
- * The message is deliberately generic in the type: implementations must not put
- * key material into it (see the redaction contract in
- * `infrastructure/testing/contracts/transaction-signer.contract.ts`).
+ * Signing failed remotely or the key was unusable. Returned rather than thrown, so a briefly
+ * unreachable KMS skips one anchoring run instead of crashing. Messages must never contain key
+ * material.
  */
 export class SigningError extends DomainError {
   readonly code = "SIGNING_FAILED";
@@ -27,63 +20,22 @@ export class SigningError extends DomainError {
 }
 
 /**
- * Produces Ed25519 signatures for a Stellar account without ever handing the
- * private half to the caller.
+ * Produces Ed25519 signatures for a Stellar account without exposing the private key to the caller.
+ * A secret in the process environment can leak through sidecars, crash dumps, logs, CI output and
+ * manifest backups; behind this port the key stays in an HSM, KMS or external signer.
  *
- * ## Why this port exists at all
+ * Every implementation must guarantee:
  *
- * The previous arrangement was a `STELLAR_ANCHOR_SECRET_KEY` environment
- * variable read into a `Keypair` at startup. That is not key management; it is
- * key *placement*. Anything that can read the process environment can read the
- * secret: a sidecar, a `kubectl describe pod`, a crash dump, a misconfigured
- * log line, the CI system that prints env for debugging, and every backup of
- * the deployment manifest. On mainnet the account holds real XLM and the key
- * mints publicly-verifiable claims about this deployment's audit log, so both
- * of those are things an attacker can turn into profit — and the ledger keeps
- * the evidence forever.
+ * 1. The private key never enters this process. A `Keypair`-based implementation is for development
+ *    only and must say so in its name and `describe()`.
+ * 2. `sign` signs exactly the bytes given, with no hashing or re-encoding.
+ * 3. No secret appears in `describe()`, `toJSON()`, `toString()` or any `SigningError` message.
+ * 4. Failures are `Result`s with a code and summary, never a raw upstream payload, including
+ *    through `cause`.
+ * 5. `accountId()` never changes for an instance.
  *
- * A signing *interface* is what closes that gap. The application asks for a
- * signature over specific bytes and receives one; the key material stays inside
- * whatever the implementation delegates to — an HSM, a KMS, an external signer.
- * Nothing in the process can log, dump, or serialize what the process never
- * holds.
- *
- * ## What every implementation must guarantee
- *
- * 1. **The private half never enters this process's address space.** If an
- *    implementation holds a `Keypair` built from a secret, it is a development
- *    convenience and must say so loudly, both in its name and in `describe()`.
- *
- * 2. **`sign` is over exactly the bytes it is given.** No hashing, no
- *    re-encoding, no "helpful" canonicalization. The caller supplies a digest
- *    the network expects; a signature over anything else is invalid in a way
- *    that only shows up at submission time, against a real fee.
- *
- * 3. **No secret in any string this object can produce.** `describe()`,
- *    `toJSON()`, `toString()`, and every `SigningError.message` must be safe to
- *    log. The contract suite asserts this against an implementation whose key
- *    material is a recognizable marker.
- *
- * 4. **Failures are `Result`, never a leaked upstream payload.** A KMS error
- *    body can contain a request that included the message bytes; implementations
- *    must surface a code and a summary, not the raw response. That rules out
- *    `new SigningError(detail, { cause: upstreamError })` as well: the error
- *    *name* is diagnostic, the object attached to `cause` is the payload, and a
- *    logger that walks the chain prints it even though `JSON.stringify` does
- *    not.
- *
- * 5. **`accountId()` is stable for an instance.** A signer that changed which
- *    account it signs for mid-life would produce transactions that fail to
- *    submit, and an operator would reasonably assume their audit trail was
- *    anchored when it was not.
- *
- * ## Why the digest, not the transaction
- *
- * Passing a `Transaction` would drag the SDK into the application layer and
- * make every consumer of this port depend on Stellar types — the exact inversion
- * `HashAnchor` was introduced to avoid. The bytes to sign are a 32-value hash
- * regardless of which chain or which library built them, so the port stays a
- * boundary rather than becoming a wrapper around one vendor's object model.
+ * The port takes the 32-byte digest rather than a `Transaction`, so no Stellar SDK types reach the
+ * application layer.
  */
 export interface TransactionSigner {
   /**
