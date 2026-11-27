@@ -22,32 +22,11 @@ export interface RequestPasswordResetResult {
 }
 
 /**
- * Starts a password reset, and says the same thing whether or not the account
- * exists.
+ * Starts a password reset and returns success whether or not the account exists, so the endpoint
+ * cannot reveal accounts. Whether anything happened is visible only internally.
  *
- * This is the third place in the package applying one rule, and the clearest
- * illustration of why it is a rule rather than a login-form quirk: a reset
- * endpoint that reports "no account with that address" is a *better*
- * enumeration oracle than the login form, because it needs no password guess
- * at all. One request per address, read the response, done.
- *
- * So the caller always gets success. Whether anything happened is visible
- * only to the system: a token row, a delivered email, an audit entry.
- *
- * ## Rate limiting
- *
- * The rate limiter is consulted at the start via the {@link RateLimiter} port,
- * and reset on success so users can legitimately request another reset if
- * needed. If not allowed, an error is thrown immediately. This prevents
- * mail-bombing attacks against known addresses.
- *
- * ## Deliberately not solved here
- *
- * Nothing rate-limits this beyond the configured limit. Anyone can trigger
- * reset emails to any address as fast as they can post (up to the rate limit),
- * which is both a mail-bombing vector and a way to invalidate a real user's
- * outstanding link repeatedly. Rate limiting (Phase 15) provides the abuse
- * mitigation.
+ * The rate limiter is checked first (throwing when exceeded) and reset on success. It is the only
+ * protection against mail-bombing an address or repeatedly invalidating a real user's link.
  */
 export class RequestPasswordReset {
   constructor(

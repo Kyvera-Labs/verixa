@@ -120,16 +120,9 @@ describe("AuthenticateWithPassword — lockout", () => {
 
   describe("disclosure", () => {
     it("is distinct to the caller and identical to a client", async () => {
-      // Two requirements pulling against each other. Operationally a lockout
-      // and a bad password are very different signals, and collapsing them
-      // makes a credential-stuffing campaign look like ordinary user error.
-      // On the wire they must be indistinguishable, because lockout state
-      // exists only for accounts that exist — so "fail five times and watch
-      // what changes" would be an enumeration oracle, undoing what the
-      // generic error is for.
-      //
-      // Resolved by distinguishing the error *type* while keeping code,
-      // status and message identical.
+      // A lockout must be distinguishable internally (credential stuffing versus user error) but
+      // identical on the wire, or repeated failures would reveal which accounts exist. Only the
+      // error type differs; code, status and message match.
       await reachThreshold();
 
       const locked = await authenticate.execute({ email: EMAIL, password: PASSWORD });

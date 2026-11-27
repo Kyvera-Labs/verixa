@@ -1,69 +1,34 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
 /**
- * Issuing and checking single-use bearer tokens — the mechanism shared by
- * email verification (Issue 068) and password reset (Issue 069).
- *
- * Shared as *mechanism*, deliberately not as a base class. The two tokens are
- * separate aggregates with genuinely different rules — one activates a user,
- * the other replaces a credential and kills sessions — and a common
- * `AbstractToken` would put the interesting differences behind a shape chosen
- * for the boring similarity. What they actually share is three functions.
- *
- * See `docs/security/token-storage.md`.
+ * Issuing and checking single-use bearer tokens for email verification and password reset. Shared
+ * as functions rather than a base class, because the two tokens have different rules (see
+ * docs/security/token-storage.md).
  */
 
 /** Bytes of entropy in an issued token. */
 const TOKEN_BYTES = 32;
 
 /**
- * Generates a raw bearer token.
- *
- * 256 bits, from a CSPRNG. `randomUUID()` would be convenient and is what
- * `Invitation` uses, but a v4 UUID carries 122 bits because six of them are
- * fixed by the format — fine, and less than this costs. For a value whose
- * sole protection is being unguessable, taking the larger number is free.
- *
- * base64url rather than hex: same entropy in two-thirds the characters, and
- * safe in a URL without escaping, which is where these tokens spend their
- * lives.
+ * Generates a 256-bit raw bearer token from a CSPRNG, base64url-encoded so it is compact and
+ * URL-safe.
  */
 export function generateToken(): string {
   return randomBytes(TOKEN_BYTES).toString("base64url");
 }
 
 /**
- * SHA-256 of a raw token, hex-encoded. The only form ever persisted.
- *
- * A plain hash, not argon2, and that difference is worth understanding
- * because it looks like an inconsistency with how passwords are stored.
- *
- * Password hashing is slow on purpose because passwords are low-entropy and
- * human-chosen: an attacker with the database can guess `Summer2026!` in
- * microseconds unless each attempt is made expensive. These tokens are 256
- * random bits. There is no dictionary to try and no guess worth making, so
- * the slowness would buy nothing — while costing real latency on a link a
- * user just clicked.
- *
- * What hashing *does* buy here is the same thing it buys for passwords: a
- * leaked database does not hand over working tokens.
+ * SHA-256 of a raw token, hex-encoded; the only form ever persisted. A fast hash is enough because
+ * tokens are 256 random bits, so there is nothing to brute-force, and a leaked database still
+ * yields no working tokens.
  */
 export function hashToken(token: string): string {
   return createHash("sha256").update(token, "utf8").digest("hex");
 }
 
 /**
- * Whether `token` hashes to `digest`, compared in constant time.
- *
- * `===` on the hex strings would leak, by returning faster the earlier the
- * first differing character appears. That is enough to reconstruct a digest
- * one character at a time given enough samples — a real attack against
- * anything that compares secrets naively, and cheap to avoid.
- *
- * Note this compares *digests*, not raw tokens, so an attacker who could
- * exploit the timing would recover a hash rather than a token. That makes
- * this belt-and-braces rather than load-bearing, which is the right place for
- * a two-line function to sit.
+ * Whether `token` hashes to `digest`, compared in constant time so response timing cannot reveal
+ * how much of a digest matched.
  */
 export function tokenMatchesDigest(token: string, digest: string): boolean {
   const candidate = Buffer.from(hashToken(token), "hex");

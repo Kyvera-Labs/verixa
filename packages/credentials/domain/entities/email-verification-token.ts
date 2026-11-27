@@ -41,25 +41,9 @@ export interface IssuedEmailVerificationToken {
 }
 
 /**
- * Proof that someone controls the email address they registered with.
- *
- * Single-use and short-lived, and both of those are load-bearing rather than
- * tidy defaults:
- *
- * **Single-use** because a verification link travels through channels nobody
- * controls — a mail provider, a corporate scanner that follows links, a
- * forwarded message, a shared inbox, browser history on a borrowed laptop. A
- * reusable link is a permanent credential scattered across all of them. Once
- * consumed, a leaked copy is worthless.
- *
- * **Short-lived** because it bounds how long any of those copies matter.
- *
- * Distinct from a session token, which is the comparison worth holding onto:
- * a session says "this request is from someone who already proved who they
- * are" and is presented on every request, so it is long-lived and renewable.
- * This says "whoever holds this controls that mailbox" and is presented once.
- * Giving them the same lifecycle is how a system ends up with a
- * never-expiring link in an old email that logs someone in.
+ * Proof that someone controls the email address they registered with. Single-use, because links
+ * pass through mail providers, scanners and forwarded messages; short-lived, to bound how long any
+ * leaked copy matters. Unlike a session token it is presented only once.
  */
 export class EmailVerificationToken {
   readonly id: EmailVerificationTokenId;
@@ -129,16 +113,9 @@ export class EmailVerificationToken {
   }
 
   /**
-   * Retires the token without redeeming it.
-   *
-   * Distinct from {@link consume}, which enforces the redemption rules and
-   * refuses an expired token. Retiring is not redeeming: when a replacement
-   * link is issued, every outstanding token must stop working, and an already
-   * expired one is no exception. Routing that through `consume` would leave
-   * expired tokens un-retired on a technicality.
-   *
-   * Idempotent — retiring an already-consumed token leaves it alone, so the
-   * original redemption time survives for the audit trail.
+   * Retires the token without redeeming it, including an expired one, so every outstanding link
+   * stops working when a replacement is issued. Idempotent; an already-consumed token keeps its
+   * original redemption time.
    */
   invalidate(now: Date = new Date()): EmailVerificationToken {
     if (this.isConsumed) {
@@ -148,14 +125,8 @@ export class EmailVerificationToken {
   }
 
   /**
-   * Marks the token used.
-   *
-   * Refuses a token that is already consumed or expired, and says which —
-   * safely, because reaching this method at all requires already holding a
-   * valid token. There is nothing left to enumerate: the caller has proved
-   * possession, so telling them *why* their link failed is helpful rather
-   * than disclosing. That is the opposite of the login path, and the
-   * difference is worth noticing rather than copying one rule everywhere.
+   * Marks the token used. Refuses a consumed or expired token and says which; the caller already
+   * holds a valid token, so this discloses nothing.
    */
   consume(now: Date = new Date()): Result<EmailVerificationToken, ValidationError> {
     if (this.isConsumed) {

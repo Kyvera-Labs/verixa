@@ -1,14 +1,9 @@
 import type { Credential, CredentialUserId } from "../../domain/entities/credential.js";
 
 /**
- * Metrics on stale credentials — those below current cost parameters.
- *
- * Credentials at older argon2 parameters cannot be upgraded without the
- * plaintext, which only exists during login. Dormant accounts may sit at
- * weak parameters for years. This metric exposes the scope of the problem:
- * how many accounts are affected, and how old the oldest one is.
- *
- * See `docs/security/password-storage.md#dormant-accounts-the-password-upgrade-gap`.
+ * Metrics on credentials hashed below current cost parameters. They can only be upgraded at login,
+ * so dormant accounts can stay weak for years (see
+ * docs/security/password-storage.md#dormant-accounts-the-password-upgrade-gap).
  */
 export interface StaleCredentialMetrics {
   /** Total count of credentials below current cost parameters. */
@@ -22,20 +17,13 @@ export interface StaleCredentialMetrics {
 }
 
 /**
- * Persistence contract for `Credential`. Mirrors the conventions in
- * `@verixa/identity`'s repository ports.
+ * Persistence port for `Credential`.
  *
- * - `findByUserId` returns `undefined` when the user has no credential. That
- *   is an ordinary state, not an error: SSO-only and passkey-only accounts
- *   legitimately have none, which is the reason credentials are a separate
- *   aggregate at all.
+ * - `findByUserId` returns `undefined` when the user has no credential, which is normal for
+ *   SSO-only and passkey-only accounts.
  * - `save` is an idempotent upsert.
- * - `deleteByUserId` supports removing password authentication without
- *   deleting the user — needed when someone moves to SSO, and by the erasure
- *   work in Phase 24.
- * - `getStaleCredentialMetrics` exposes the count and age distribution of
- *   credentials below current cost parameters, for visibility into dormant
- *   account security posture.
+ * - `deleteByUserId` removes password authentication without deleting the user.
+ * - `getStaleCredentialMetrics` reports credentials below current cost parameters.
  */
 export interface CredentialRepository {
   findByUserId(userId: CredentialUserId): Promise<Credential | undefined>;

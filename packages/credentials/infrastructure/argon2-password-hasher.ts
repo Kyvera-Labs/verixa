@@ -35,50 +35,18 @@ export const DEFAULT_ARGON2_PARAMETERS: Argon2Parameters = {
 };
 
 /**
- * `Algorithm.Argon2id` and `Version.V0x13` as plain numbers.
- *
- * The library declares both as ambient `const enum`s, which `isolatedModules`
- * forbids referencing — a const enum is erased and inlined at compile time,
- * so it cannot exist for a transpiler compiling one file at a time. Confirmed
- * at runtime: both objects are exported as `{}`, so importing them by name
- * would have produced `undefined` rather than a value.
- *
- * They are still imported as *types* — type-only usage is erased, so
- * `isolatedModules` permits it — and the constants are cast to those types so
- * comparisons against a parsed hash stay enum-safe rather than degrading to
- * bare number comparison. See docs/guides/typescript-conventions.md.
+ * `Algorithm.Argon2id` and `Version.V0x13` as plain numbers. The library declares them as ambient
+ * `const enum`s, which `isolatedModules` cannot reference and which are `{}` at runtime. They are
+ * cast to the enum types so comparisons stay type-safe (see docs/guides/typescript-conventions.md).
  */
 const ARGON2ID = 2 as Algorithm;
 const ARGON2_VERSION_0X13 = 1 as Version;
 
 /**
- * argon2id-backed {@link PasswordHasher}.
- *
- * ## Why argon2id
- *
- * argon2 has three variants. **argon2i** resists side-channel attacks but is
- * weaker against time-memory tradeoffs; **argon2d** is the reverse. **argon2id**
- * runs the first half in argon2i mode and the rest in argon2d mode, which
- * gets most of both. RFC 9106 names it the default choice, and it is the one
- * to pick unless you have a specific reason not to.
- *
- * ## Why not bcrypt or scrypt
- *
- * bcrypt is not broken, and it is still a defensible choice. Its limits are
- * real though: a fixed 4 MiB working set that cannot be raised, so it has not
- * become meaningfully harder to attack as hardware improved, and a 72-byte
- * input truncation that silently ignores anything longer — which turns a long
- * passphrase into a shorter one without telling anybody.
- *
- * scrypt is memory-hard and fine. argon2id is simply the newer design that
- * won the Password Hashing Competition and addressed scrypt's tradeoffs
- * directly.
- *
- * **What matters far more than the choice among these three is not using
- * anything else.** MD5, SHA-1, SHA-256, and any bare cryptographic hash are
- * wrong here regardless of salting, because they are built to be *fast* —
- * exactly the property you do not want when an attacker holds your database
- * and is making billions of guesses per second.
+ * argon2id-backed {@link PasswordHasher}. argon2id is RFC 9106's recommended default and combines
+ * argon2i's side-channel resistance with argon2d's resistance to time-memory trade-offs. bcrypt has
+ * a fixed memory cost and truncates input at 72 bytes. Fast hashes (MD5, SHA-1, SHA-256) are never
+ * acceptable for passwords.
  */
 export class Argon2PasswordHasher implements PasswordHasher {
   private readonly parameters: Argon2Parameters;
@@ -127,18 +95,10 @@ export class Argon2PasswordHasher implements PasswordHasher {
   }
 
   /**
-   * Implemented by parsing the stored hash's own parameters, because the
-   * library has no `needsRehash` of its own — only `parseOptions`.
-   *
-   * Rehashes when the stored hash is *weaker* than current settings, not
-   * merely different. The distinction matters: if someone lowers a parameter
-   * (to shed load, say), "different" would trigger a mass re-hash of every
-   * password down to the weaker setting on next login, quietly degrading the
-   * whole system. Only upgrades should propagate.
-   *
-   * `parallelism` is deliberately excluded. It is a throughput knob rather
-   * than a strength one, and a change in either direction does not map
-   * cleanly onto stronger or weaker.
+   * Compares the stored hash's own parameters with current settings, since the library has no
+   * `needsRehash`. Only a weaker hash triggers a rehash, so lowering a parameter never
+   * mass-downgrades passwords. `parallelism` is ignored because it affects throughput, not
+   * strength.
    */
   needsRehash(encodedHash: string): boolean {
     let parsed;
