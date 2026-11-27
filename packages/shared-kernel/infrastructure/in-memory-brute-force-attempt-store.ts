@@ -4,23 +4,10 @@ import type {
 } from "../application/ports/brute-force-attempt-store.js";
 
 /**
- * A `Map` behind the attempt-store port.
- *
- * Process-local and volatile, which is a real limitation and stated as one: a
- * restart clears every counter, and each API replica keeps its own. What it
- * buys is that the policy is usable and tested today, with no Redis and no
- * schema, against the same interface Phase 15 will point at a durable store.
- * Swapping it is a composition-root change, not a policy change.
- *
- * Single-threaded by construction, so the policy's read-then-write is not
- * interleaved with itself. A durable adapter has to make that pair atomic;
- * this one gets it from the event loop.
- *
- * Entries expire on their own terms rather than by eviction: a key past its
- * lockout is cleared the next time the policy reads it, and a key that never
- * comes back costs one map entry. Unbounded growth is possible in principle
- * from a spray of unique identifiers, which is the same trade every in-memory
- * limiter makes and the reason a real deployment uses the durable adapter.
+ * Map-backed attempt store: process-local and volatile, so a restart clears it and each replica has
+ * its own. Single-threaded, so the policy's read-then-write cannot interleave; a durable adapter
+ * must make that pair atomic. Expired keys are cleared on their next read; a spray of unique
+ * identifiers can grow the map, which is why production should use a durable store.
  */
 export class InMemoryBruteForceAttemptStore implements BruteForceAttemptStore {
   private readonly records = new Map<string, AttemptRecord>();
