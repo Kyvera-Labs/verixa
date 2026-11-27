@@ -13,19 +13,11 @@ import {
 } from "../persistence/prisma-audit-repositories.js";
 
 /**
- * Verifies the audit log's hash chain against a real database.
+ * Verifies the audit log's hash chain against a real database: `pnpm audit:verify-chain`.
  *
- *     pnpm audit:verify-chain
- *
- * The point of this tool is that it can be run by someone who does not trust
- * the database — an operator after a suspected incident, an auditor, whoever.
- * It reads the rows, re-derives every hash from the content, and reports the
- * first place the two disagree. Trusting the stored digest would prove
- * nothing: whoever can edit a row can edit its hash too.
- *
- * Exit status is the machine-readable answer — 0 intact, 1 broken or the check
- * could not run — so it works as a scheduled job or a deploy gate without
- * anyone parsing prose.
+ * Re-derives every hash from row content rather than trusting stored digests, since anyone who can
+ * edit a row can edit its hash. Exits 0 when intact and 1 when broken or the check could not run,
+ * so it works as a scheduled job or deploy gate.
  */
 
 const USAGE = `

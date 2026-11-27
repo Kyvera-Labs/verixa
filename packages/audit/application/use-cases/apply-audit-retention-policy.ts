@@ -43,36 +43,13 @@ export interface RetentionReview {
 const MS_PER_DAY = 86_400_000;
 
 /**
- * Identifies audit entries that have outlived the configured retention window.
+ * Identifies audit entries older than the retention window. It deliberately deletes nothing:
+ * erasure is a compliance decision handled separately, and reporting candidates first lets
+ * operators see their backlog safely.
  *
- * ## This job does not delete anything
- *
- * That restriction is the deliverable, not a stub waiting to be finished. The
- * decision that a record may be erased is a compliance judgement — retention
- * obligations, legal holds, and jurisdiction all override a plain age rule —
- * and Phase 24 owns it. What belongs to this phase is the *seam*: a query that
- * finds the candidates, a shape that reports them, and an interface that a
- * future erasure step consumes rather than reinvents.
- *
- * Keeping identification separate also makes it safe to run today. An operator
- * can schedule this against production now and start seeing their retention
- * backlog, which is the only way to learn that a policy was wrong before the
- * policy is what destroys the evidence.
- *
- * ## Why candidates are reported rather than archived in passing
- *
- * Moving or compressing old entries would rewrite where the chain's content
- * lives while leaving its hashes behind, and a verification run would then
- * report `content_altered` on records nobody altered. Archival has to be
- * designed together with verification and with anchoring — see
- * `docs/security/audit-log-integrity.md` — not bolted onto a query.
- *
- * ## Reading the pagination
- *
- * Entries are walked in sequence order with a keyset cursor, the same way
- * `QueryAuditEvents` does it. A retention run over a log with millions of
- * entries is a long job, and a long job that cannot be resumed is a long job
- * that gets run manually.
+ * Candidates are reported rather than archived, because moving content away from its hashes would
+ * make verification report `content_altered`. The walk uses a keyset cursor so long runs can
+ * resume.
  */
 export class ApplyAuditRetentionPolicy {
   constructor(

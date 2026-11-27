@@ -17,14 +17,8 @@ export type AuditEventId = Id<"AuditEventId">;
 export type ResourceType = string;
 
 /**
- * Organization identifier for tenant scoping.
- *
- * Every audit event is scoped to an organization, ensuring audit logs are
- * tenant-isolated and cross-organization queries are impossible without
- * explicit permission escalation.
- *
- * For system-level events that don't belong to any specific organization,
- * this may be a sentinel value (e.g., a well-known system org ID).
+ * Organization identifier. Every audit event is scoped to one organization; system-level events may
+ * use a well-known sentinel ID.
  */
 export type OrganizationId = string;
 
@@ -40,58 +34,12 @@ interface AuditEventProps {
 }
 
 /**
- * An immutable record of a security-relevant action.
+ * An immutable record of a security-relevant action. There are no setters, the repository has no
+ * update or delete, and the database revokes UPDATE/DELETE; corrections are new events.
  *
- * ## Why audit events are immutable
- *
- * An audit log is a ledger, not a mutable table. Once an event has occurred
- * and been recorded, the record of that occurrence cannot change — any
- * alteration would undermine the entire purpose of the audit trail, which is
- * to provide a trustworthy account of what actually happened.
- *
- * This immutability is enforced at three layers:
- * 1. **Domain model**: No setter methods exist; properties are readonly
- * 2. **Repository port**: No update/delete operations in the interface
- * 3. **Database**: UPDATE/DELETE grants revoked for the application role
- *
- * The three layers are complementary. The domain model makes accidental
- * mutation hard; the repository port makes intentional mutation unrepresentable
- * in the application layer; the database grants make bypassing both layers
- * require direct DBA intervention.
- *
- * ## Nullable actorId for system actions
- *
- * Most audit events have a human or service account actor — someone initiated
- * the action. But some events are purely system-driven: a session expiring, a
- * scheduled job running, an automated check completing. These have no
- * meaningful actor, and forcing a synthetic "system" actor ID would just add
- * noise to queries. `actorId` is therefore nullable, with `undefined`
- * explicitly meaning "this was a system action with no initiating actor."
- *
- * ## Metadata as structured JSON
- *
- * Each action has context-specific details beyond the common fields. Rather
- * than adding nullable fields for every possible detail (and ending up with a
- * table of 90% NULLs), action-specific data goes in `metadata` as validated
- * JSON. Each action type has a Zod schema defining its metadata shape,
- * ensuring metadata is queryable and consistent, not an opaque blob.
- *
- * See `audit-metadata-schemas.ts` for the schema registry and validation.
- *
- * ## organizationId for tenant scoping
- *
- * Multi-tenancy in audit logs is not optional. Every query, export, and
- * analysis must be scoped to the tenant performing it — letting one
- * organization see another's audit trail would be a catastrophic isolation
- * failure. `organizationId` is therefore a first-class field on every event,
- * and the repository enforces it on every query path.
- *
- * ## No delete or update
- *
- * There is deliberately no way to modify an `AuditEvent` after construction.
- * Corrections, if ever needed, are handled by appending a *new* event that
- * describes the correction, not by editing the original. This preserves the
- * full history, including mistakes, which is exactly what an audit log is for.
+ * `actorId` is undefined for system actions with no initiating actor. Action-specific details live
+ * in `metadata`, validated per action (see `audit-metadata-schemas.ts`). Every event carries
+ * `organizationId` for tenant isolation.
  */
 export class AuditEvent {
   readonly id: AuditEventId;
@@ -123,9 +71,8 @@ export class AuditEvent {
    * @param params.resourceType - The type of resource affected
    * @param params.resourceId - The ID of the affected resource
    * @param params.organizationId - The organization this event belongs to
-   * @param params.metadata - Action-specific metadata (validated against action's schema)
+   * @param params.metadata - Action-specific metadata (validated against the action's schema)
    * @param params.timestamp - When the event occurred (defaults to now)
-   *
    * @throws {Error} If the action is not a valid AuditAction
    * @throws {ZodError} If metadata validation fails for the action's schema
    */
@@ -159,28 +106,16 @@ export class AuditEvent {
   }
 
   /**
-   * Reconstitutes an audit event from trusted storage.
-   *
-   * Use this when loading events from the database. Unlike `create()`, this
-   * skips validation — the assumption is that stored data has already been
-   * validated on the way in and can be trusted on the way out.
-   *
-   * **Do not** use this with untrusted input (API requests, imports). Those
-   * must go through `create()`.
+   * Reconstitutes an audit event from storage without validation. Never use it with untrusted
+   * input; use `create()` instead.
    */
   static reconstitute(props: AuditEventProps): AuditEvent {
     return new AuditEvent(props);
   }
 
   /**
-   * Creates a copy with the metadata field replaced.
-   *
-   * This is **not** for editing existing events (audit events are immutable).
-   * It's a utility for tests and data migrations where you need to construct
-   * an event shape with specific metadata without going through the validation
-   * path.
-   *
-   * Production code should never call this.
+   * Returns a copy with different metadata, bypassing validation. For tests and data migrations
+   * only, never production code.
    */
   withMetadata(metadata: Record<string, unknown>): AuditEvent {
     return new AuditEvent({

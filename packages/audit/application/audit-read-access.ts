@@ -42,30 +42,12 @@ function describe(criteria: AuditEventCriteria): Record<string, string> {
 }
 
 /**
- * Authorizes a read of the audit log and records it, in that order, before a
- * single entry is returned.
+ * Authorizes a read of the audit log and records it before any entry is returned. Shared by query
+ * and export so neither path can skip a step.
  *
- * Shared by `QueryAuditEvents` and `ExportAuditEvents` so the two cannot drift
- * apart — an export path that skipped either step would be the one an
- * attacker used.
- *
- * ## Refusals are recorded too
- *
- * A denied read is written as `audit.access_denied`. The interesting event for
- * an investigator is rarely "an auditor read the log"; it is "someone kept
- * trying to read a log that was not theirs". That write is best-effort: the
- * caller is refused either way, so a failure to record the refusal changes
- * nothing about the outcome.
- *
- * ## Fail closed when the read cannot be recorded
- *
- * `RecordAuditEvent` swallows write failures, because it normally records an
- * operation that has *already happened* — failing a completed login would be
- * reporting a false negative. That reasoning does not apply here: nothing has
- * been disclosed yet, so refusing costs one retry and nothing else. The
- * alternative, serving the read and hoping the record catches up, would mean
- * the one reliable way to read the audit log unobserved is to break audit
- * writes first.
+ * Denied reads are recorded as `audit.access_denied` on a best-effort basis. If an allowed read
+ * cannot be recorded, the read fails closed: nothing has been disclosed yet, and serving it anyway
+ * would let someone read the log unobserved by first breaking audit writes.
  */
 export async function authorizeAndRecordAuditRead(
   recordAuditEvent: RecordAuditEvent,

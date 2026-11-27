@@ -41,18 +41,9 @@ function chainFrom(head: AuditLogEntry | undefined, count: number, offset = 1): 
 }
 
 /**
- * Behavioral contract every `AuditLogRepository` implementation must satisfy.
- *
- * Run against `InMemoryAuditLogRepository` on every test run and against
- * `PrismaAuditLogRepository` (over a fake transactional client) without a
- * database, plus the real Postgres adapter in the network-dependent suite. Same
- * one-suite-many-implementations approach as every other repository port here.
- *
- * The append-protocol cases are the ones that earn this suite its place. A fake
- * that accepted a stale `previousHash`, or that wrote half a batch, would let
- * every test built on it pass against a chain the real database would have
- * rejected — and a forked audit chain is not a bug someone notices in review, it
- * is a bug that shows up while answering a regulator.
+ * Behavioural contract for every `AuditLogRepository` implementation, run against the in-memory,
+ * Prisma-over-fake and real Postgres adapters. The append-protocol cases ensure no fake accepts a
+ * stale `previousHash` or a partial batch.
  */
 export function auditLogRepositoryContract(createRepository: () => AuditLogRepository): void {
   describe("AuditLogRepository contract", () => {

@@ -1,16 +1,9 @@
-// Curated public surface of @verixa/audit. Nothing outside this package should
-// import from a deep path (`@verixa/audit/domain/...`,
-// `@verixa/audit/application/...`) — see docs/guides/domain-modeling.md
-// ("Package encapsulation") for why, and eslint.config.mjs's
-// `no-restricted-imports` rule, which enforces it.
+// Public surface of @verixa/audit. Deep imports are forbidden by eslint.config.mjs (see
+// docs/guides/domain-modeling.md).
 //
-// What is deliberately *not* here: the hash chain's mechanics. `GENESIS_HASH`,
-// the canonical serialization, and `AuditLogEntry`'s factories (`append`,
-// `reconstitute`) stay internal. A consumer that could mint an entry could
-// append one without going through `RecordAuditEvent`, which is the one place
-// that reads the chain tail before linking to it — and the chain is only as
-// trustworthy as its least careful writer. Consumers can read entries and
-// verify a chain; they cannot build one.
+// The hash chain's mechanics (`GENESIS_HASH`, canonical serialization, `AuditLogEntry` factories)
+// are not exported, so entries can only be appended through `RecordAuditEvent`. Consumers can read
+// and verify a chain but not build one.
 
 // Domain: AuditLogEntry (Phase 01 hash-chained audit log) -- the entry as a
 // read-only type, and the chain-verification tool

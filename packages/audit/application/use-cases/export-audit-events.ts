@@ -19,24 +19,11 @@ export interface ExportAuditEventsCommand {
 }
 
 /**
- * Streams every matching entry of an organization's audit log, for a
- * compliance export, and records that the export happened.
+ * Streams every matching entry of an organization's audit log for a compliance export and records
+ * the export. Requires `audit:export`, which is separate from `audit:query`.
  *
- * Requires `audit:export`, a separate permission from `audit:query` — see
- * `AUDIT_PERMISSIONS` for why bulk disclosure is its own grant.
- *
- * ## Recorded when it starts, not when it finishes
- *
- * The `audit.exported` entry is written before the stream is handed back, so
- * it exists even if the export is abandoned halfway. Recording on completion
- * reads more naturally ("a successful export is logged") but gets the
- * security property backwards: rows leave the system from the first chunk,
- * and a client that disconnects one row before the end would have taken
- * almost everything while leaving no trace. What is audited is the disclosure,
- * and the disclosure starts immediately.
- *
- * Serialization to CSV or JSON is not this use case's concern — it yields
- * entries, and the interface layer (Issue 189) encodes them as it streams.
+ * The `audit.exported` entry is written before the stream starts, so an export abandoned partway is
+ * still recorded. Encoding is left to the interface layer.
  */
 export class ExportAuditEvents {
   constructor(
