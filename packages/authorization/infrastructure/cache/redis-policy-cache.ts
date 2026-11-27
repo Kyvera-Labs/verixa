@@ -24,54 +24,18 @@ export interface RedisPolicyCacheOptions {
 const DEFAULT_KEY_PREFIX = "policy:cache:";
 
 /**
- * A Redis-backed {@link PolicyCache}.
+ * Redis-backed {@link PolicyCache}.
  *
- * ## Generations instead of deletion
+ * Invalidation uses generation counters (one global, one per resource type) embedded in each entry
+ * key. Invalidating a resource type is a single atomic `INCR` that makes its old entries
+ * unreachable at once without `SCAN` or `KEYS`. Superseded keys expire by TTL; correctness comes
+ * from the policy version each entry carries.
  *
- * Two counters per prefix hold the state that matters: a global generation and one
- * per resource type. An entry key embeds the generations that were current when it
- * was written, so:
+ * Redis errors propagate. Degrading through an outage, and reporting it, is
+ * `ResilientPolicyCache`'s job.
  *
- * - `invalidateResourceType("document")` is a single `INCR` — atomic, O(1), and
- *   it makes every entry written under the previous generation unreachable in the
- *   same instant. No `SCAN`, no `KEYS`, no read-modify-write that could half-fail
- *   and leave some entries live.
- * - An entry's key is a *set* of generations, so invalidating one resource type
- *   leaves every other type's entries reachable, which is the granularity a policy
- *   publish actually has.
- *
- * The superseded keys are left to their TTL. That is the memory cost of making
- * invalidation atomic and instant, and it is bounded: keyspace size is
- * `live entries + entries written within one TTL of the last publish`, and TTL is
- * a memory bound rather than a correctness one because every entry also carries the
- * policy version its reader checks against.
- *
- * ## Failure behaviour
- *
- * Every method lets Redis errors propagate. That is deliberate: this adapter's
- * contract is "the store is reachable and it obeyed", and the decision to keep
- * serving through an outage belongs one level up, in `ResilientPolicyCache`, where
- * it can also be *reported*. A `get` that silently turned a connection error into
- * "not cached" would look identical to a healthy miss from the outside, and the
- * resulting stampede on Postgres would arrive with no signal explaining it.
- *
- * ## Why the client is injected
- *
- * The adapter takes a connected client rather than constructing one, and imports
- * `ioredis` only as a *type* — which is why `ioredis` is a devDependency of this
- * package rather than a runtime dependency of it. That keeps the cache
- * implementable without a Redis client at all (the contract suite runs the
- * in-memory adapter for deployments that have none), lets tests drive it with a
- * client they own, and leaves connection lifecycle, TLS and pooling to the
- * composition root that owns those concerns anyway.
- *
- * ## Values must be JSON-serializable
- *
- * Entries are stored as JSON, so a cached value has to survive `JSON.stringify`
- * round-tripping. Both intended payloads (a compiled policy AST, a decision DTO)
- * are plain data by construction; a value carrying `Map`, `Date` or class
- * instances would silently lose that structure, which is why the contract suite
- * pins the round-trip with a nested object.
+ * The connected client is injected and `ioredis` is imported only as a type, so the composition
+ * root owns connection, TLS and pooling. Values must survive a JSON round trip.
  */
 export class RedisPolicyCache implements PolicyCache {
   private readonly keyPrefix: string;

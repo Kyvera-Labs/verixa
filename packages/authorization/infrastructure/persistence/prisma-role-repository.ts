@@ -8,15 +8,8 @@ import { SystemRoleImmutableError } from "../../domain/errors/system-role-immuta
 import { mapPrismaError } from "./error-mapper.js";
 
 /**
- * The shape every read here selects: the role's own columns plus the keys of
- * the permissions joined to it.
- *
- * `role_permissions` is an *explicit* join model (`@@id([roleId, permissionId])`),
- * not an implicit many-to-many, so a row of it carries only the two ids — the
- * key lives one hop further on, through `permission`. An earlier version of this
- * adapter read `record.permissions[n].key` directly and wrote
- * `permissions: { connect: [{ key }] }`, both of which only typecheck against an
- * implicit relation.
+ * Selection for every read: the role's columns plus the keys of its permissions, reached through
+ * the explicit `role_permissions` join model.
  */
 const ROLE_WITH_PERMISSIONS = {
   permissions: { include: { permission: { select: { key: true } } } },
@@ -49,18 +42,9 @@ export class PrismaRoleRepository implements RoleRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
   /**
-   * Upserts the role and makes its permission set match the aggregate exactly.
-   *
-   * The join rows are replaced rather than merged: the aggregate is the single
-   * source of truth for which permissions a role holds, so a permission revoked
-   * in the domain has to disappear here. `deleteMany` then `createMany` runs
-   * inside one transaction, because a role observed between the two would appear
-   * to hold no permissions at all — and this is the table an authorization check
-   * reads.
-   *
-   * A permission key with no row in `permissions` is skipped rather than
-   * created. The permission catalogue is seeded, and inventing rows here would
-   * let a typo in a policy silently become a real permission.
+   * Upserts the role and replaces its permission rows to match the aggregate. The delete and insert
+   * run in one transaction so a reader never sees the role with no permissions. Keys with no row in
+   * the seeded `permissions` catalog are skipped, so a typo cannot create a permission.
    */
   async save(role: Role): Promise<void> {
     try {

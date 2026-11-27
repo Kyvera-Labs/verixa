@@ -18,17 +18,9 @@ export type PermissionResolverLike = {
 };
 
 /**
- * Fastify `onRequest`/`preHandler` hook factory that resolves the authenticated user's
- * effective permissions once per request and memoizes them on `request.principal` (Issue 137).
- *
- * ## Lifecycle & Caching Guarantees:
- * 1. **Per-Request Memoization:** Resolved permissions are attached to `request.principal.permissions`.
- *    Subsequent guards on the same route inspect this cache without redundant database/service queries.
- * 2. **Unauthenticated Safety:** If no authenticated user is present (`request.principal` is undefined
- *    or missing `userId`), the hook completes silently without throwing, allowing upstream auth
- *    middleware or downstream route guards to handle the unauthenticated state cleanly.
- * 3. **Tenant Context Awareness:** Resolves permissions using either the custom `orgIdResolver`
- *    or the `principal.orgId` context.
+ * Fastify hook factory that resolves the authenticated user's effective permissions once per
+ * request and stores them on `request.principal.permissions` for later guards. Does nothing when
+ * there is no authenticated user. Uses `orgIdResolver` when provided, otherwise `principal.orgId`.
  */
 export function createResolvePrincipalHook(
   checker: PermissionResolverLike,

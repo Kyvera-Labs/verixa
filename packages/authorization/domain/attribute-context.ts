@@ -1,17 +1,7 @@
 /**
- * Attribute vocabulary shared by every Phase 08 authorization entry point.
- *
- * The engine never reads attributes off entities directly: callers assemble an
- * {@link AttributeContext} from whatever sources they trust (the session, the
- * resource's owning service, the environment) and pass it in. That keeps a
- * policy decision reproducible from its inputs and keeps the domain layer free
- * of provider/network knowledge.
- *
- * The four bags are the categories NIST SP 800-162 uses for ABAC (subject,
- * resource, action, environment). Verixa keeps all four defined from the start
- * even though the composition service in this issue only forwards the context:
- * a condition like `environment.now between ...` is written against this shape,
- * so the shape is the interface the DSL has to target.
+ * Attribute vocabulary shared by every authorization entry point. Callers assemble an {@link
+ * AttributeContext} from trusted sources and pass it in, so decisions are reproducible from their
+ * inputs. The four bags follow NIST SP 800-162: subject, resource, action and environment.
  */
 
 /** A flat, provider-supplied attribute bag. Values are `unknown` on purpose: the policy engine is what gives them type meaning. */

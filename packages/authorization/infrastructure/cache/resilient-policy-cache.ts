@@ -19,30 +19,14 @@ export interface ResilientPolicyCacheOptions {
 }
 
 /**
- * Makes cache unavailability degrade to direct evaluation instead of failing
- * requests — the second acceptance criterion of Issue 154.
+ * Decorator that degrades cache failures to direct evaluation instead of failing requests.
  *
- * ## What it absorbs, and what it does not
- *
- * - `get` failures become a **miss** (`undefined`). A reader that gets a miss
- *   computes the value the way it would on a cold cache, which is exactly the
- *   behaviour a Redis outage should produce: slower, still correct, still
- *   fail-closed, because nothing here invents a value.
- *   `undefined` can only ever mean "not cached", never "not permitted".
- * - `set` failures are **swallowed**: a cache that cannot be written is still
- *   serving, and failing the request would turn a performance optimization into
- *   an availability dependency.
- * - `invalidate` failures are swallowed *and reported*, which is the one place
- *   this class trades something real. A publish that could not invalidate leaves
- *   the documented stale window (bounded by TTL and by the version check on
- *   read) rather than failing the publish. The alternative — propagate, and let
- *   a Redis hiccup block policy publishing — is worse: publishing is the
- *   operation that *removes* authority, and refusing it leaves the old, broader
- *   policy in force indefinitely.
- *
- * This is a decorator rather than behaviour baked into the adapters so the tests
- * can assert both halves: the adapter's own contract (a Redis failure
- * propagates) and this class's degradation (a wrapped failure becomes a miss).
+ * - A failed `get` becomes a miss, so the caller evaluates as on a cold cache. `undefined` only
+ *   ever means "not cached".
+ * - A failed `set` is swallowed.
+ * - A failed invalidation is swallowed and reported. The stale window stays bounded by TTL and the
+ *   version check, and publishing a policy, which may remove authority, is never blocked by a cache
+ *   error.
  */
 export class ResilientPolicyCache implements PolicyCache {
   private readonly onDegrade: PolicyCacheDegradationHandler | undefined;

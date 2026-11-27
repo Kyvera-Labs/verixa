@@ -9,30 +9,12 @@ import type {
 } from "../ports/policy-simulation-engine.js";
 
 /**
- * Issue 155 (roadmap 155): evaluate a policy against author-supplied attribute
- * fixtures and report where it disagreed with what its author expected.
+ * Evaluates a policy against author-supplied attribute fixtures and reports where the result
+ * differs from the expected effect.
  *
- * The use case owns *the comparison*, and nothing else. It does not parse the
- * DSL, does not know what a condition is, and does not touch a database — all of
- * that arrives through {@link PolicySimulationEngine}. What it does own is the
- * judgement the tool exists to make: a fixture states an expected effect, the
- * engine states an actual one, and a run either agrees with its author or it
- * does not.
- *
- * ## Why this is a use case rather than a CLI script
- *
- * The alternative — doing the comparison inside the CLI command, iterating
- * fixtures and printing as it goes — was rejected for the usual reason and one
- * specific to this tool. The usual reason is testability: comparison logic in a
- * `console.log` loop is only testable through stdout. The specific one is that
- * *the report is the deliverable*: the CI exit code, the JSON output a pipeline
- * consumes and the table a human reads all have to be derived from the same
- * structured result, or the three drift and a passing local run starts failing
- * in CI for reasons that are about the printer rather than the policy.
- *
- * So the shape is: {@link SimulatePolicy} returns a
- * {@link PolicySimulationReport}, and every renderer — table, JSON, exit code —
- * reads that same object.
+ * Parsing and evaluation come through {@link PolicySimulationEngine}; this use case only compares.
+ * It returns a structured {@link PolicySimulationReport} so the table, JSON output and exit code
+ * are all derived from the same result.
  */
 
 /** One fixture: a named attribute context plus the effect its author expects from it. */

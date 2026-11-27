@@ -15,14 +15,8 @@ export interface CreateRoleCommand {
 export type CreateRoleError = ValidationError | ConflictError;
 
 /**
- * Orchestrates creating a new Role: validate input, enforce a unique role name,
- * construct the Role aggregate, and persist it via the RoleRepository port.
- *
- * The name is unique *globally*, not per organization. Roles are an
- * administrative concern rather than a tenant one -- see `model Role` in
- * `packages/database/prisma/schema.prisma`, where `name` is `@unique` and there
- * is no `organization_id`. What varies per organization is who holds a role,
- * which `UserRoleAssignment` expresses.
+ * Creates a role: validates input, enforces a globally unique name, and persists the aggregate.
+ * Roles are global; per-organization access is expressed by `UserRoleAssignment`.
  */
 export class CreateRole {
   constructor(private readonly roleRepository: RoleRepository) {}

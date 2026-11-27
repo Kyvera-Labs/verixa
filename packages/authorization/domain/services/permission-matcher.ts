@@ -3,16 +3,13 @@ import { Result } from "@verixa/shared-kernel";
 import { Permission } from "../value-objects/permission.js";
 
 /**
- * Pure domain service encapsulating wildcard and hierarchical permission matching logic (Issue 135).
+ * Matches granted permissions against a required one.
  *
- * ## Matching Semantics:
- * 1. **Exact Match:** `granted.value === required.value` (e.g., `users:read` satisfies `users:read`).
- * 2. **Global Wildcard:** `*:*` matches any valid permission (e.g., `*:*` satisfies `users:read`, `audit:export`).
- *    - Note: Granting `*:*` is restricted to system roles (`isSystemRole: true`) at the use case layer.
- * 3. **Resource Wildcard / Action Wildcard:**
- *    - `resource:*` matches any action on that specific resource (e.g., `users:*` satisfies `users:read`, `users:write`).
- *    - `*:action` matches that specific action across all resources (e.g., `*:read` satisfies `users:read`, `docs:read`).
- * 4. **Boundary Isolation:** `users:*` does NOT match `orgs:read` or `user_profiles:read`.
+ * 1. Exact: `users:read` satisfies `users:read`.
+ * 2. Global wildcard: `*:*` satisfies anything; only system roles may be granted it.
+ * 3. `resource:*` matches any action on that resource; `*:action` matches that action on any
+ *    resource.
+ * 4. Boundaries hold: `users:*` does not match `orgs:read` or `user_profiles:read`.
  */
 export class PermissionMatcher {
   /**

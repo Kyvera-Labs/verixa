@@ -10,14 +10,8 @@ export interface DefinePermissionCommand {
 export type DefinePermissionError = ValidationError;
 
 /**
- * Orchestrates registering a new Permission in the authoritative catalog (Issue 131).
- *
- * Typically invoked during application bootstrap by feature modules declaring the permissions
- * they protect.
- *
- * Invariants:
- * - Registering a duplicate permission key is idempotent (no-op) and returns the existing permission.
- * - Registering an invalid key format is rejected with a {@link ValidationError}.
+ * Registers a permission in the catalog, typically at bootstrap. Registering an existing key
+ * returns the existing permission; an invalid key format returns a {@link ValidationError}.
  */
 export class DefinePermission {
   constructor(private readonly permissionRepository: PermissionRepository) {}

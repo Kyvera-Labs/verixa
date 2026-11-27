@@ -10,17 +10,9 @@ export class PrismaPermissionRepository implements PermissionRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
   /**
-   * Upserts a permission by its key.
-   *
-   * Only `key` is stored. `resource` and `action` are derived from it by the
-   * value object, and the `permissions` table has no columns for them — an
-   * earlier version of this adapter wrote both and so could not compile. Storing
-   * them would also let the two drift from the key that authorization checks
-   * actually compare.
-   *
-   * `id` is supplied on create because the column has no database default, and
-   * left alone on update: the row's identity is its key, and re-seeding the
-   * catalogue must not renumber rows that `role_permissions` points at.
+   * Upserts a permission by key. Only `key` is stored; `resource` and `action` are derived from it.
+   * `id` is set on create (no database default) and never changed, so rows referenced by
+   * `role_permissions` keep their identity.
    */
   async save(permission: Permission): Promise<void> {
     try {

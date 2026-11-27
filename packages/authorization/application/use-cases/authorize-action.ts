@@ -27,22 +27,13 @@ export interface AuthorizeActionCommand {
 }
 
 /**
- * The Policy Decision Point (PDP): the single call site other contexts and
- * route handlers use to ask "can this subject do this action on this
- * resource," wrapping `AuthorizationService` (Issue 152) the way Issue 153
- * specifies. Has no HTTP/Fastify dependency — like every use case, it can be
- * called identically from a route handler, a CLI command, or a test (see
- * `docs/guides/use-cases.md`).
+ * The policy decision point: the single entry point for "can this subject do this action on this
+ * resource", wrapping `AuthorizationService`. It has no HTTP dependency (see
+ * docs/guides/use-cases.md).
  *
- * When constructed with a `resourceAttributeResolvers` registry (Issue 151),
- * `execute` resolves the resource's own attributes automatically via
- * `resourceId`, so callers don't have to fetch and pass them by hand on
- * every check; `resourceAttributes` on the command can still supply
- * additional attributes, or override a resolved one (e.g. a caller that
- * already has the resource loaded and wants to skip a redundant fetch).
- * Passing no registry (or one with nothing registered for this resource
- * type) simply means no resource attributes are resolved automatically —
- * not an error, since not every check needs any.
+ * With a `resourceAttributeResolvers` registry, the resource's attributes are resolved from
+ * `resourceId` automatically. `resourceAttributes` on the command can add to or override them.
+ * Without a registry, no attributes are resolved automatically.
  */
 export class AuthorizeAction {
   constructor(
@@ -107,16 +98,9 @@ export class AuthorizeAction {
   }
 
   /**
-   * Phrases the decision for a caller.
-   *
-   * Written as sentences rather than passing the service's own `reason`
-   * through: that one is terse and internal ("ABAC policy permit"), and this is
-   * the string a route handler surfaces and an audit entry records. The layer
-   * that decided is named because "denied" and "denied because nothing matched"
-   * send a reader to different places — the first looks like a bug, the second
-   * like missing configuration.
-   *
-   * Driven by `source`, the single layer that produced the returned effect.
+   * Phrases the decision as a sentence for route handlers and audit entries, naming the layer
+   * (`source`) that produced the effect, because "denied" and "denied because nothing matched" call
+   * for different fixes.
    */
   private static describeReason(result: DomainAuthorizationDecision): string {
     const matched =

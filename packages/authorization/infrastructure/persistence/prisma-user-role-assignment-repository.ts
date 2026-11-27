@@ -25,16 +25,8 @@ interface AssignmentRow {
 }
 
 /**
- * Rebuilds the aggregate from a row.
- *
- * `reconstitute`, not `create`: storage is trusted and already validated, and
- * `create` returns a `Result` that an adapter has no sensible way to fail on —
- * a row that will not validate is a corrupt database, not a bad request.
- *
- * `assigned_by` is nullable in the database but required on the aggregate. A row
- * without it predates that column, so the assignment is attributed to the user
- * it was granted to rather than invented: that is visibly odd in an audit view,
- * which is better than a confident wrong name.
+ * Rebuilds the aggregate from a trusted row with `reconstitute`. Rows created before `assigned_by`
+ * existed are attributed to the assignee rather than to an invented user.
  */
 function toDomain(row: AssignmentRow): UserRoleAssignment {
   return UserRoleAssignment.reconstitute({
@@ -59,14 +51,8 @@ export class PrismaUserRoleAssignmentRepository implements UserRoleAssignmentRep
   constructor(private readonly prisma: PrismaClient) {}
 
   /**
-   * Persists an assignment.
-   *
-   * A global assignment (`orgId: null`) is refused rather than coerced. The
-   * `user_role_assignments.organization_id` column is `NOT NULL` with a foreign
-   * key to `organizations`, and the table's row-level security policy is keyed on
-   * it — so a row with no organization would not just fail to store, it would be
-   * a hole in the tenancy boundary if the column were ever made nullable. The
-   * aggregate still models the case; this is the layer that cannot.
+   * Persists an assignment. Global assignments (`orgId: null`) are refused because
+   * `organization_id` is `NOT NULL` and row-level security is keyed on it.
    */
   async save(assignment: UserRoleAssignment): Promise<void> {
     if (assignment.orgId === null) {

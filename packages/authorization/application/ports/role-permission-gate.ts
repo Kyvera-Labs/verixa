@@ -36,16 +36,10 @@ export interface RolePermissionGate {
   /**
    * Renders a role decision for the request.
    *
-   * Contracts an implementation must honour:
-   *
-   * - **Total for expected outcomes.** "This subject has no matching role" is
-   *   `no-match`, not an exception. Only an unreachable/permanently broken
-   *   store may throw, and callers treat a throw as a denial.
-   * - **No attribute judgements.** An implementation must not read policy
-   *   attributes or condition values; a role check that starts evaluating
-   *   attributes has moved decision-making out of the policy engine.
-   * - **Deterministic.** The same request against the same store state returns
-   *   the same decision, with no dependence on call order.
+   * - "No matching role" is `no-match`, not an exception. Only an unreachable store may throw, and
+   *   callers treat a throw as a denial.
+   * - Never evaluates policy attributes or conditions; that belongs to the policy engine.
+   * - Deterministic for a given store state.
    */
   check(request: RoleCheckRequest): Promise<RoleDecision>;
 }

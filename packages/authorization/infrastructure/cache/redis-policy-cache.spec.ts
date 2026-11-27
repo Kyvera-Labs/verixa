@@ -9,14 +9,9 @@ import { policyCacheContract } from "./testing/policy-cache-contract.js";
 import { startTestRedis, type TestRedis } from "./testing/redis-harness.js";
 
 /**
- * Runs the same {@link policyCacheContract} the in-memory adapter passes against
- * a real Redis, plus the two guarantees only a real store can make: that entries
- * actually expire, and that a publish invalidates the previous generation's
- * entries immediately.
- *
- * Skips when no Redis is reachable and `TEST_REDIS_URL` is unset; see
- * `testing/redis-harness.ts`. `REQUIRE_REDIS_TESTS=1` turns the skip into a
- * failure, which is what the CI job does.
+ * Runs {@link policyCacheContract} against a real Redis, plus the guarantees only a real store can
+ * show: entries expire, and a publish invalidates the previous generation immediately. Skips
+ * without Redis unless `REQUIRE_REDIS_TESTS=1` (see `testing/redis-harness.ts`).
  */
 
 const redis = await startTestRedis();

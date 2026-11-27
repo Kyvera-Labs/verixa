@@ -3,14 +3,8 @@ import { DomainError } from "@verixa/shared-kernel";
 export type SystemRoleAction = "revoke" | "rename" | "delete";
 
 /**
- * Thrown when an operation attempts to mutate or revoke invariants on a protected
- * system role (e.g. revoking permissions from `super-admin` or renaming it).
- *
- * System roles are built-in roles that guarantee system recoverability and platform
- * administration. Protecting them at the domain layer ensures that no UI, script,
- * or background job can accidentally lock out administrative access.
- *
- * Distinguished from {@link ValidationError} with HTTP status code 403 Forbidden.
+ * Thrown when an operation would revoke permissions from, or rename, a protected system role such
+ * as `super-admin`, which guarantees administrative access cannot be locked out. Maps to HTTP 403.
  */
 export class SystemRoleImmutableError extends DomainError {
   readonly code = "SYSTEM_ROLE_IMMUTABLE";

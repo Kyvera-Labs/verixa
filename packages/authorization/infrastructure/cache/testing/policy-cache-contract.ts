@@ -7,15 +7,8 @@ import type {
 } from "../../../application/ports/policy-cache.js";
 
 /**
- * The behaviour every {@link PolicyCache} must have, run against each adapter.
- *
- * Repetition of the contract-suite convention Phase 03 established for
- * repositories: the in-memory adapter and the Redis adapter are only
- * interchangeable if they are held to one written set of expectations, and a
- * contract that lives in only one of the two specs is a contract nobody
- * maintains. TTL *expiry* is deliberately not in here — it needs a clock or a
- * sleep, so each adapter proves it its own way — but the "zero TTL caches
- * nothing" rule is, because it is the one TTL rule both can satisfy identically.
+ * Behaviour every {@link PolicyCache} adapter must have. TTL expiry is tested per adapter because
+ * it needs a clock; the rule that a zero TTL caches nothing is shared.
  */
 
 const DOCUMENT_READ: PolicyCacheKey = { resourceType: "document", action: "document:read" };

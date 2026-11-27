@@ -1,43 +1,17 @@
 /**
- * The {@link PolicyCache} port: a store for values derived from the *policy set*
- * (compiled policy ASTs, and optionally decisions) rather than from a resource.
+ * Cache port for values derived from the policy set (compiled ASTs and optionally decisions),
+ * generic over the cached value.
  *
- * Issue 154 (roadmap 154). The port is deliberately generic over the cached
- * value and free of anything Redis-, AST-, or decision-shaped: the same
- * interface has to serve a parsed AST for `(resourceType, action)` and a short
- * TTL decision for `(subject, action, resource)`, and an implementation should
- * not have to know which of the two it is holding.
+ * A stale entry here can turn a deny into a permit, so the contract is strict:
  *
- * ## Why caching authorization is different
- *
- * A stale entry in an ordinary read cache is a UX glitch. A stale entry here can
- * be a `DENY → PERMIT` transition, which is a security bug — so the contract
- * below is stricter than "call these methods and it'll be fast":
- *
- * - **Invalidation is a hard requirement, not a TTL hope.** Publishing a policy
- *   version (Issue 150) must make the entries derived from the previous version
- *   unreachable *immediately*. Implementations therefore namespace entries under
- *   a *generation* that invalidation advances, instead of deleting keys one by
- *   one or scanning for them: advancing a generation is one atomic write, cannot
- *   partially fail, and needs no `SCAN`/`KEYS` (which are unsafe on a shared
- *   Redis and would themselves be an availability risk on a large keyspace).
- * - **Every entry carries the policy version it was derived from.** A reader must
- *   compare {@link CachedPolicy.policyVersion} against the version it believes is
- *   active and treat a mismatch as a **miss**. That check is what bounds the
- *   stale-policy window to "no longer than the time between a version being
- *   published and this node's next read", which is zero for the reading node and
- *   a documented one-cache-write for other nodes. TTL is a *memory* bound, not
- *   the correctness mechanism.
- * - **A miss and a failure are indistinguishable to a reader.** `get` returns
- *   `undefined` for both, which is what makes "Redis is down" degrade into direct
- *   evaluation rather than into a failed request (see `ResilientPolicyCache`).
- *   A reader must never treat "I could not ask the cache" as "the cached answer
- *   was no" — that is how a cache outage turns into an authorization decision.
- * - **Reads are optional; writes and invalidations are not silent.** `set` and the
- *   `invalidate*` methods are allowed to throw, because a caller that thinks it
- *   invalidated and did not has a stale-policy window it does not know about.
- *   Callers that would rather keep serving than fail a request wrap the adapter in
- *   {@link ResilientPolicyCache} and accept a *reported* degradation.
+ * - Invalidation is required, not left to TTL. Entries live under a generation that invalidation
+ *   advances in one atomic write, with no key scans.
+ * - Every entry carries its policy version; a reader treats a version mismatch as a miss. TTL only
+ *   bounds memory.
+ * - `get` returns `undefined` for both a miss and a failure, so a cache outage degrades to direct
+ *   evaluation, never to a decision.
+ * - `set` and the `invalidate*` methods may throw so a failed invalidation is never silent. Wrap
+ *   the adapter in {@link ResilientPolicyCache} to keep serving with a reported degradation.
  */
 
 /** What a cached entry is keyed by: the policy target selector, not the request. */

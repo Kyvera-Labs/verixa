@@ -8,15 +8,9 @@ interface RuleProps {
 }
 
 /**
- * One `if <condition> then <effect>` clause inside a {@link Policy}.
- *
- * Immutable value object (no identity of its own — two rules with the same
- * effect and condition are the same rule) constructed only through
- * {@link Rule.create}, which is the single place the "must have a condition"
- * invariant is enforced. There is no `reconstitute`: unlike an aggregate
- * such as `Policy`, a `Rule` has no independent existence a repository would
- * load on its own — it only ever arrives already embedded in a `Policy`,
- * which reconstitutes itself and its rules together in one factory.
+ * One `if <condition> then <effect>` clause in a {@link Policy}. An immutable value object created
+ * only through {@link Rule.create}, which requires a condition. Rules are always loaded as part of
+ * a `Policy`, so there is no `reconstitute`.
  */
 export class Rule {
   readonly effect: Effect;
