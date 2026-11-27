@@ -23,7 +23,7 @@ The most fundamental design decision in Phase 09 is that identity verification l
 Adding verification fields directly to the `User` entity would be simpler in the short term:
 
 ```typescript
-// ❌ What we explicitly did NOT do
+// What we explicitly did NOT do
 class User {
   readonly id: UserId;
   readonly email: Email;
@@ -131,7 +131,7 @@ class VerificationStatus {
 Without the state machine, status transitions would be scattered across use cases as unstructured string assignments:
 
 ```typescript
-// ❌ Anti-pattern: implicit transitions
+// Anti-pattern: implicit transitions
 async function approveVerification(requestId: string) {
   const request = await repo.findById(requestId);
   request.status = "approved"; // What if current status is "pending_evidence"?
@@ -148,7 +148,7 @@ Problems:
 The state machine makes these rules **compile-time knowledge**:
 
 ```typescript
-// ✅ Enforced by type system
+// Enforced by the type system
 const result = currentStatus.transitionTo(VerificationStatus.approved());
 if (result.isErr()) {
   // This path is forced into existence by Result<T, E> type
@@ -355,7 +355,7 @@ Manual review (Issues 173–177) is where the hardest concurrency problems live.
 ### The Naive Approach (What We Don't Do)
 
 ```typescript
-// ❌ Race-prone queue implementation
+// Race-prone queue implementation
 async function claimNextCase(reviewerId: string) {
   const cases = await repo.find({ status: "in_review", assignedTo: null }, { limit: 1 });
   if (cases.length === 0) return null;
@@ -378,10 +378,10 @@ Time T+1:  Reviewer B: SELECT * FROM requests WHERE assigned_to IS NULL LIMIT 1;
            → returns request-123 (still unassigned from DB perspective)
 
 Time T+2:  Reviewer A: UPDATE requests SET assigned_to = 'A' WHERE id = 'request-123';
-           ✓ success
+           success
 
 Time T+3:  Reviewer B: UPDATE requests SET assigned_to = 'B' WHERE id = 'request-123';
-           ✓ success (overwrites A's claim)
+           success (overwrites A's claim)
 ```
 
 Result: Both reviewers believe they own the case. One's decision will be lost or cause a constraint violation.

@@ -373,9 +373,9 @@ patience and the connection pool.
   maintenance trap. Re-test with a live database to see which layer answers
   first. Issue 219 (ASVS V2).
 - **F-12 — `X-Forwarded-Proto` is matched case-sensitively, and `Forwarded:` is
-  ignored.** On `:3124`: `x-forwarded-proto: http` → 308 ✓; `http, https` → 308 ✓
-  (first value wins, which is the safe reading); **`HTTPS` → 308** ✗; `htt ps` →
-  308 ✓; `forwarded: for=1.2.3.4;proto=https` → 308 (RFC 7239 is not consulted).
+  ignored.** On `:3124`: `x-forwarded-proto: http` → 308 (correct); `http, https` → 308 (correct)
+  (first value wins, which is the safe reading); **`HTTPS` → 308 (wrong)**; `htt ps` →
+  308 (correct); `forwarded: for=1.2.3.4;proto=https` → 308 (RFC 7239 is not consulted).
   A TLS terminator that capitalizes the scheme, or that emits only
   `Forwarded:`, sits in an infinite redirect loop with this app. RFC 9110 §4.1
   makes the scheme case-insensitive. Cheap fix, real outage prevention: compare

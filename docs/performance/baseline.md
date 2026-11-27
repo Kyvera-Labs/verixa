@@ -17,7 +17,7 @@ because the first calls pay for connection setup, Prisma's query-engine
 startup, and a cold buffer cache — real costs, but one-off ones that would
 otherwise dominate `max` and distort p95.
 
-## ⚠️ These numbers are not a target, and not portable
+## These numbers are not a target, and not portable
 
 A baseline is only meaningful **compared against itself, on the same
 hardware, measured the same way.**
