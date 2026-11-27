@@ -182,7 +182,7 @@ describe("coverage-ratchet (Issue 413)", () => {
       const md = formatRatchetMarkdown(result);
 
       expect(md).toContain("## Coverage Ratchet Summary (Issue 413)");
-      expect(md).toContain("✅ **All coverage ratchet gates satisfied.**");
+      expect(md).toContain("**All coverage ratchet gates satisfied.**");
       expect(md).toContain("| **workspace (aggregate)** |");
       expect(md).toContain("| **@verixa/identity** |");
     });
@@ -196,7 +196,7 @@ describe("coverage-ratchet (Issue 413)", () => {
       const result = compareCoverage(summary, sampleBaseline, { tolerance: 0.1 });
       const md = formatRatchetMarkdown(result);
 
-      expect(md).toContain("❌ **Coverage ratchet check failed.**");
+      expect(md).toContain("**Coverage ratchet check failed.**");
       expect(md).toContain("### Required Action");
       expect(md).toContain("COVERAGE_RATCHET_OVERRIDE");
     });

@@ -80,8 +80,8 @@ describe("perf-budget check", SPAWNING_SUITE, () => {
 
     expect(result.stderr).toBe("");
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("| unit | 100s | 120s | 120s | +20% | ✅ within budget |");
-    expect(result.stdout).toContain("| integration | 50s | 60s | 41s | -18% | ✅ within budget |");
+    expect(result.stdout).toContain("| unit | 100s | 120s | 120s | +20% | within budget |");
+    expect(result.stdout).toContain("| integration | 50s | 60s | 41s | -18% | within budget |");
   });
 
   it("fails and names the suite, the time, the limit and the slowdown when a suite regresses", () => {
@@ -103,7 +103,7 @@ describe("perf-budget check", SPAWNING_SUITE, () => {
       'suite "unit" took 120.5s, over its limit of 120s (baseline 100s + 20% tolerance; 20.5% slower than baseline)',
     );
     expect(result.stderr).not.toContain('"integration"');
-    expect(result.stdout).toContain("❌ regressed");
+    expect(result.stdout).toContain("| regressed |");
   });
 
   it("fails when a budgeted suite has no timing, so a suite cannot silently drop out of the budget", () => {
@@ -121,7 +121,7 @@ describe("perf-budget check", SPAWNING_SUITE, () => {
     expect(result.stderr).toContain(
       'suite "integration" has a baseline but no timing was recorded',
     );
-    expect(result.stdout).toContain("| integration | 50s | 60s | – | – | ❌ not measured |");
+    expect(result.stdout).toContain("| integration | 50s | 60s | – | – | not measured |");
   });
 
   it("reports a timed suite with no baseline without failing, since a new suite has no history yet", () => {
@@ -139,7 +139,7 @@ describe("perf-budget check", SPAWNING_SUITE, () => {
     ]);
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("| e2e | – | – | 30s | – | ⚠️ no baseline |");
+    expect(result.stdout).toContain("| e2e | – | – | 30s | – | no baseline |");
     expect(result.stdout).toContain('suite "e2e" has no baseline yet');
   });
 

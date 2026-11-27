@@ -266,18 +266,16 @@ export function formatRatchetMarkdown(result: RatchetComparisonResult): string {
 
   if (result.passed && !result.overrideApplied) {
     lines.push(
-      "✅ **All coverage ratchet gates satisfied.** No coverage regression detected beyond tolerance.",
+      "**All coverage ratchet gates satisfied.** No coverage regression detected beyond tolerance.",
     );
   } else if (result.passed && result.overrideApplied) {
-    lines.push(
-      "⚠️ **Coverage ratchet override applied.** Drops allowed by policy or override flag.",
-    );
+    lines.push("**Coverage ratchet override applied.** Drops allowed by policy or override flag.");
     if (result.overrideReason) {
       lines.push(`> **Override Reason:** ${result.overrideReason}`);
     }
   } else {
     lines.push(
-      "❌ **Coverage ratchet check failed.** One or more targets regressed beyond the permitted tolerance.",
+      "**Coverage ratchet check failed.** One or more targets regressed beyond the permitted tolerance.",
     );
   }
 
@@ -296,11 +294,11 @@ export function formatRatchetMarkdown(result: RatchetComparisonResult): string {
       return `${diff.current}% (\`${sign}${diff.delta}%\`)`;
     });
 
-    let statusBadge = "✅ Maintained";
+    let statusBadge = "Maintained";
     if (targetResult.status === "improved") {
-      statusBadge = "📈 Improved";
+      statusBadge = "Improved";
     } else if (targetResult.status === "regressed") {
-      statusBadge = "❌ Regressed";
+      statusBadge = "Regressed";
     }
 
     return `| **${targetResult.target}** | ${metricCols.join(" | ")} | ${statusBadge} |`;

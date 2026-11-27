@@ -302,8 +302,6 @@ export function evaluate(config, results) {
   return { failed, rows };
 }
 
-const ICON = { pass: "✅", warn: "⚠️", fail: "❌", off: "⏸️", "not-run": "❔" };
-
 export function renderSummary(outcome) {
   const lines = [
     "## Code quality",
@@ -311,8 +309,7 @@ export function renderSummary(outcome) {
     "| Gate | Mode | Result | Detail |",
     "|---|---|---|---|",
     ...outcome.rows.map(
-      (r) =>
-        `| \`${r.name}\` | ${r.mode} | ${ICON[r.status]} ${r.status} | ${r.summary.replace(/\|/g, "\\|")} |`,
+      (r) => `| \`${r.name}\` | ${r.mode} | ${r.status} | ${r.summary.replace(/\|/g, "\\|")} |`,
     ),
     "",
   ];

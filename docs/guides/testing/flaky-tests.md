@@ -75,7 +75,7 @@ To eliminate this:
 
 1. **Automated CI Expiration Audit**: CI runs `pnpm flaky:track --scan-quarantines` on every pull request and push to `main`.
 2. **Hard Failure on Expiration**: When current date > `until`:
-   - Quarantine status becomes **`🚨 EXPIRED`**.
+   - Quarantine status becomes **`EXPIRED`**.
    - `shouldSkip` is set to `false`.
    - CI exits with code 1.
 3. **Resolution Required**: The PR author or maintainer must either:

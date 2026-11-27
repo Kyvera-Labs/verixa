@@ -319,13 +319,13 @@ export function generateMarkdownSummary(report: WorkspaceCoverageReport): string
   const { aggregate, packages } = report;
 
   const statusBadge = (pct: number) => {
-    if (pct >= 85) return "🟢";
-    if (pct >= 70) return "🟡";
-    return "🔴";
+    if (pct >= 85) return "good";
+    if (pct >= 70) return "fair";
+    return "low";
   };
 
   const lines = [
-    "## 📊 Workspace Coverage Aggregate Report",
+    "## Workspace Coverage Aggregate Report",
     "",
     `**Generated:** ${report.timestamp}`,
     "",

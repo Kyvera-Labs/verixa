@@ -22,11 +22,11 @@ The job summary (the **Summary** tab of the workflow run) has a table with one
 row per gate. Findings also appear as annotations on the exact lines in the
 pull request's **Files changed** tab.
 
-- ✅ **pass**: nothing to do.
-- ⚠️ **warn**: the gate found something, but it is not blocking yet. Please fix
+- **pass**: nothing to do.
+- **warn**: the gate found something, but it is not blocking yet. Please fix
   it anyway. The summary says when the gate is planned to start blocking.
-- ❌ **fail**: a blocking gate found something, and the check is red.
-- ❔ **not-run**: the measurement step crashed. Look at that step's log.
+- **fail**: a blocking gate found something, and the check is red.
+- **not-run**: the measurement step crashed. Look at that step's log.
 
 ## Fixing common findings
 

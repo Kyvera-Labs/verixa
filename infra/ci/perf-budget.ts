@@ -251,10 +251,10 @@ function failureMessages(evaluation: Evaluation): string[] {
 }
 
 const STATUS_LABEL: Record<SuiteStatus, string> = {
-  ok: "✅ within budget",
-  regressed: "❌ regressed",
-  "not-measured": "❌ not measured",
-  unbudgeted: "⚠️ no baseline",
+  ok: "within budget",
+  regressed: "regressed",
+  "not-measured": "not measured",
+  unbudgeted: "no baseline",
 };
 
 const cell = (value: number | null, suffix = ""): string =>

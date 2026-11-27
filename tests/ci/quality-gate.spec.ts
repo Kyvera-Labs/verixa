@@ -69,7 +69,7 @@ describe("report: the mode policy", () => {
       resultDir({ complexity: FAIL }),
     ]);
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("⚠️ warn");
+    expect(result.stdout).toContain("| warn |");
     expect(result.stdout).toContain("::warning file=packages/x/a.ts,line=3");
   });
 
@@ -82,7 +82,7 @@ describe("report: the mode policy", () => {
       resultDir({ complexity: FAIL }),
     ]);
     expect(result.exitCode).toBe(1);
-    expect(result.stdout).toContain("❌ fail");
+    expect(result.stdout).toContain("| fail |");
     expect(result.stdout).toContain("::error file=packages/x/a.ts,line=3");
   });
 
