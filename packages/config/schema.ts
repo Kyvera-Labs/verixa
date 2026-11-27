@@ -1,20 +1,12 @@
 import { z } from "zod";
 
 /**
- * A boolean read from an environment variable.
+ * A boolean read from an environment variable. Not `z.coerce.boolean()`, which treats every
+ * non-empty string as true, so `ENFORCE_HTTPS=false` would enable the redirect. Only `true`,
+ * `false`, `1` and `0` parse; anything else fails at startup and names the variable.
  *
- * `z.coerce.boolean()` is deliberately not used, because it is `Boolean(value)`
- * and every non-empty string is truthy — so `ENFORCE_HTTPS=false` would
- * *enable* the redirect. A flag whose most natural misconfiguration means its
- * own opposite is the worst kind to ship, so only the four spellings that
- * unambiguously state an answer parse, and anything else (`yes`, `TRUE`, an
- * empty value left by a half-filled `.env`) is a startup error listing the
- * variable by name.
- *
- * Defaults use `.prefault(...)` with the *input* spelling — `.prefault("true")`,
- * not `.default(true)`. In Zod 4 `.default()` short-circuits with an output
- * value, while `.prefault()` feeds the value through the enum and transform as
- * Zod 3's `.default()` did, so an invalid default would still be rejected.
+ * Defaults use `.prefault("true")` with the input spelling: in Zod 4, `.prefault()` runs the value
+ * through the enum and transform, so an invalid default is still rejected.
  */
 export const booleanFromEnv = z
   .enum(["true", "false", "1", "0"])
@@ -36,14 +28,8 @@ export const OTEL_EXPORTER_PROTOCOLS = ["http/protobuf", "http/json", "grpc"] as
 export type OtelExporterProtocol = (typeof OTEL_EXPORTER_PROTOCOLS)[number];
 
 /**
- * Default trace sampling rates by `NODE_ENV` when `OTEL_TRACES_SAMPLER_RATE`
- * is not explicitly configured.
- *
- * - `development`: 1.0 (100%) — every trace is captured locally for debugging.
- * - `production`: 0.1 (10%) — bounds trace volume and collector cost while
- *   keeping a statistically representative baseline; errors are always
- *   force-sampled regardless of this rate.
- * - `test`: 0.0 (0%) — avoids noisy telemetry output during automated tests.
+ * Default trace sampling rate per `NODE_ENV` when `OTEL_TRACES_SAMPLER_RATE` is unset:
+ * `development` 1.0, `production` 0.1 (errors are always sampled), `test` 0.0.
  */
 export const DEFAULT_OTEL_SAMPLING_RATES: Readonly<
   Record<"development" | "test" | "production", number>
@@ -110,16 +96,9 @@ export function resolveOtelSamplingRate(
 }
 
 /**
- * A single origin entry the API is willing to reflect back in
- * `Access-Control-Allow-Origin`.
- *
- * `new URL(...)` plus an `origin` round-trip is deliberately stricter than
- * "looks like a URL": `https://app.example.com/path`, `https://app.example.com/`
- * and `HTTPS://APP.EXAMPLE.COM` all fail, and that is the point. The value is
- * matched character-for-character against the browser-sent `Origin` header, so
- * an entry that is merely *equivalent* to a real origin would silently never
- * match — a misconfiguration whose symptom is a blocked front end rather than
- * an error message. Rejecting it at startup turns that into a config failure.
+ * Whether an entry is a valid origin to reflect in `Access-Control-Allow-Origin`. It must equal its
+ * own `URL.origin` exactly, because browsers send `Origin` in that exact form; an equivalent value
+ * with a path, trailing slash or different case would never match, so it fails at startup instead.
  */
 export function isValidCorsOrigin(origin: string): boolean {
   if (origin === CORS_WILDCARD_ORIGIN) {
@@ -137,16 +116,9 @@ export function isValidCorsOrigin(origin: string): boolean {
 }
 
 /**
- * The wildcard-with-credentials check, shared by the environment schema and the
- * CORS plugin.
- *
- * A browser refuses to store credentials from a response whose
- * `Access-Control-Allow-Origin` is `*`, so the pairing is either a no-op that
- * looks like it works or a front end that mysteriously cannot authenticate.
- * It is also an outright hole in the other direction when a proxy or a
- * framework "fixes" the wildcard by reflecting the caller's origin. Failing at
- * startup is the only honest outcome; returning the message means the schema
- * and the plugin cannot drift apart on what counts as invalid.
+ * Rejects a wildcard origin combined with credentials. Browsers refuse credentials when
+ * `Access-Control-Allow-Origin` is `*`, and a proxy that "fixes" it by reflecting the origin opens
+ * a hole. Shared by the environment schema and the CORS plugin so they cannot disagree.
  */
 export function corsConfigurationError(
   allowedOrigins: readonly string[],
@@ -176,30 +148,15 @@ export const rawEnvSchema = z.object({
   DATABASE_URL: z.string().url().default("postgres://verixa:verixa@localhost:5432/verixa"),
 
   /**
-   * Maximum Postgres connections this process will hold open (Issue 053).
+   * Maximum Postgres connections this process holds open. Size it as peak concurrent database
+   * requests divided by app instances, rounded up modestly, not as high as the database allows.
    *
-   * Sizing formula: `pool size ≈ (peak concurrent requests that touch the
-   * database) / (number of app instances)`, then round up modestly. It is
-   * deliberately *not* "as high as the database allows."
+   * Raising it rarely fixes pool timeouts: each connection is a separate Postgres process, and
+   * beyond the available cores they compete for CPU and locks, so throughput falls. Timeouts under
+   * load usually mean slow queries or connections held too long; fix those first.
    *
-   * Raising this is the reflexive fix for connection-pool timeouts and
-   * usually makes throughput worse. Every Postgres connection is a separate
-   * OS process with its own memory (work_mem is per-operation, per-connection),
-   * and past the point where active connections exceed available cores, they
-   * compete for CPU and lock contention rather than doing more work — so
-   * total throughput falls while every individual query gets slower. A pool
-   * that is "too small" and briefly queues requests generally beats one that
-   * lets a hundred connections thrash.
-   *
-   * Timeouts under load usually mean queries are too slow or held too long
-   * (a transaction awaiting a network call, a missing index), and the pool is
-   * just where the symptom appears. Fix the query before touching this.
-   *
-   * Capped at 100 because exceeding a stock Postgres `max_connections` (also
-   * 100) means connection *errors*, not slowness — and the failure is far
-   * more confusing than a queue. Multiple app instances share that budget:
-   * ten instances at 20 each is 200, and the eleventh connection past the
-   * limit fails outright.
+   * Capped at 100 to stay under a stock Postgres `max_connections`, which all app instances share;
+   * exceeding it causes connection errors.
    */
   DATABASE_POOL_SIZE: z.coerce.number().int().positive().max(100).default(10),
 
@@ -226,69 +183,29 @@ export const rawEnvSchema = z.object({
   REDIS_URL: z.string().url().default("redis://localhost:6379"),
 
   /**
-   * HMAC key `@verixa/sessions`'s `JwtTokenSigner` signs and verifies access
-   * tokens with (Issue 096).
-   *
-   * Unlike `DATABASE_URL`, this has **no default**. A database URL pointing
-   * at the wrong (but real) database is a mistake you notice; a signing key
-   * everyone's `.env.example` shares is a mistake you don't, because nothing
-   * about a session issued with it looks wrong until someone who copied the
-   * same public default forges one. Access tokens are bearer credentials —
-   * see `docs/security/token-storage.md` on why those get no free passes on
-   * secrecy just because a workflow is convenient. Every environment,
-   * including local development, generates its own with e.g. `openssl rand
-   * -base64 48`.
-   *
-   * 32 characters is a floor, not a target — it stops a trivially short
-   * placeholder from validating, not a guarantee of adequate entropy on its
-   * own. Phase 11 covers key management (rotation, storage) properly.
+   * HMAC key `JwtTokenSigner` uses to sign and verify access tokens. No default: a key shared
+   * through `.env.example` would let anyone who copied it forge sessions. Generate one per
+   * environment, for example with `openssl rand -base64 48` (see docs/security/token-storage.md).
+   * The 32-character minimum only rejects obvious placeholders.
    */
   SESSION_ACCESS_TOKEN_SECRET: z
     .string()
     .min(32, "must be at least 32 characters — generate one with `openssl rand -base64 48`"),
 
   /**
-   * Maximum simultaneous active sessions a single user may hold (Issue 094).
-   * Logging in past this limit evicts the least-recently-active session —
-   * see `IssueSession` in `@verixa/sessions`.
-   *
-   * `0` (the default) disables enforcement entirely, per that issue's own
-   * acceptance criterion. Unlike `DATABASE_POOL_SIZE`, there is no safe
-   * non-zero default to fall back to: a banking-style deployment might want
-   * `1`, a consumer product might never want this on, and guessing wrong in
-   * either direction is a product decision this package has no basis to
-   * make on a deployment's behalf. Zero is the only default that cannot
-   * surprise anyone who has not deliberately opted in.
+   * Maximum simultaneous active sessions per user; logging in past it evicts the least recently
+   * active session (see `IssueSession`). `0`, the default, disables the limit, since the right
+   * value is a product decision.
    */
   SESSION_MAX_CONCURRENT_SESSIONS: z.coerce.number().int().min(0).default(0),
 
-  // ---------------------------------------------------------------------------
-  // Transport security — TLS enforcement & HSTS (Issue 213)
-  //
-  // `apps/api` maps these onto the `Strict-Transport-Security` directive and
-  // the plaintext-redirect switch in `plugins/security-headers.ts`; the
-  // reasoning for each default lives in `docs/security/tls-enforcement.md`.
-  // They are validated here because this package is the only place `process.env`
-  // is read: a header value that never went through validation is a header
-  // value nobody checked was well-formed before it reached a browser.
-  // ---------------------------------------------------------------------------
+  // Transport security: TLS enforcement and HSTS. `apps/api` maps these onto
+  // `plugins/security-headers.ts`; see docs/security/tls-enforcement.md for each default.
 
   /**
-   * The `max-age` of the `Strict-Transport-Security` directive, in seconds.
-   *
-   * Only applied when `NODE_ENV=production` — pinning `localhost` for a year
-   * is a way to lose an afternoon, and `securityHeadersFromConfig` in
-   * `apps/api` explains the tradeoff.
-   *
-   * `0` is legal and means something specific: the header is still sent, with
-   * `max-age=0`, which is how a browser is told to *drop* an existing pin.
-   * Omitting the header instead would leave every visitor who saw the old one
-   * pinned until their own max-age expired — the opposite of the emergency
-   * exit someone sets this looking for.
-   *
-   * Capped at two years because the browser *renews* the pin on every response
-   * carrying the header, so a very large `max-age` is a promise that outlives
-   * the decision to make it.
+   * `max-age` of the `Strict-Transport-Security` header, in seconds. Applied only in production.
+   * `0` is valid and sends `max-age=0`, which tells browsers to drop an existing pin. Capped at two
+   * years because browsers renew the pin on every response.
    */
   HSTS_MAX_AGE_SECONDS: z.coerce
     .number()
@@ -301,61 +218,29 @@ export const rawEnvSchema = z.object({
     .default(31_536_000),
 
   /**
-   * Append `includeSubDomains` to the directive.
-   *
-   * The honest cost of turning this on is in the docs: every subdomain,
-   * including the ones nobody controls and the ones that will exist later, has
-   * to serve HTTPS or become unreachable for pinned visitors. Default on,
-   * because the forgotten-certificate failure is the loud, fixable one, while
-   * a stray wildcard record pointing at a plaintext host is the one that
-   * nobody notices until a browser refuses to connect.
+   * Appends `includeSubDomains`. On by default; every subdomain must then serve HTTPS or become
+   * unreachable for pinned visitors.
    */
   HSTS_INCLUDE_SUBDOMAINS: booleanFromEnv.prefault("true"),
 
   /**
-   * Append `preload` to the directive.
-   *
-   * Off by default, deliberately. `preload` only means anything as part of a
-   * submission to hstspreload.org, which ships the domain inside browsers'
-   * source; the header alone does nothing. Its cost is near-irreversible —
-   * removal is a multi-day request, and every subdomain has to be
-   * HTTPS-capable *permanently*, including ones added years from now by
-   * someone who never read this comment.
-   *
-   * Not defaulting it is the whole point: a flag with this much blast radius
-   * should be a decision somebody types, not one a template inherits. Requires
-   * `HSTS_INCLUDE_SUBDOMAINS` (the preload list rejects a directive without
-   * it), checked at startup rather than discovered at submission time.
+   * Appends `preload`. Off by default: it only matters for an hstspreload.org submission, removal
+   * takes a long time, and every future subdomain must serve HTTPS. Requires
+   * `HSTS_INCLUDE_SUBDOMAINS`, checked at startup.
    */
   HSTS_PRELOAD: booleanFromEnv.prefault("false"),
 
   /**
-   * Redirect plaintext requests to their HTTPS equivalent.
-   *
-   * Off by default because the safe owner of this redirect is usually not the
-   * application: when a load balancer terminates TLS, the proxy already knows
-   * the client's scheme and can answer in one round trip without involving
-   * this process. Defaulting it on would break every deployment whose proxy
-   * forgets to set `X-Forwarded-Proto` with an infinite redirect loop — a far
-   * more common misconfiguration than a directly-exposed plaintext API. Enable
-   * it when this process is the thing listening on port 80, or together with
-   * `TRUST_PROXY`.
+   * Redirects plaintext requests to HTTPS. Off by default because a TLS-terminating load balancer
+   * usually owns this, and a proxy that omits `X-Forwarded-Proto` would cause a redirect loop.
+   * Enable it when this process listens on port 80, or together with `TRUST_PROXY`.
    */
   ENFORCE_HTTPS: booleanFromEnv.prefault("false"),
 
   /**
-   * Honour `X-Forwarded-Proto` / `X-Forwarded-For` from the immediate upstream
-   * proxy.
-   *
-   * Needed for `ENFORCE_HTTPS` to behave behind a TLS-terminating proxy, and
-   * for anything that logs or rate-limits by client IP (Issue 209) to see the
-   * client rather than the load balancer.
-   *
-   * Trusting these headers when there is no proxy lets a caller claim to be
-   * anyone: `X-Forwarded-For: 1.2.3.4` slips past an IP blocklist, and
-   * `X-Forwarded-Proto: https` skips the plaintext redirect. Off by default for
-   * exactly that reason — it is a statement about network topology, and only
-   * the operator knows it.
+   * Trusts `X-Forwarded-Proto` and `X-Forwarded-For` from the immediate upstream proxy, which
+   * `ENFORCE_HTTPS` and client-IP logging and rate limiting need behind a proxy. Off by default:
+   * without a proxy, clients could spoof their IP or scheme.
    */
   TRUST_PROXY: booleanFromEnv.prefault("false"),
 
@@ -367,17 +252,9 @@ export const rawEnvSchema = z.object({
   // ---------------------------------------------------------------------------
 
   /**
-   * Comma-separated list of origins allowed to make browser requests.
-   *
-   * Empty by default, which denies every cross-origin browser client. That is
-   * the safe default for an API: a deployment that has not thought about CORS
-   * has no cross-origin front end to break, while one that has simply lists
-   * its origins. Starting permissive and tightening later would mean every
-   * client added in the meantime is a client the tightened policy breaks.
-   *
-   * A single `*` allows any origin and is legal **only** when
-   * `CORS_ALLOW_CREDENTIALS=false` — the schema refuses the combination, as
-   * does the plugin for callers that build the policy directly.
+   * Comma-separated origins allowed to make browser requests. Empty by default, denying all
+   * cross-origin browser clients. A single `*` allows any origin and is only valid with
+   * `CORS_ALLOW_CREDENTIALS=false`.
    */
   CORS_ALLOWED_ORIGINS: z
     .string()
@@ -407,62 +284,30 @@ export const rawEnvSchema = z.object({
     ),
 
   /**
-   * Send `Access-Control-Allow-Credentials` and allow cookies on cross-origin
-   * requests.
-   *
-   * Off by default, and it should stay off unless a browser front end on a
-   * *different* origin genuinely needs to carry the session cookie — which is
-   * the rarer design. The API's bearer tokens travel in an `Authorization`
-   * header, which CORS does not attach on its own, so a token-authenticated
-   * cross-origin client does not need this at all.
-   *
-   * Refused in combination with the wildcard origin; see
-   * {@link corsConfigurationError}.
+   * Sends `Access-Control-Allow-Credentials`, allowing cookies on cross-origin requests. Only
+   * needed when a front end on another origin must carry the session cookie; bearer tokens in the
+   * `Authorization` header do not need it. Refused with the wildcard origin (see {@link
+   * corsConfigurationError}).
    */
   CORS_ALLOW_CREDENTIALS: booleanFromEnv.prefault("false"),
 
-  // ---------------------------------------------------------------------------
-  // MFA enforcement — global defaults (Issue 114)
-  //
-  // These are the *global* defaults that apply when no org, role, or user
-  // override is present. Individual orgs and users can raise or lower the bar
-  // via runtime configuration stored in the database (not environment
-  // variables), because per-tenant config cannot live in environment variables
-  // — you would need one deployment per tenant if it did. The fields here give
-  // operators a baseline that matches their deployment's security posture
-  // without requiring every newly-created org to be individually configured.
-  // ---------------------------------------------------------------------------
+  // MFA enforcement: global defaults used when no organization, role or user override exists.
+  // Per-tenant overrides are stored in the database, not environment variables.
 
   /**
-   * Global default MFA enforcement level (Issue 114).
+   * Global default MFA enforcement level:
    *
-   * - `optional` (default): users may enroll but are not required to. A
-   *   session is issued regardless. Safe for consumer-facing products where
-   *   mandating MFA would cause friction before users understand the value.
-   * - `required`: every user must complete an MFA challenge before a session
-   *   is issued. Choose this for admin consoles, banking-style products, or
-   *   any deployment where the threat model justifies the enrollment friction.
-   * - `disabled`: MFA is blocked globally. Useful when authentication is
-   *   delegated entirely to an external IdP that already enforces MFA and you
-   *   do not want a second factor in Verixa itself.
+   * - `optional` (default): users may enroll; a session is issued either way.
+   * - `required`: every user must complete an MFA challenge before a session is issued.
+   * - `disabled`: MFA is blocked, for deployments whose external IdP already enforces it.
    *
-   * Per-org and per-user overrides take precedence over this value; see
-   * `MfaEnforcementPolicy` in `packages/mfa`.
+   * Organization and user overrides take precedence (see `MfaEnforcementPolicy`).
    */
   MFA_ENFORCEMENT_LEVEL: z.enum(["required", "optional", "disabled"]).default("optional"),
 
   /**
-   * Comma-separated list of MFA method types permitted globally (Issue 114).
-   *
-   * Absent (empty string) means all types are permitted. Supply a list to
-   * restrict: e.g. `MFA_ALLOWED_METHODS=totp,webauthn` to ban backup codes
-   * org-wide when your security policy requires phishing-resistant factors.
-   *
-   * Valid values: `totp`, `webauthn`, `backup-codes`.
-   *
-   * The alternative — a separate boolean env var per method type — was
-   * rejected because it scales poorly (N env vars for N methods, combinatorial
-   * interactions) and cannot express "any subset of the three" cleanly.
+   * Comma-separated MFA method types allowed globally: `totp`, `webauthn`, `backup-codes`. Empty
+   * allows all; for example `totp,webauthn` disallows backup codes.
    */
   MFA_ALLOWED_METHODS: z
     .string()

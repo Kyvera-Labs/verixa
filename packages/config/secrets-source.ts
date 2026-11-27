@@ -2,16 +2,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 /**
- * Port representing an abstract source for application secrets (Issue 391 / #503).
- *
- * In production, secrets are sourced dynamically via environment injection
- * from external secret management solutions (e.g. AWS Secrets Manager,
- * HashiCorp Vault, Doppler, Google Cloud Secret Manager) rather than committed
- * files.
- *
- * Verixa models secrets access as an abstract port so that application and
- * tooling code can resolve secrets uniformly across local development (.env files),
- * automated test suites (in-memory fixtures), and production clusters (cloud secret managers).
+ * Source of application secrets, so code resolves them the same way from `.env` files in
+ * development, in-memory fixtures in tests, and cloud secret managers (AWS Secrets Manager, Vault,
+ * Doppler, GCP Secret Manager) in production.
  */
 export interface SecretsSource {
   /**
@@ -45,14 +38,9 @@ export interface SecretsSource {
 }
 
 /**
- * Parses raw .env file content into key-value pairs.
- *
- * Conforms to standard dotenv formatting rules:
- * - Ignores empty lines and comment lines starting with `#`
- * - Strips optional leading `export ` keyword
- * - Trims unquoted values and keys
- * - Unquotes single (`'`) and double (`"`) quoted values, expanding escaped newlines in double-quoted strings
- * - Preserves inline comments only when separated by whitespace after unquoted values
+ * Parses `.env` content into key-value pairs: skips blank and `#` comment lines, strips a leading
+ * `export `, trims unquoted keys and values, unquotes single- and double-quoted values (expanding
+ * `\n` in double quotes), and treats `#` after whitespace in an unquoted value as a comment.
  */
 export function parseDotenv(content: string): Record<string, string> {
   const result: Record<string, string> = {};
