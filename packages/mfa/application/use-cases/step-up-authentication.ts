@@ -39,18 +39,10 @@ export interface StepUpAuthenticationDeps {
 const DEFAULT_MAX_AGE_SECONDS = 5 * 60;
 
 /**
- * Re-verifies an enrolled MFA method for an already-authenticated user before a
- * sensitive action, issuing a short-lived assertion instead of a new session.
- *
- * The verification itself is **delegated** — TOTP to {@link VerifyTotpChallenge}
- * and backup codes to {@link ConsumeBackupCode} — so replay rejection, lockout,
- * and single-use consumption behave identically to a login challenge. Duplicating
- * that logic here would mean two places to keep in step, and the step-up path is
- * exactly where a divergence would go unnoticed.
- *
- * WebAuthn has no verification use case in this package yet; when one lands it
- * plugs in as another branch of {@link StepUpVerificationMethod} without
- * changing the assertion machinery.
+ * Re-verifies an enrolled MFA method before a sensitive action and issues a short-lived assertion
+ * instead of a new session. Verification is delegated to {@link VerifyTotpChallenge} and {@link
+ * ConsumeBackupCode}, so replay protection, lockout and single-use behave exactly as at login.
+ * WebAuthn can be added as another {@link StepUpVerificationMethod} branch.
  */
 export class StepUpAuthentication {
   private readonly maxAgeSeconds: number;

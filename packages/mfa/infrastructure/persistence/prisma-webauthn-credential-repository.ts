@@ -1,25 +1,12 @@
 /**
- * NOT BUILT. Excluded from this package's `tsconfig.json` and
- * `eslint.config.mjs`.
+ * Not built: excluded from this package's `tsconfig.json` and `eslint.config.mjs`, and not
+ * exported. There is no `webauthn_credentials` table or `WebAuthnCredential` model in the Prisma
+ * schema yet. Kept as a starting point (see docs/QUARANTINE.md).
  *
- * There is no `webauthn_credentials` table. `packages/database/prisma/schema.prisma`
- * has no `WebAuthnCredential` model and no migration ever created one --
- * `mfa_method_type`'s enum has a `webauthn` value, and nothing else. This file
- * was written against a table that was never migrated, which is also why it
- * is not part of this package's public surface (`index.ts` exports the port
- * and an in-memory fake, never this class).
- *
- * It is left in place, excluded rather than deleted, because the adapter
- * logic itself is a reasonable starting point once the migration exists --
- * see `docs/QUARANTINE.md` for the project's convention on this: don't
- * silently discard a contributor's work, state why it can't build yet.
- *
- * To bring this back: add the `WebAuthnCredential` model and a migration for
- * it, fix the two method signatures flagged below to match
- * `application/ports/webauthn-credential-repository.js` (no `findById`/
- * `delete` on that port; it has `findByCredentialId`/`findByUserId`/
- * `findByMfaMethodId`), and remove the three paths this comment sits above
- * from `tsconfig.json`'s `exclude`.
+ * To enable it: add the model and a migration, align the method signatures with
+ * `application/ports/webauthn-credential-repository.ts` (`findByCredentialId`, `findByUserId`,
+ * `findByMfaMethodId`; no `findById` or `delete`), and remove the three excluded paths from
+ * `tsconfig.json`.
  */
 import type { PrismaClient } from "@prisma/client";
 import type { WebAuthnCredentialRepository } from "../../application/ports/webauthn-credential-repository.js";

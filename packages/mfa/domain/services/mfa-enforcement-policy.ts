@@ -49,34 +49,22 @@ export interface MfaEnforcementDecision {
 const ALL_METHODS: readonly MfaMethodType[] = ["totp", "webauthn", "backup_codes"];
 
 /**
- * Resolves whether MFA is required, optional, or disabled for a subject, and
- * which method types are permitted.
+ * Resolves whether MFA is required, optional or disabled for a subject, and which method types are
+ * allowed.
  *
- * ## Precedence
- *
- * The most specific scope that sets a value wins, per knob:
+ * The most specific scope that sets a value wins, separately for the level and for the allowed
+ * methods:
  *
  * ```
  * user  >  role  >  organization  >  global default
  * ```
  *
- * This is deliberately resolved independently for the *level* and for the
- * *allowed methods*. A bank can mandate MFA organization-wide while letting a
- * service account's role relax only the permitted method set, and an individual
- * user's exemption does not accidentally widen everyone else's.
+ * Resolving each setting separately lets an organization require MFA while a role narrows only the
+ * allowed methods, and lets a scope inherit the organization's method list while keeping a stricter
+ * level.
  *
- * *Alternative considered:* a single merged "policy object" where the first
- * scope that defines anything supplies the whole policy. Rejected because it
- * makes "inherit the org's method list but keep the stricter level" impossible
- * without duplicating the org's list at every scope — the bug that shows up as
- * an org adding WebAuthn only for users who never customized their settings.
- *
- * ## Required but unenrolled
- *
- * A `required` decision with no permitted method enrolled yields
- * `requiresEnrollment` (and `blocked`). The login flow uses this to force
- * enrollment before issuing a session rather than failing the login — see
- * Issue 116 and docs/security/mfa-design.md.
+ * A `required` level with no permitted method enrolled yields `requiresEnrollment` (and `blocked`),
+ * so login forces enrollment before issuing a session (see docs/security/mfa-design.md).
  */
 export class MfaEnforcementPolicy {
   public static resolve(input: MfaEnforcementPolicyInput): MfaEnforcementDecision {

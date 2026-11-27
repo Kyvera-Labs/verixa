@@ -8,22 +8,10 @@ export interface MfaChallengeRepository {
 }
 
 /**
- * What this use case needs from session issuance, declared as a port rather
- * than importing `@verixa/sessions` directly.
- *
- * Two reasons, not one. First, `packages/mfa` must not depend on another
- * bounded context's concrete implementation — see
- * `docs/guides/domain-modeling.md` ("Package encapsulation"); the real
- * `IssueSession` use case is wired in by the composition root, which is the
- * only place allowed to know both contexts exist. Second, `packages/sessions`
- * is currently quarantined (see `docs/QUARANTINE.md`) and does not build, so
- * importing its types directly would make this package's build depend on
- * sessions' build succeeding — which it does not, independent of anything
- * this file does.
- *
- * The shape mirrors `IssueSessionCommand`/`IssueSessionResult` closely enough
- * that wiring the real `IssueSession` instance to this port in the
- * composition root is a direct pass-through, once sessions is unquarantined.
+ * Session issuance as this use case needs it, declared as a port so `packages/mfa` does not depend
+ * on `@verixa/sessions` (see docs/guides/domain-modeling.md). The composition root wires
+ * `IssueSession` to it directly, since the shapes mirror `IssueSessionCommand` and
+ * `IssueSessionResult`.
  */
 export interface SessionIssuer {
   execute(command: SessionIssuerCommand): Promise<Result<unknown, unknown>>;

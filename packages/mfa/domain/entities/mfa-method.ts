@@ -31,18 +31,9 @@ const LOCKOUT_BASE_MS = 60 * 1_000;
 const MAX_LOCKOUT_MS = 60 * 60 * 1_000;
 
 /**
- * A second factor enrolled by a user.
- *
- * This aggregate was reconciled from three independently-developed branches
- * (TOTP enrollment, MFA persistence, and a domain value-object attempt) that
- * each defined their own version of this class. The union of their behaviour is
- * preserved here: the mutable, well-behaved transitions the TOTP use cases
- * need (rate limiting and replay protection) and the load/create/updateSecret
- * helpers the persistence adapter needs.
- *
- * Transitions mutate the instance and return `this` so callers may either chain
- * (`method.activate().recordTotpUse(step)`) or ignore the return value — the two
- * call styles the surviving call sites use.
+ * A second factor enrolled by a user. Supports the TOTP transitions (rate limiting and replay
+ * protection) and the persistence helpers (load, create, `updateSecret`). Transitions mutate the
+ * instance and return `this`, so calls can be chained or the return value ignored.
  */
 export class MfaMethod {
   private props: MfaMethodProps;
@@ -213,14 +204,9 @@ export class MfaMethod {
   }
 
   /**
-   * Records a successful challenge, clearing the failure counter and lockout.
-   *
-   * This carries no replay protection of its own, because not every factor
-   * needs it here. A WebAuthn assertion is protected by the authenticator's
-   * monotonic `signCount`, which lives on `WebAuthnCredential` and is checked
-   * there — a counter that fails to advance is what clone detection looks for.
-   * TOTP has no such per-credential counter and must use
-   * {@link recordTotpUse} instead.
+   * Records a successful challenge, clearing failures and lockout. No replay protection here:
+   * WebAuthn relies on the authenticator's `signCount` on `WebAuthnCredential`, while TOTP must use
+   * {@link recordTotpUse}.
    */
   recordUse(now: Date = new Date()): this {
     if (this.props.status !== "active") {

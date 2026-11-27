@@ -1,13 +1,6 @@
 /**
- * Minimal RFC 8949 CBOR encoder and decoder for WebAuthn data structures.
- *
- * Implements canonical deterministic encoding and decoding for:
- * - integers (positive and negative)
- * - byte strings (Uint8Array)
- * - text strings (UTF-8)
- * - arrays
- * - maps (including string and integer keys)
- * - booleans and null
+ * Minimal RFC 8949 CBOR encoder and decoder for WebAuthn, with canonical deterministic encoding of
+ * integers, byte strings, UTF-8 text, arrays, maps (string or integer keys), booleans and null.
  */
 
 export class CborReader {
