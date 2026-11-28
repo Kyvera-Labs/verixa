@@ -3,8 +3,8 @@ import type { Policy, PolicyId } from "../../domain/entities/policy.js";
 
 /**
  * An in-memory fake satisfying {@link PolicyRepository}, following the
- * Issue 031 pattern: lets policy-dependent use cases (Issue 153) be written
- * and tested before a real, database-backed adapter (Issue 150) exists.
+ * Lets policy-dependent use cases be written
+ * and tested before a real, database-backed adapter exists.
  *
  * Versions are stored keyed by policy id, each id mapping to the ordered
  * list of every version ever saved for it — mirroring the append-only

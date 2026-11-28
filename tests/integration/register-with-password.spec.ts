@@ -10,7 +10,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { createTestPrismaClient, databaseAvailability } from "./helpers/database.js";
 
 /**
- * Atomicity of `RegisterUserWithPassword` against a real database (Issue 065).
+ * Atomicity of `RegisterUserWithPassword` against a real database.
  *
  * The in-memory unit of work cannot verify this — it does not roll back, and
  * deliberately so. Faking rollback would make these tests pass against a

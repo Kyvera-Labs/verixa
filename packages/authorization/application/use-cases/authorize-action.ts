@@ -56,7 +56,7 @@ export class AuthorizeAction {
         // — failing open here would silently skip exactly the attributes an
         // ABAC policy might be relying on to deny. Denying is the only safe
         // outcome, and it is reported as a distinct reason (this is the
-        // "policy-error path" Issue 153's tests cover) rather than left
+        // "policy-error path" its tests cover) rather than left
         // indistinguishable from an ordinary policy-driven denial.
         return {
           granted: false,

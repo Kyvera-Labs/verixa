@@ -10,7 +10,7 @@ import { AuthorizeAction } from "./authorize-action.js";
 /**
  * A role layer with a fixed answer.
  *
- * `AuthorizationService` takes a `RolePermissionGate` — Phase 07's port, which
+ * `AuthorizationService` takes a `RolePermissionGate` — the RBAC port, which
  * is tenant-aware and reports `grant`/`deny`/`no-match`.
  */
 function stubGate(kind: RoleDecision["kind"]): RolePermissionGate {

@@ -24,7 +24,7 @@ export interface LockoutPolicy {
    * attackers: anyone who knows an address can lock its owner out for years
    * by failing enough times. The cap is what keeps lockout a speed bump for
    * the attacker rather than a weapon against the user. Account recovery
-   * (Issue 069) is the escape hatch that makes even the cap survivable.
+   * is the escape hatch that makes even the cap survivable.
    */
   readonly maxDurationMs: number;
 }

@@ -3,8 +3,8 @@ import { Result, ValidationError } from "@verixa/shared-kernel";
 /**
  * The delivery channels a template can target.
  *
- * Issue 261 owns the `NotificationChannel` value object; until it lands this
- * is the minimal shape a template needs, and Issue 261's type should replace
+ * Minimal channel type until a `NotificationChannel` value object exists; this
+ * is the shape a template needs, and that type should replace
  * it rather than sit alongside it.
  */
 export type NotificationChannel = "email" | "sms" | "webhook";

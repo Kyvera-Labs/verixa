@@ -102,7 +102,7 @@ export class Credential {
     // Clears the lockout too. A password change is a legitimate owner
     // demonstrating control of the account, so carrying a lock across it
     // would leave them locked out of the credential they just set -- and
-    // after a reset (Issue 070) that is the one moment they have no way to
+    // after a reset that is the one moment they have no way to
     // wait it out, because the failures were not theirs.
     return new Credential({
       ...this,

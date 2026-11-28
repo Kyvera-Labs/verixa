@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { escapeHtml, renderHtmlDocument } from "./html.js";
 
 /**
- * The HTML document helper (Issue 212).
+ * The HTML document helper.
  *
  * What these are really checking is that nothing the caller passes can end the
  * element it was put inside. The CSP nonce protects a *script* from running

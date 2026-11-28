@@ -28,7 +28,7 @@ export { UserProfileUpdated } from "./domain/events/user-profile-updated.js";
 export { UserRegistered } from "./domain/events/user-registered.js";
 export { UserStatusChanged } from "./domain/events/user-status-changed.js";
 
-// Application: ports (for infrastructure adapters, e.g. Phase 03's Prisma
+// Application: ports (for infrastructure adapters, e.g. the Prisma
 // implementations, to implement — see docs/guides/domain-modeling.md)
 export type { InvitationRepository } from "./application/ports/invitation-repository.js";
 export type { OrganizationMembershipRepository } from "./application/ports/organization-membership-repository.js";

@@ -91,7 +91,7 @@ export class AuthorizationService {
     }
 
     // A policy that produced an effect is what makes this a composed decision;
-    // an RBAC-only outcome keeps Phase 07's behaviour and its `rbac` source.
+    // an RBAC-only outcome keeps the RBAC behaviour and its `rbac` source.
     const source: AuthorizationDecisionSource = grantedByRole ? "composition" : "abac";
 
     if (evaluation.effect === "DENY") {

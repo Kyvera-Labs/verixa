@@ -104,7 +104,7 @@ describe("baseline response headers", () => {
 
     it("leaves Strict-Transport-Security to the transport-security module", async () => {
       // `hsts: false` in the helmet options. A pin here would mean this module
-      // and `./security-headers.ts` (Issue 213) both write the header, so its
+      // and `./security-headers.ts` both write the header, so its
       // value would depend on hook ordering rather than on validated config.
       const response = await supertest(app.server).get("/health");
 

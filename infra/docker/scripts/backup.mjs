@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { composeArguments, runDocker } from "./compose-command.mjs";
 
 /**
- * Issue 386 / #498: production backups are taken from the running containers,
+ * Production backups are taken from the running containers,
  * not from a stopped database directory. `pg_dump` gives a transactionally
  * consistent Postgres snapshot; `redis-cli --rdb` asks Redis to write a point
  * in-time RDB even though AOF is the primary persistence mode.

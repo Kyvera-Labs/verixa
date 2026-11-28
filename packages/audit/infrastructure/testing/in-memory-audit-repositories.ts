@@ -163,7 +163,7 @@ export class InMemoryAnchorRecordRepository implements AnchorRecordRepository {
  * In-memory `AuditEventReader` for testing without a database.
  *
  * Entries are filed under an organization explicitly with {@link seed}, since
- * `AuditLogEntry` does not carry one yet (Issue 181). Every read is recorded in
+ * `AuditLogEntry` does not carry one yet. Every read is recorded in
  * {@link reads}, so a test can prove a refused request never reached storage
  * at all — "returned an error" and "returned an error without looking" are
  * different guarantees, and only the second one is the point.

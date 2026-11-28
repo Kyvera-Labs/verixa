@@ -14,7 +14,7 @@ export interface AssignPermissionToRoleCommand {
 export type AssignPermissionToRoleError = NotFoundError | ValidationError;
 
 /**
- * Orchestrates assigning a permission to a Role (Issue 132).
+ * Orchestrates assigning a permission to a Role.
  *
  * Enforces cross-aggregate catalog validation: verifies that the target permission exists in
  * the authoritative `PermissionRepository` catalog before modifying the `Role` aggregate.

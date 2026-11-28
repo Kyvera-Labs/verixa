@@ -2,7 +2,7 @@ import type { AuthorizationRequest } from "../../domain/attribute-context.js";
 import type { PolicyEffect } from "../../domain/authorization-decision.js";
 
 /**
- * The attribute-based half of an authorization question: Issue 148's combined
+ * The attribute-based half of an authorization question: the combined
  * policy decision for one request.
  *
  * The port deliberately returns three values rather than a boolean. "No policy

@@ -67,7 +67,7 @@ export class TemplateRegistry {
 
   /**
    * Looks a template up by exact key. An unknown key is a `NotFoundError`
-   * rather than `undefined` so the caller (Issue 264's `SendNotification`)
+   * rather than `undefined` so the caller (`SendNotification`)
    * fails fast before anything is rendered or dispatched.
    */
   resolve(key: string): Result<NotificationTemplate, NotFoundError> {

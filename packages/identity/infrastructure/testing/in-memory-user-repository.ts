@@ -4,7 +4,7 @@ import type { Email } from "../../domain/value-objects/email.js";
 
 /**
  * A `UserRepository` backed by an in-memory `Map`, satisfying the exact same
- * port a real (Phase 03, Prisma-backed) adapter will. Exists so use cases
+ * port a real adapter will. Exists so use cases
  * and their tests never need a database — see `docs/guides/testing.md`
  * for why this and the Prisma adapter are both required to pass the same
  * `user-repository.contract.ts` suite.

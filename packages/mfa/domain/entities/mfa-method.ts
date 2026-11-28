@@ -174,7 +174,7 @@ export class MfaMethod {
     return this;
   }
 
-  /** Clears the stored secret without deleting the method (Issue 118 recovery). */
+  /** Clears the stored secret without deleting the method (used by MFA recovery). */
   clearSecret(now: Date = new Date()): this {
     this.props = { ...this.props, secret: null, updatedAt: now };
     return this;

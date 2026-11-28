@@ -3,7 +3,7 @@ import supertest from "supertest";
 import { afterEach, describe, expect, it } from "vitest";
 
 /**
- * CORS policy over a real socket (Issue 204).
+ * CORS policy over a real socket.
  *
  * The property that matters is what a browser sees, so these assert on real
  * responses rather than on the options object: which origins receive the

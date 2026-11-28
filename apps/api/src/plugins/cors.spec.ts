@@ -14,7 +14,7 @@ import {
 } from "./cors.js";
 
 /**
- * Unit coverage for the CORS policy mapping (Issue 204).
+ * Unit coverage for the CORS policy mapping.
  *
  * The HTTP behaviour — which responses carry `Access-Control-*` headers and
  * which requests are refused — lives in `tests/integration/cors.spec.ts`. This

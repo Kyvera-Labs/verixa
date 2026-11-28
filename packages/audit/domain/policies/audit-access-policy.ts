@@ -18,7 +18,7 @@ export type AuditReadOperation = keyof typeof AUDIT_PERMISSIONS;
  *
  * Built by the interface layer from an authenticated session — never from the
  * request body. `permissions` is whatever the caller has been granted *within
- * `organizationId`*; until Phase 07/12 wires real RBAC, the composition root
+ * `organizationId`*; until real RBAC is wired, the composition root
  * is responsible for populating it, and an empty set (the safe default) grants
  * nothing.
  */

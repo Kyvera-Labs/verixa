@@ -1,7 +1,7 @@
 import { defineWorkspace } from "vitest/config";
 
 /**
- * Root workspace definition for Vitest (Issue 412).
+ * Root workspace definition for Vitest.
  *
  * Discovers and coordinates test execution across all applications,
  * bounded context packages, and the integration test suite.

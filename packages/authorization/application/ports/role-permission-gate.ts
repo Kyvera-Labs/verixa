@@ -1,7 +1,7 @@
 import type { ResourceRef, SubjectRef } from "../../domain/attribute-context.js";
 
 /**
- * The coarse-grained RBAC floor (Phase 07, Issues 121–140), consumed by the
+ * The coarse-grained RBAC floor, consumed by the
  * composition service rather than reimplemented by it.
  *
  * This port answers exactly one question — "does this subject hold a role that
@@ -31,7 +31,7 @@ export interface RoleCheckRequest {
   readonly resource: ResourceRef;
 }
 
-/** Port implemented by Phase 07's permission store (and by the cache in front of it). */
+/** Port implemented by the permission store (and by the cache in front of it). */
 export interface RolePermissionGate {
   /**
    * Renders a role decision for the request.

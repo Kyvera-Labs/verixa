@@ -56,7 +56,7 @@ export class Evidence {
    *
    * The `verificationType` is a parameter even though the request carries one
    * because the domain cannot reach through to the request from here without
-   * making evidence persistence-aware; the calling use case (Issue 168) has
+   * making evidence persistence-aware; the calling use case has
    * both objects loaded and passing the type in keeps this a pure function of
    * its inputs.
    */

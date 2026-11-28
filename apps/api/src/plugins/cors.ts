@@ -14,7 +14,7 @@ import type {
 } from "fastify";
 
 /**
- * Who may call this API from a browser on another origin (Issue 204).
+ * Who may call this API from a browser on another origin.
  *
  * CORS is the browser's escape hatch from the same-origin policy: the policy
  * stops a page at `evil.example` reading a response from this API, and a CORS

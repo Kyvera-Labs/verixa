@@ -57,7 +57,7 @@ export const BASELINE_RESPONSE_HEADERS: FastifyHelmetOptions = {
   referrerPolicy: { policy: "no-referrer" },
 
   /**
-   * `Strict-Transport-Security` is owned by `./security-headers.ts` (Issue 213):
+   * `Strict-Transport-Security` is owned by `./security-headers.ts`:
    * its `max-age`, scope and `preload` flag come from validated configuration,
    * and it is sent by an `onRequest` hook that also performs the HTTPS redirect.
    * Emitting a second pin from here would make the header's value depend on hook

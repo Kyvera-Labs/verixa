@@ -157,7 +157,7 @@ export function registerCspReportRoute<TLogger extends FastifyBaseLogger>(
     async (request, reply) => {
       // Logged, not stored. A violation is a signal about a page and a policy,
       // and the place that signal belongs is the same stream every other
-      // operational event goes to. Turning it into a table is Phase 11's
+      // operational event goes to. Turning it into a table is a later
       // security-monitoring question, not this endpoint's.
       request.log.info(
         { cspReport: summarize(request.body["csp-report"]) },

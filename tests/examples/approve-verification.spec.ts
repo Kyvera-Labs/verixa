@@ -1,6 +1,6 @@
 /**
  * The unit-test example from docs/guides/tutorials/testing-the-platform.md
- * (Issue 420). The tutorial imports the `#region` blocks below instead of
+ *. The tutorial imports the `#region` blocks below instead of
  * copying them, so this file is the example: if it stops compiling or passing,
  * `pnpm test` fails, and if a region is renamed, `pnpm docs:build` fails.
  *

@@ -73,7 +73,7 @@ describe("Email", () => {
   });
 });
 
-/** Added in Issue 417: kills mutants the mutation-testing spike found surviving in email.ts. */
+/** Kills mutants the mutation-testing spike found surviving in email.ts. */
 describe("Email: edges the pattern and the limit must hold", () => {
   it("rejects an address with a second @ after a valid prefix", () => {
     // Kills :10 (the `$` anchor dropped): without it, "user@example.com" is

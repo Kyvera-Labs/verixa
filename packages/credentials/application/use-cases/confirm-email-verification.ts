@@ -35,7 +35,7 @@ export class ConfirmEmailVerification {
     return this.unitOfWork.run(async (repositories) => {
       const token = await repositories.emailVerificationTokens.findByTokenHash(tokenHash);
       // `security/detect-possible-timing-attacks` matches the operand name
-      // "token" and assumes a secret comparison (Issue 208). This is a null
+      // "token" and assumes a secret comparison. This is a null
       // check on a lookup result, and its timing reveals only whether the row
       // exists — which the response already reveals. The actual secret
       // comparison, `matchesToken`, is constant-time below.
@@ -89,7 +89,7 @@ export class ConfirmEmailVerification {
       await repositories.users.save(activated.value);
 
       // The `UserStatusChanged` event is already on the aggregate, emitted by
-      // `activate`. Issue 068 asks for an event on success and the identity
+      // `activate`. An event is required on success and the identity
       // model supplies it — this use case does not need its own, and adding a
       // second one would mean two records of one fact that can disagree.
       return Result.ok({ user: activated.value });

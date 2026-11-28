@@ -7,7 +7,7 @@ import type {
 } from "fastify";
 
 /**
- * `/.well-known/security.txt` (Issue 211, RFC 9116).
+ * `/.well-known/security.txt` (RFC 9116).
  *
  * A machine-readable pointer to the disclosure policy, at the path an
  * automated scanner or a security researcher tries first. The prose lives in

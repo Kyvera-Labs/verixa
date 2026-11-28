@@ -45,7 +45,7 @@ export interface RetentionRuleProps {
  * The declared lifetime of one category of data for one organization.
  *
  * This is the minimum the enforcement job needs. Rule versioning and
- * overlapping-rule rejection belong to the retention-rule model issue (#369)
+ * overlapping-rule rejection belong to the retention-rule model issue
  * and are not duplicated here.
  */
 export class RetentionRule {

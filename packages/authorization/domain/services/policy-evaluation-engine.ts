@@ -90,7 +90,7 @@ export function evaluateCondition(condition: Condition, context: AttributeContex
 /**
  * Evaluates whether `rule`'s condition matches `context`. Does not consult
  * `rule.effect` — deriving a `PERMIT`/`DENY`/`NOT_APPLICABLE` outcome from a
- * match/no-match result is `combining-algorithms.ts`'s job (Issue 148), kept
+ * match/no-match result is `combining-algorithms.ts`'s job, kept
  * separate so this evaluator stays a pure boolean predicate.
  */
 export function evaluateRule(rule: Rule, context: AttributeContext): boolean {

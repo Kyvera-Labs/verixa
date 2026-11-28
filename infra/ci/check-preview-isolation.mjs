@@ -106,7 +106,7 @@ function getJobEnvironmentName(envField) {
 
 /**
  * Validates a parsed preview workflow YAML and its raw text against all
- * Issue #489 isolation invariants.
+ * Preview isolation invariants.
  *
  * @param {string} workflowText
  * @returns {string[]}

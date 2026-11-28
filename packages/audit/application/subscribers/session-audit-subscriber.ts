@@ -5,7 +5,7 @@ import type { RecordAuditEventCommand } from "../use-cases/record-audit-event.js
 import { AuditEventSubscriber } from "./audit-event-subscriber.js";
 
 /**
- * Placeholder for SessionCreated event from Phase 05.
+ * Placeholder for the sessions SessionCreated event.
  *
  * This interface defines the expected shape of the SessionCreated event.
  * When the sessions package publishes this event, this subscriber will
@@ -20,7 +20,7 @@ export interface SessionCreatedEvent extends DomainEvent {
 }
 
 /**
- * Placeholder for SessionRevoked event from Phase 05.
+ * Placeholder for the sessions SessionRevoked event.
  *
  * This interface defines the expected shape of the SessionRevoked event.
  * When the sessions package publishes this event, this subscriber will
@@ -34,7 +34,7 @@ export interface SessionRevokedEvent extends DomainEvent {
 }
 
 /**
- * Subscriber for SessionCreated events (Phase 05).
+ * Subscriber for SessionCreated events.
  *
  * Records each new session creation as an audit event with the user as both
  * actor and subject (someone creates a session for themselves by logging in).
@@ -63,7 +63,7 @@ export class SessionCreatedAuditSubscriber extends AuditEventSubscriber<SessionC
 }
 
 /**
- * Subscriber for SessionRevoked events (Phase 05).
+ * Subscriber for SessionRevoked events.
  *
  * Records each session revocation as an audit event. The actor may differ from
  * the subject when an admin revokes someone else's session.

@@ -1,5 +1,5 @@
 /**
- * The outcome Phase 07's role/permission layer contributes for one
+ * The outcome the role/permission layer contributes for one
  * `(subject, action, resourceType)` check — the same three-state shape as
  * {@link import("../../domain/services/combining-algorithms.js").RuleOutcome},
  * for the same reason: a role check that simply has no opinion about this

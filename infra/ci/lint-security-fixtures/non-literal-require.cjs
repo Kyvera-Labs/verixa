@@ -1,4 +1,4 @@
-// Fixture: security/detect-non-literal-require (Issue 208).
+// Fixture: security/detect-non-literal-require.
 //
 // Loads whatever module name the caller supplies, which is arbitrary code
 // execution if the name is not checked against a closed list.

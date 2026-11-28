@@ -45,7 +45,7 @@ describe("DisplayName", () => {
   });
 });
 
-/** Added in Issue 417: kills mutants the mutation-testing spike found surviving in display-name.ts. */
+/** Kills mutants the mutation-testing spike found surviving in display-name.ts. */
 describe("DisplayName: limits at the edges", () => {
   it("accepts exactly the minimum and the maximum length", () => {
     // Kills :21 (`<` -> `<=`) and :27 (`>` -> `>=`).

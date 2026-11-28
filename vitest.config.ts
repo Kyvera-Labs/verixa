@@ -9,7 +9,7 @@ const repoRoot = fileURLToPath(new URL(".", import.meta.url));
  * Not run directly against the whole monorepo in one process — each package
  * still runs its own `vitest run` (see package.json "test" scripts) so a
  * package's tests execute with that package's own node_modules and working
- * directory, which matters once cross-package imports (Issue 007) are
+ * directory, which matters once cross-package imports are
  * involved.
  */
 export default defineConfig({
@@ -22,13 +22,13 @@ export default defineConfig({
     },
   },
   test: {
-    // Vitest 4 narrowed the default exclude to node_modules and .git, so the
+    // Vitest 4 narrowed the default exclude to node_modules and.git, so the
     // compiled `*.spec.js` copies that `pnpm build` writes to dist/ would run
     // as a second, stale set of tests. Keep only the sources.
     exclude: ["**/node_modules/**", "**/.git/**", "**/dist/**", "**/coverage/**"],
 
     /**
-     * Child processes, not worker threads (Issue 415). This is Vitest's
+     * Child processes, not worker threads. This is Vitest's
      * default, stated here so it reads as a decision. Several packages load
      * native code in tests (Prisma's query engine, the argon2 addon), which is
      * safer with a process per worker, and a crash in one is contained to

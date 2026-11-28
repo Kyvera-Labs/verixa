@@ -211,7 +211,7 @@ export function findPackageCoverageDirs(repoRoot: string): Array<{ name: string;
       if (existsSync(covDir)) {
         dirs.push({ name: "tests/integration", dir: covDir });
       }
-      // The CI-tooling specs run under their own config (Issue 415, #611)
+      // The CI-tooling specs run under their own config
       // and write to coverage/ci. Before that split they ran in the same
       // coverage run as everything else here, so they count toward the same
       // target; skipping their report dropped tests/integration by ~7%.

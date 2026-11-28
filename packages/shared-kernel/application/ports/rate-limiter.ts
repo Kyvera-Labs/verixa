@@ -2,7 +2,7 @@
  * RateLimiter port — cross-cutting concern for abuse-sensitive operations.
  *
  * Defines the seam between use cases and rate limiting infrastructure.
- * Wired from day one even before the real limiter exists (no-op until Phase 15).
+ * Wired from day one even before the real limiter exists.
  * Avoids a painful retrofit later.
  *
  * See `docs/security/authentication-flows.md` for the rate limiting strategy.

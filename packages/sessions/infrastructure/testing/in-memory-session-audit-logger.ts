@@ -9,7 +9,7 @@ export interface RecordedSessionAuditEntry {
 
 /**
  * A `SessionAuditLogger` that keeps every call in memory instead of writing
- * it anywhere, so tests (notably Issue 094's "eviction is logged" acceptance
+ * it anywhere, so tests (notably the "eviction is logged" acceptance
  * criterion) can assert on what was recorded.
  */
 export class InMemorySessionAuditLogger implements SessionAuditLogger {

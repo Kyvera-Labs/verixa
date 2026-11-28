@@ -8,8 +8,8 @@ import tseslint from "typescript-eslint";
 import { securityPlugin, securityRules } from "./infra/ci/security-lint-rules.mjs";
 
 /**
- * `@verixa/testing-kit` is consumed only through its curated root (Issue 420),
- * the same boundary the context packages keep (Issue 038). Declared once
+ * `@verixa/testing-kit` is consumed only through its curated root,
+ * the same boundary the context packages keep. Declared once
  * because two config blocks below need it, and a flat-config block setting
  * `no-restricted-imports` replaces, rather than merges with, another block's
  * options for the same file. Verified by packages/testing-kit/index.spec.ts.
@@ -67,7 +67,7 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
   {
-    // Issue 208: the ruleset lives in `infra/ci/security-lint-rules.mjs` so the
+    // The security ruleset lives in `infra/ci/security-lint-rules.mjs` so the
     // fixture tests in `tests/ci/security-lint.spec.ts` lint the same rules
     // this config enables, rather than a re-declared copy.
     plugins: { security: securityPlugin },
@@ -199,7 +199,7 @@ export default tseslint.config(
     // the rule working as intended on code that is not the attack surface it
     // targets, so it stays visible as a warning instead of failing a correct
     // build.
-    // The docs site config (Issue 422) is the same case: it reads docs/ at
+    // The docs site config is the same case: it reads docs/ at
     // build time to list sidebar pages, and never runs in a deployment.
     files: ["tests/**/*.ts", "**/*.spec.ts", "infra/ci/**/*.ts", "docs/.vitepress/config.ts"],
     rules: {

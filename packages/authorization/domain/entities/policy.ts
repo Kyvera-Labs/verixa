@@ -95,7 +95,7 @@ export class Policy {
 
   /**
    * Rebuilds a `Policy` from already-trusted data (a database row, once
-   * Issue 150 lands). Skips {@link create}'s validation for the same reason
+   * a persistence adapter exists). Skips {@link create}'s validation for the same reason
    * `User.reconstitute` does — the data already represents a previously
    * valid state, so re-validating it as if it were new authoring input would
    * be redundant.

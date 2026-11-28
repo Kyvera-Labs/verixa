@@ -1,5 +1,5 @@
 // pino's CJS export interop
-// eslint-disable-next-line import-x/no-named-as-default
+ 
 import pino, { type DestinationStream, type Logger, type LoggerOptions } from "pino";
 
 import { getActiveTraceId, getRequestContext } from "./request-context.js";
@@ -45,7 +45,7 @@ export interface ContextualLoggerOptions {
  * Creates a structured JSON Pino logger pre-configured with:
  * 1. Automatic contextual bindings (correlationId, traceId, req.id, trace.id, actor.id, route)
  *    injected seamlessly from the active RequestContext and OpenTelemetry active span.
- * 2. Standardized field taxonomy adhering to Phase 18 specifications.
+ * 2. A standard field taxonomy.
  * 3. Robust redaction of credential and authentication secrets.
  */
 export function createContextualLogger(

@@ -33,7 +33,7 @@ export interface PolicySimulationRun {
   /** Human-readable identity of the policy that ran — a stored ref, or a draft's label. */
   readonly policyLabel: string;
   readonly combinedEffect: PolicyEffect;
-  /** Named so a report can say which strategy produced the effect (Issue 148). */
+  /** Named so a report can say which strategy produced the effect. */
   readonly combiningAlgorithm: string;
   readonly matchedPolicyIds: readonly string[];
   readonly rules: readonly SimulatedRuleOutcome[];

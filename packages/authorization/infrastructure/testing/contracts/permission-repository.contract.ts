@@ -6,7 +6,7 @@ import { Permission } from "../../../domain/value-objects/permission.js";
 
 /**
  * Behavioral contract every `PermissionRepository` implementation must satisfy.
- * Follows the Issue 031 contract-testing pattern.
+ * Follows the shared contract-testing pattern.
  */
 export function permissionRepositoryContract(createRepository: () => PermissionRepository): void {
   describe("PermissionRepository contract", () => {

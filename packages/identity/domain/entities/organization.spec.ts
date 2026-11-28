@@ -62,7 +62,7 @@ describe("Organization", () => {
 });
 
 /**
- * Added in Issue 417. Each test kills mutants the mutation-testing spike found
+ * Each test kills mutants the mutation-testing spike found
  * surviving in organization.ts: the limits were tested well inside and well
  * outside, never at the edge, and the slug pattern's `^` anchor was never
  * needed by any test.

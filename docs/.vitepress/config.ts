@@ -1,4 +1,4 @@
-// VitePress site for docs/ (Issue 422). See docs/guides/writing-docs.md for
+// VitePress site for docs/. See docs/guides/writing-docs.md for
 // how to add a page and why the site is configured the way it is.
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -26,7 +26,7 @@ const SOURCE_BASE_URL = "https://github.com/Kyvera-Labs/verixa/blob/main";
  * forgets to register, and the page then exists only for people who know its
  * URL. Generating items from folders cannot drift. What it gives up is per-page
  * ordering (pages sort by file name, which suits the numbered ADRs), and that
- * grouping by audience is Issue 423's job, not this scaffold's.
+ * grouping by audience is left to a later change.
  */
 const SECTIONS: readonly { text: string; dir: string }[] = [
   { text: "Guides", dir: "guides" },

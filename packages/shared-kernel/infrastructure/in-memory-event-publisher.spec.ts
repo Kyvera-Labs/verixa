@@ -5,7 +5,7 @@ import type { DomainEvent } from "../domain/domain-event.js";
 import { InMemoryEventPublisher } from "./in-memory-event-publisher.js";
 
 /**
- * Added in Issue 417: the mutation-testing spike found this publisher with no
+ * The mutation-testing spike found this publisher with no
  * direct tests (every mutant "no coverage"). The composition root wires it up,
  * and the audit subscriber depends on its two promises: every subscribed
  * handler runs, and they run in subscription order, each finishing before the

@@ -11,7 +11,7 @@ import {
 } from "./helpers/database.js";
 
 /**
- * Verifies `pnpm db:seed` is genuinely idempotent (Issue 051).
+ * Verifies `pnpm db:seed` is genuinely idempotent.
  *
  * Runs the real script as a subprocess rather than importing and calling it.
  * Importing would test a function; this tests the thing a contributor

@@ -5,7 +5,7 @@
 // are not exported, so entries can only be appended through `RecordAuditEvent`. Consumers can read
 // and verify a chain but not build one.
 
-// Domain: AuditLogEntry (Phase 01 hash-chained audit log) -- the entry as a
+// Domain: AuditLogEntry -- the entry as a
 // read-only type, and the chain-verification tool
 export {
   type AuditAction as AuditLogAction,
@@ -23,13 +23,13 @@ export {
   type AuditReadOperation,
 } from "./domain/policies/audit-access-policy.js";
 
-// Domain: AuditEvent (Phase 10 structured audit events)
+// Domain: AuditEvent
 export { AuditEvent, type AuditEventId } from "./domain/entities/audit-event.js";
 export type { ResourceType, OrganizationId } from "./domain/entities/audit-event.js";
 export { type AuditAction as AuditActionType } from "./domain/value-objects/audit-action.js";
 export { isAuditAction } from "./domain/value-objects/audit-action.js";
 
-// Domain: AuditMetadata (Issue 196 — the bounds and per-sink encodings that
+// Domain: AuditMetadata (the bounds and per-sink encodings that
 // keep a crafted metadata value from speaking for the record)
 export {
   AuditMetadata,
@@ -45,7 +45,7 @@ export {
 } from "./domain/value-objects/audit-metadata.js";
 export type { AuditMetadataRejectionReason } from "./domain/value-objects/audit-metadata.js";
 
-// Application: ports (AuditLogRepository - Phase 01)
+// Application: ports (AuditLogRepository)
 export { ChainConflictError } from "./application/ports/audit-log-repository.js";
 export type {
   AnchorFailure,
@@ -64,7 +64,7 @@ export type {
   AuditEventReader,
 } from "./application/ports/audit-event-reader.js";
 
-// Application: ports (AuditEventRepository - Phase 10)
+// Application: ports (AuditEventRepository)
 export type {
   AuditEventRepository,
   AuditEventFilters,

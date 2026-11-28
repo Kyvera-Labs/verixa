@@ -27,8 +27,8 @@ export interface IssuedSession {
 export type IssueSessionError = ValidationError;
 
 /**
- * Zero (the default) disables enforcement — see Issue 094's acceptance
- * criterion "limit of 0/unset disables enforcement." Sizing this above zero
+ * Zero (the default) disables enforcement, as required:
+ * "limit of 0/unset disables enforcement." Sizing this above zero
  * is a per-deployment product decision (banking apps tend to pick 1–3,
  * consumer SaaS often skips it entirely), which is why it is a constructor
  * parameter here rather than a constant: the composition root reads it from

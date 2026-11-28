@@ -153,7 +153,7 @@ describe.skipIf(database === undefined)("Prisma repositories (real Postgres)", (
         data: { ...membership, id: "00000000-0000-0000-0000-0000000000aa" },
       });
 
-      // The partial unique index from Issue 044. `OrganizationMembership.create()`
+      // The partial unique index on active memberships. `OrganizationMembership.create()`
       // already rejects this on the normal path; the index is what holds when
       // two concurrent requests both read "no active membership" before either
       // writes — a race no amount of application-level checking can close.

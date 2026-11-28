@@ -19,7 +19,7 @@ export const booleanFromEnv = z
 export const CORS_WILDCARD_ORIGIN = "*";
 
 /**
- * Supported OTLP transport protocols (Issue 356 / #468).
+ * Supported OTLP transport protocols.
  *
  * Kept collector-agnostic so operators can target Jaeger, Grafana Tempo,
  * OpenTelemetry Collector, or any vendor OTLP endpoint without code changes.
@@ -141,7 +141,7 @@ export const rawEnvSchema = z.object({
   PORT: z.coerce.number().int().positive().max(65535).default(3000),
   HOST: z.string().min(1).default("0.0.0.0"),
   LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal", "silent"]).default("info"),
-  // Not yet read by any repository (that starts with Issue 046) — present
+  // Not yet read by any repository; present
   // now so it flows through the same validated, fail-fast config loading
   // as everything else, and so tooling like scripts/db-wait.mjs has one
   // canonical place to get it from instead of reading process.env directly.
@@ -173,7 +173,7 @@ export const rawEnvSchema = z.object({
 
   /**
    * Connection string for the revocation-list store used by
-   * `@verixa/sessions`'s `RedisRevocationList` (Phase 05, Issue 096).
+   * `@verixa/sessions`'s `RedisRevocationList`.
    *
    * Defaults to the instance `docker-compose.yml` provisions for local
    * development — same reasoning as `DATABASE_URL`'s default. Was already
@@ -245,7 +245,7 @@ export const rawEnvSchema = z.object({
   TRUST_PROXY: booleanFromEnv.prefault("false"),
 
   // ---------------------------------------------------------------------------
-  // Cross-origin resource sharing — CORS policy (Issue 204)
+  // Cross-origin resource sharing — CORS policy
   //
   // `apps/api` maps these onto `@fastify/cors` in `plugins/cors.ts`; the
   // reasoning for each default lives in `docs/security/cors-policy.md`.
@@ -322,7 +322,7 @@ export const rawEnvSchema = z.object({
     ),
 
   // ---------------------------------------------------------------------------
-  // OpenTelemetry OTLP exporter & sampling policy (Phase 18, Issue 356 / #468)
+  // OpenTelemetry OTLP exporter & sampling policy
   // ---------------------------------------------------------------------------
 
   /**
@@ -426,7 +426,7 @@ export const envSchema = rawEnvSchema
   }));
 
 /**
- * Rate limit policy configuration schema (Issue 284 / #315).
+ * Rate limit policy configuration schema.
  * Validates per-route rate limit configuration with fail-fast Zod parsing.
  */
 export const rateLimitPolicySchema = z.object({
@@ -437,7 +437,7 @@ export const rateLimitPolicySchema = z.object({
 });
 
 /**
- * Rate limit allowlist configuration schema (Issue 289 / #304).
+ * Rate limit allowlist configuration schema.
  * Validates trusted IP addresses, CIDR blocks, and service-account tokens.
  */
 export const rateLimitAllowlistSchema = z.object({

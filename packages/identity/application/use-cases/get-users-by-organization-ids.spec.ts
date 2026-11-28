@@ -67,7 +67,7 @@ describe("GetUsersByOrganizationIds", () => {
 });
 
 /**
- * Added in Issue 417: kills mutants the mutation-testing spike found
+ * Kills mutants the mutation-testing spike found
  * surviving in get-users-by-organization-ids.ts.
  */
 describe("GetUsersByOrganizationIds: memberships that must not produce a user", () => {

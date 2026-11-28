@@ -13,7 +13,7 @@ export interface RequestPasswordResetResult {
   /**
    * Whether a token was actually issued.
    *
-   * **Must not reach the client.** Issue 069's acceptance criterion asks that
+   * **Must not reach the client.** The requirement is that
    * token generation be "verified via internal event, not response", and this
    * is that: the HTTP response is identical either way, so a test has to
    * observe something the response does not carry.

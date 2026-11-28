@@ -42,7 +42,7 @@ export interface MfaEnforcementDecision {
    * so enrollment must happen before the session can be issued.
    */
   readonly requiresEnrollment: boolean;
-  /** True when the user cannot proceed until they enroll (Issue 116 behaviour). */
+  /** True when the user cannot proceed until they enroll. */
   readonly blocked: boolean;
 }
 

@@ -75,7 +75,7 @@ describe("ApiKey", () => {
 });
 
 /**
- * Added in Issue 417: kills mutants the mutation-testing spike found surviving
+ * Kills mutants the mutation-testing spike found surviving
  * in api-key.ts. Expiry was tested well before and well after, never at the
  * instant itself, which is where `<` and `<=` disagree.
  */

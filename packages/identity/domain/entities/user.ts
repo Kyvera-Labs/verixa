@@ -43,7 +43,7 @@ interface UserProps {
    *
    * Redundant with `status === "deleted"` on purpose. The status drives
    * behavior; this records *when*, which the status alone cannot — and which
-   * audit, retention schedules, and the eventual erasure job (Phase 24) all
+   * audit, retention schedules, and the eventual erasure job all
    * need. {@link User.reconstitute} rejects the two disagreeing.
    */
   readonly deletedAt?: Date | undefined;
@@ -103,7 +103,7 @@ export class User {
 
   /**
    * Rebuilds a `User` from already-trusted data (e.g. a database row read
-   * back by a repository in Phase 03). Unlike {@link register}, this does not
+   * back by a repository). Unlike {@link register}, this does not
    * go through status-transition validation — the data is assumed to already
    * represent a previously-valid state, not a new transition being made now.
    * Never carries pending domain events: a rehydrated aggregate represents

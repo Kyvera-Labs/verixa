@@ -70,7 +70,7 @@ export interface BuildAppOptions {
    */
   readonly securityHeaders?: SecurityHeadersOptions | undefined;
   /**
-   * The cross-origin browser policy (Issue 204).
+   * The cross-origin browser policy.
    *
    * Defaults to `NO_CORS` — an empty allowlist — for the same reason
    * `securityHeaders` defaults to the nothing-on shape: the callers that pass
@@ -88,14 +88,14 @@ export interface BuildAppOptions {
    */
   readonly trustProxy?: boolean;
   /**
-   * Rate-limiting response controls (Phase 15, Issue 297).
+   * Rate-limiting response controls.
    *
    * Defaults to active in non-test environments (`process.env["NODE_ENV"] !== "test"`).
    * Pass `false` to disable or pass a configuration object to tune limits.
    */
   readonly rateLimit?: boolean | RateLimitPluginOptions;
   /**
-   * Operational metrics recorder (Phase 18 Observability, Issue 349 / #461).
+   * Operational metrics recorder.
    * When provided, registers HTTP golden signal metrics hooks across all routes.
    */
   readonly metricsRecorder?: MetricsRecorder | undefined;
@@ -158,19 +158,19 @@ export function buildApp(options: BuildAppOptions = {}) {
   app.addSchema(errorResponseSchema);
   app.addHook("onRoute", (route) => assertRouteValidationSchemas(route));
 
-  // Baseline response headers (Issue 203), registered before any route exists
+  // Baseline response headers, registered before any route exists
   // so "all routes return the configured header set" is true by construction
   // rather than by every route remembering to ask. `/health` below is the proof:
   // it is the one endpoint a deployment is most likely to expose without
   // thinking about it. The `Strict-Transport-Security` pin is a separate,
-  // config-driven concern (`./plugins/security-headers.js`, Issue 213) and is
+  // config-driven concern (`./plugins/security-headers.js`) and is
   // deliberately not set here.
   registerBaselineResponseHeaders(app);
 
-  // Request context and correlation ID linkage (Issue 341, 342, 355)
+  // Request context and correlation ID linkage
   registerRequestContext(app);
 
-  // Operational metrics recorder (Phase 18 Observability, Issue 349 / #461)
+  // Operational metrics recorder
   const metricsRecorder =
     options.metricsRecorder ??
     options.container?.observability?.metricsRecorder ??
@@ -184,7 +184,7 @@ export function buildApp(options: BuildAppOptions = {}) {
     new HealthCheckRegistry();
   registerHealthRoutes(app, { healthCheckRegistry });
 
-  // Prometheus scrape endpoint (Phase 18 Observability, Issue 351)
+  // Prometheus scrape endpoint
   if (options.metricsEndpoint === true) {
     app.get("/metrics", async (_request, reply) => {
       const registry = getSharedRegistry();

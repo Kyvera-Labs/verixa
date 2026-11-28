@@ -20,8 +20,8 @@ export interface AlwaysCondition {
  *
  * Deliberately minimal for now: this is the shape a comparison takes, not
  * its evaluation semantics (type coercion rules, regex matching, time
- * windows) — those belong to the operator library (Issue 147) and the
- * evaluation engine (Issue 146), which the domain layer must not depend on.
+ * windows) — those belong to the operator library and the
+ * evaluation engine, which the domain layer must not depend on.
  */
 export type ComparisonOperator = "eq" | "neq" | "lt" | "lte" | "gt" | "gte" | "in" | "contains";
 
@@ -29,7 +29,7 @@ export type ComparisonOperator = "eq" | "neq" | "lt" | "lte" | "gt" | "gte" | "i
  * A literal a comparison's right-hand side may hold. Restricted to
  * JSON-serializable primitives and arrays of them, since a `Policy` must
  * remain serialization-agnostic (storable as JSON/DSL text without a custom
- * codec) — see Issue 141's objective.
+ * codec).
  */
 export type ComparisonLiteral = string | number | boolean | readonly (string | number)[];
 

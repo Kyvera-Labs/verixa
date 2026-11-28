@@ -13,7 +13,7 @@ export interface CoverageMetrics {
 }
 
 /**
- * Checked-in coverage baseline schema (Issue 413).
+ * Checked-in coverage baseline schema.
  */
 export interface CoverageBaseline {
   version: number;

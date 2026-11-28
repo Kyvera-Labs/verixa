@@ -39,7 +39,7 @@ export default mergeConfig(
       // - e2e/**: the end-to-end suite has its own config (`pnpm test:e2e`).
       // - ci/**: the CI-tooling specs run under `vitest.ci.config.ts` instead,
       //   with file parallelism: they touch no database, so the serial rule
-      //   below does not apply to them (Issue 415).
+      //   below does not apply to them.
       exclude: [...configDefaults.exclude, "**/dist/**", "e2e/**", "ci/**"],
 
       /**

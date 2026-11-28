@@ -11,10 +11,10 @@ export interface SessionRevoker {
 /**
  * A revoker with nothing to revoke.
  *
- * Correct until Phase 05 — there are no sessions, so revoking all of them is
+ * Revokes nothing. Kept for deployments without the sessions package, where it is
  * genuinely a no-op — and it keeps the call site real rather than commented
  * out. The moment sessions exist, one line in the composition root replaces
- * this, and Issue 070 needs no change.
+ * this (see `SessionsPackageRevoker`).
  */
 export class NoSessionsRevoker implements SessionRevoker {
   revokeAllForUser(): Promise<void> {

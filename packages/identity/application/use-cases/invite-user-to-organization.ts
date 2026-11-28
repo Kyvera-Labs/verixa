@@ -16,9 +16,9 @@ export type InviteUserToOrganizationError = ValidationError;
 
 /**
  * Creates a pending `Invitation` for `email` to join `organizationId`. This
- * is the domain-skeleton half of org invitations (Issue 035) — it validates
+ * is the domain-skeleton half of org invitations — it validates
  * input and persists the invitation, but doesn't send anything: there's no
- * email adapter until Phase 14 (Notifications). The invitation's `token`
+ * email adapter yet. The invitation's `token`
  * exists and is ready to be mailed the moment that adapter does.
  */
 export class InviteUserToOrganization {

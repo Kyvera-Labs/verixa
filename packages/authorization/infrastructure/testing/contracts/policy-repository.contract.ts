@@ -27,9 +27,9 @@ function aPolicy(overrides?: {
 
 /**
  * Shared contract every {@link PolicyRepository} implementation — the
- * in-memory fake here, and the Prisma-backed adapter in Issue 150 — must
+ * in-memory fake here, and the Prisma-backed adapter — must
  * satisfy identically. See `packages/identity/infrastructure/testing/` for
- * the established pattern this follows (Issue 031).
+ * the established pattern this follows.
  */
 export function policyRepositoryContract(createRepository: () => PolicyRepository): void {
   describe("PolicyRepository contract", () => {

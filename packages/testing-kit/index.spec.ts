@@ -22,7 +22,7 @@ describe("@verixa/testing-kit public API (Issue 420)", () => {
 /**
  * Runs the repository's real ESLint configuration, so what is verified is the
  * rule contributors actually hit, not a copy of it that could drift. Same
- * shape as the Issue 038 boundary test in packages/audit/index.spec.ts.
+ * shape as the boundary test in packages/audit/index.spec.ts.
  *
  * Linted as the text of files that exist on disk, because the configuration is
  * type-aware and the TypeScript project service only knows files that belong

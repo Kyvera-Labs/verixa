@@ -24,7 +24,7 @@ export class Rule {
   }
 
   /**
-   * Every acceptance criterion for Issue 141 requires a rule to carry a
+   * Every rule requires a rule to carry a
    * condition — "at least one condition or an explicit 'always' marker" — so
    * `condition` is required here, not optional. Pass
    * {@link Condition.always} for a rule meant to match unconditionally

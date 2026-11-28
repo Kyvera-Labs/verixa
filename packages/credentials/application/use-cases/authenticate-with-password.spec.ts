@@ -151,7 +151,7 @@ describe("AuthenticateWithPassword", () => {
   });
 
   describe("does not reveal why it failed", () => {
-    // The acceptance criterion for Issue 066, and the reason this use case
+    // The core requirement, and the reason this use case
     // exists in the shape it does. Each of these is a different internal
     // cause; a caller must not be able to tell them apart.
 

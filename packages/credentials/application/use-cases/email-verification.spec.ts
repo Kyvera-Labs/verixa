@@ -179,7 +179,7 @@ describe("email verification (Issue 068)", () => {
     });
 
     it("emits a status-change event on the aggregate", async () => {
-      // Issue 068 asks for an event on success. `activate` already emits
+      // An event is required on success. `activate` already emits
       // `UserStatusChanged`, so this use case does not add its own — two
       // records of one fact can disagree.
       const rawToken = await issueToken();

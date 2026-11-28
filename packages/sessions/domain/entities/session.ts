@@ -17,7 +17,7 @@ export type SessionId = Id<"SessionId">;
  */
 export type SessionUserId = Id<"UserId">;
 
-/** Where a session was opened from, for the "manage your devices" view (Issue 095). */
+/** Where a session was opened from, for the "manage your devices" view. */
 export interface SessionMetadata {
   readonly ipAddress: string | undefined;
   readonly userAgent: string | undefined;

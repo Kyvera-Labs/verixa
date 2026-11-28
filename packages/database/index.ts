@@ -4,7 +4,7 @@
 // docs/guides/database.md).
 //
 // Loaded through `createRequire`: the generated client is CommonJS with dynamically built exports,
-// so Node's ESM loader cannot find its named exports and a static `export ... from
+// so Node's ESM loader cannot find its named exports and a static `export... from
 // "@prisma/client"` throws at runtime. Vitest and `tsc` do not catch this, only a real `node
 // dist/server.js`.
 import { createRequire } from "node:module";
@@ -125,7 +125,7 @@ export function createPrismaClient(
 }
 
 // Row types for the models defined in prisma/schema.prisma. Repository
-// adapters (Issue 046 onward) map between these and the domain entities;
+// adapters map between these and the domain entities;
 // nothing outside an adapter should ever hold one.
 export type {
   Credential as CredentialRow,

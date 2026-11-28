@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 
 /**
- * The bundle-pruning step the API image build runs (roadmap Issue 216).
+ * The bundle-pruning step the API image build runs.
  *
  * The Dockerfile is the only consumer, and a laptop with no Docker daemon
  * cannot build it — so the script the image calls is tested here the way the

@@ -7,7 +7,7 @@ import {
 } from "./secrets-source.js";
 
 /**
- * Shared contract test suite for any implementation of SecretsSource (Issue 391 / #503).
+ * Shared contract test suite for any implementation of SecretsSource.
  */
 export function describeSecretsSourceContract(
   name: string,

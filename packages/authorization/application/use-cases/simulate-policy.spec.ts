@@ -15,7 +15,7 @@ import { SimulatePolicy, type PolicyFixtureSet } from "./simulate-policy.js";
  * A policy engine that answers with whatever the test tells it, so the use case
  * can be exercised without a DSL, a repository or a database. It records its
  * calls, because half of what this use case must guarantee is what it *passes
- * through* (Issue 155).
+ * through*.
  */
 class StubPolicySimulationEngine implements PolicySimulationEngine {
   readonly calls: { policy: PolicySource; context: AttributeContext }[] = [];

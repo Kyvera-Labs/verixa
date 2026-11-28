@@ -36,7 +36,7 @@ const SECURITY_FIXTURE_CONFIG = join(
 );
 const SECURITY_FIXTURE_DIRECTORY = "infra/ci/lint-security-fixtures";
 
-/** Captured reports and manifests for the dependency-scan gate (Issue 207). */
+/** Captured reports and manifests for the dependency-scan gate. */
 export const DEPENDENCY_SCAN_FIXTURES = join(
   REPO_ROOT,
   "infra",
@@ -69,7 +69,7 @@ function run(command: string, args: readonly string[], cwd: string): ToolResult 
   const result = spawnSync(command, args, {
     cwd,
     encoding: "utf8",
-    // Windows spawns `pnpm` through a .cmd shim, which needs a shell. Node and
+    // Windows spawns `pnpm` through a.cmd shim, which needs a shell. Node and
     // the tsx CLI are real executables, so this only applies to the pnpm cases
     // — the same conditional the other shelling-out specs use.
     shell: process.platform === "win32" && command === "pnpm",
@@ -114,7 +114,7 @@ export function runLockfileGateViaPnpmScript(): ToolResult {
 
 /**
  * Runs ESLint against the deliberately vulnerable fixture snippets with the
- * fixture-only config (Issue 208).
+ * fixture-only config.
  *
  * Spawning the CLI rather than importing ESLint's Node API keeps this test
  * free of a typed import for `eslint-plugin-security`, which ships no types —
@@ -130,7 +130,7 @@ export function runSecurityLintFixtureConfig(args: readonly string[]): ToolResul
 
 export const SECURITY_LINT_FIXTURES = SECURITY_FIXTURE_DIRECTORY;
 
-/** `node infra/ci/dependency-scan.mjs <args>` — the Issue 207 gate step. */
+/** `node infra/ci/dependency-scan.mjs <args>` — the dependency-scan gate step. */
 export function runDependencyScan(args: readonly string[]): ToolResult {
   return run(process.execPath, [DEPENDENCY_SCAN_GATE, ...args], REPO_ROOT);
 }
@@ -140,17 +140,17 @@ export function runSbomGenerator(args: readonly string[]): ToolResult {
   return run(process.execPath, [TSX_CLI, SBOM_GENERATOR, ...args], REPO_ROOT);
 }
 
-/** `tsx infra/ci/perf-budget.ts <args>` — the Issue 415 suite-duration gate. */
+/** `tsx infra/ci/perf-budget.ts <args>` — the suite-duration gate. */
 export function runPerfBudget(args: readonly string[]): ToolResult {
   return run(process.execPath, [TSX_CLI, PERF_BUDGET, ...args], REPO_ROOT);
 }
 
-/** `tsx infra/ci/check-env-matrix.ts <args>` — the Issue 389 environment matrix check. */
+/** `tsx infra/ci/check-env-matrix.ts <args>` — the environment matrix check. */
 export function runCheckEnvMatrix(args: readonly string[] = []): ToolResult {
   return run(process.execPath, [TSX_CLI, CHECK_ENV_MATRIX_GATE, ...args], REPO_ROOT);
 }
 
-/** `tsx scripts/ci-dashboard/generate.ts <args>` — the Issue 379 CI dashboard generator. */
+/** `tsx scripts/ci-dashboard/generate.ts <args>` — the CI dashboard generator. */
 export function runCiDashboardGenerator(args: readonly string[] = []): ToolResult {
   return run(process.execPath, [TSX_CLI, CI_DASHBOARD_GENERATOR, ...args], REPO_ROOT);
 }

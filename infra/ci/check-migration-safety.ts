@@ -48,7 +48,7 @@ export interface MigrationSafetySummary {
 }
 
 /**
- * Comment marker required for destructive changes to document data preservation (Issue 393).
+ * Comment marker required for destructive changes to document data preservation.
  */
 const DATA_PRESERVATION_NOTE_PATTERN = /DATA[-_ ]?PRESERVATION\s*:|@data-preservation/i;
 
@@ -82,7 +82,7 @@ function inspectDestructiveOperation(statement: string): { isDestructive: boolea
 }
 
 /**
- * Extracts table and column names from an ALTER TABLE ... ADD statement using tokenization.
+ * Extracts table and column names from an ALTER TABLE... ADD statement using tokenization.
  */
 function extractTableAndColumn(statement: string): { tableName: string; columnName: string } {
   const words = statement.trim().split(/\s+/);
@@ -202,7 +202,7 @@ export function checkMigrationSql(sql: string, filePath = "migration.sql"): Migr
   for (const stmt of cleanedStatements) {
     const text = stmt.text;
 
-    // --- Issue 393: Forward-only policy (no undocumented destructive drops) ---
+    // -: Forward-only policy (no undocumented destructive drops) ---
     const dropCheck = inspectDestructiveOperation(text);
     if (dropCheck.isDestructive) {
       if (!hasDataPreservationNote) {
@@ -222,7 +222,7 @@ export function checkMigrationSql(sql: string, filePath = "migration.sql"): Migr
       }
     }
 
-    // --- Issue 394: Zero-downtime rolling deploy checklist ---
+    // -: Zero-downtime rolling deploy checklist ---
     const notNullCheck = inspectNotNullWithoutDefault(text);
     if (notNullCheck.isUnsafe) {
       issues.push({

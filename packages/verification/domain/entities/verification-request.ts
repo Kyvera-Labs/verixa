@@ -152,14 +152,14 @@ export class VerificationRequest {
 
   /**
    * `pending_evidence → submitted`. Called by the evidence-completeness flow
-   * (Issue 168) once every required evidence type is present; it is a
+   * once every required evidence type is present; it is a
    * deliberate transition rather than a client-asserted flag.
    */
   submit(): Result<VerificationRequest, InvalidStatusTransitionError> {
     return this.transitionTo("submitted");
   }
 
-  /** `submitted → in_review`. Called once the automated provider check has run (Issue 172). */
+  /** `submitted → in_review`. Called once the automated provider check has run. */
   startReview(): Result<VerificationRequest, InvalidStatusTransitionError> {
     return this.transitionTo("in_review");
   }
@@ -243,7 +243,7 @@ export class VerificationRequest {
   /**
    * `in_review → needs_more_info`, with a note describing what is missing.
    * Not a decision: the request stays open and re-enters the evidence flow via
-   * {@link reopenForEvidence}. See Issue 176.
+   * {@link reopenForEvidence}.
    */
   requestMoreInformation(params: {
     reviewerId: ReviewerId;

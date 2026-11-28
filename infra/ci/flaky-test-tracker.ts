@@ -63,7 +63,7 @@ export interface FlakyCliOptions {
 }
 
 /**
- * Classifies a test execution based on its attempt sequence (Issue 414).
+ * Classifies a test execution based on its attempt sequence.
  *
  * Distinguishes:
  * - "stable": Passed on first attempt

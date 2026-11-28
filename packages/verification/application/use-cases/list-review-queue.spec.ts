@@ -334,7 +334,7 @@ describe("ListReviewQueue", () => {
     // response shape omits sensitive fields" is a property of this projection
     // rather than of whichever serializer comes later. Evidence detail — and
     // any signed URL for it — belongs to the per-request detail fetch (Issue
-    // 178) and to `EvidenceStorage` (Issue 166), not to a list.
+    // 178) and to `EvidenceStorage`, not to a list.
     expect(Object.keys(item ?? {}).sort()).toEqual([
       "claim",
       "createdAt",

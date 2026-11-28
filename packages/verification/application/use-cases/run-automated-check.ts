@@ -14,8 +14,8 @@ export interface RunAutomatedCheckCommand {
   readonly requestId: VerificationRequestId;
   /**
    * The evidence to check. Supplied by the caller rather than fetched here:
-   * this package has no `EvidenceRepository` yet (evidence persistence is
-   * Issues 166/168), and the upload flow that triggers an automated check
+   * this package has no `EvidenceRepository` yet (evidence persistence
+   * is not built yet), and the upload flow that triggers an automated check
    * already has the evidence it just accepted in hand.
    */
   readonly evidence: readonly Evidence[];

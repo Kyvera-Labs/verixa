@@ -13,7 +13,7 @@ let corsPolicy;
 try {
   config = loadConfig();
   // Derived beside config loading, not inside `buildApp`, because an
-  // impossible pairing of the transport-security variables (Issue 213) is a
+  // impossible pairing of the transport-security variables is a
   // configuration error and belongs on this same fail-fast path — printed to
   // stderr, not routed through a logger that does not exist yet.
   securityHeaders = securityHeadersFromConfig(config);
@@ -25,7 +25,7 @@ try {
   corsPolicy = corsPolicyFromConfig(config);
 } catch (error) {
   if (error instanceof ConfigError) {
-    // The structured logger (Issue 008) itself depends on config being valid,
+    // The structured logger itself depends on config being valid,
     // so a config error can't be routed through it — this is the one place
     // console.error is the right tool.
     console.error(error.message);

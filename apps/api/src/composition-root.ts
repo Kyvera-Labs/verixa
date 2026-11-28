@@ -281,7 +281,7 @@ export interface Container {
   };
   readonly sessions?: SessionUseCases;
   readonly rateLimiter?: RateLimiter;
-  /** Compliance case management (Issue 314). Absent in partial test containers. */
+  /** Compliance case management. Absent in partial test containers. */
   readonly governance?: GovernanceUseCases;
   /**
    * Drains any queued audit writes, then releases the database connection.
@@ -377,7 +377,7 @@ export function buildContainer(
     overrides.rateLimiter ??
     (process.env["NODE_ENV"] === "test" ? new NoopRateLimiter() : createCredentialRateLimiter());
   // Counts failures the per-credential lockout cannot see (unknown addresses,
-  // password spraying). In-memory and per process until Phase 15's durable store.
+  // password spraying). In-memory and per process until a durable store is wired.
   const bruteForceAttempts = new BruteForcePolicy(new InMemoryBruteForceAttemptStore());
 
   // Audit recording. Failures are logged and never propagated -- see
@@ -386,7 +386,7 @@ export function buildContainer(
   const auditLog = new PrismaAuditLogRepository(prisma.auditLogEntry, auditTransaction(prisma));
   const anchorRecords = new PrismaAnchorRecordRepository(prisma.anchorRecord, () => randomUUID());
 
-  // Batched writes are opt-in (Issue #134). The default keeps the per-event
+  // Batched writes are opt-in. The default keeps the per-event
   // writer, whose behaviour — an entry is durable before the request returns —
   // is the one an operator who has not read the throughput document will
   // assume. Turning batching on trades that for throughput, so it is a

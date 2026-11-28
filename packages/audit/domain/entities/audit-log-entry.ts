@@ -44,7 +44,7 @@ export type AuditAction =
   | "audit.queried"
   | "audit.exported"
   | "audit.access_denied"
-  // API key lifecycle (Issue 233)
+  // API key lifecycle
   | "api_key.created";
 
 /**

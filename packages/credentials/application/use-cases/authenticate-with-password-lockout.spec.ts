@@ -17,7 +17,7 @@ import { AuthenticateWithPassword } from "./authenticate-with-password.js";
 import { RegisterUserWithPassword } from "./register-user-with-password.js";
 
 /**
- * Account lockout (Issue 067), in its own file because it is a distinct
+ * Account lockout, in its own file because it is a distinct
  * behaviour with its own fixture: a deliberately tiny policy, so the suite
  * observes real expiry without sleeping for a minute.
  *
@@ -237,7 +237,7 @@ describe("AuthenticateWithPassword — lockout", () => {
     });
 
     it("clears the lock when the password is changed", async () => {
-      // After a reset (Issue 070) the failures were not the owner's, and they
+      // After a reset the failures were not the owner's, and they
       // have no way to wait out a lock on a credential they have just
       // replaced.
       await reachThreshold();
