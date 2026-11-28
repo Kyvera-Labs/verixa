@@ -1,15 +1,7 @@
 /**
- * CycloneDX SBOM generator (Issue 215).
- *
- * The properties worth testing are the ones an auditor depends on: the document
- * says which spec version it is in, names every package the lockfile resolves
- * (including transitive ones, which is where supply-chain exposure actually
- * lives), claims completeness only when it means it, and refuses to produce a
- * document that fails schema validation.
- *
- * The last one is the interesting failure mode. A generator that writes a
- * malformed BOM looks like a release that was reviewed, and the person
- * downstream — running a scanner against the artifact — has no way to tell.
+ * CycloneDX SBOM generator. Checks what an auditor relies on: the spec version is declared, every
+ * resolved package (including transitive ones) is listed, completeness is claimed only when true,
+ * and a document that fails schema validation is never written.
  */
 
 import { readFileSync } from "node:fs";

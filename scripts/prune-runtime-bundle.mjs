@@ -1,28 +1,14 @@
 #!/usr/bin/env node
 /**
- * Strip everything a running Node process will never read out of a deployed
- * bundle (roadmap Issue 216).
+ * Removes from a deployed bundle what a running Node process never reads:
  *
- * Two different things end up in `/out` that should not ship:
+ * 1. Build residue: `.js.map` and `.d.ts.map` files (they contain the original source) and compiled
+ *    `.spec.js` tests.
+ * 2. Verixa's own sources and test output: `pnpm deploy` copies each package directory whole,
+ *    including `src/`, `domain/`, `application/` and `coverage/`.
  *
- * 1. **Build residue.** `pnpm deploy --prod` leaves dev *dependencies* behind,
- *    but TypeScript still emits `<file>.js.map` and `<file>.d.ts.map` beside
- *    every compiled file, and every suite compiles to `<name>.spec.js`. A
- *    `.js.map` is the original source, and a `.spec.js` is a worked description
- *    of every assumption an attacker could make about the code.
- * 2. **Our own sources and test output.** No workspace package declares a
- *    `files` array, so `pnpm deploy` copies each package directory whole:
- *    `apps/api/src/*.ts`, every package's `index.ts`, `domain/`,
- *    `application/`, and whatever `coverage/` the test run left behind.
- *
- * Third-party `.ts` files are deliberately *not* touched. They are published
- * artefacts of other projects, some of which resolve through them, and this
- * script's job is to remove what Verixa's own build put there — not to guess
- * about someone else's package layout.
- *
- * The step runs *before* the Dockerfile's load proof on purpose. If anything in
- * the bundle did need a file removed here, the build fails at that line with a
- * module resolution error rather than at 03:00 as a crashed pod.
+ * Third-party `.ts` files are left alone. Runs before the Dockerfile's load proof, so a needed file
+ * that was removed fails the build rather than a running container.
  *
  * Usage: node scripts/prune-runtime-bundle.mjs <directory>
  */

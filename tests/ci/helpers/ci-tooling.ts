@@ -1,18 +1,9 @@
 /**
- * Runs the Issue 215 CI tools as subprocesses, over throwaway repository
- * fixtures.
- *
- * Spawning rather than importing is the point. The deliverable is a command a
- * workflow invokes, so the tests have to exercise that command — including its
- * exit code and its stderr, which is the only thing a maintainer sees when the
- * gate fails. The SBOM generator additionally runs its CLI at module load and
- * calls `process.exit(1)` on failure, which an in-process test could not
- * survive.
- *
- * The root `package.json` scripts are mostly not used here (one test per tool
- * does use them, to keep the wiring honest). Going through `pnpm` for every
- * case would add a few seconds of package-manager startup per assertion and
- * make a pnpm failure indistinguishable from a tool failure.
+ * Runs the CI tools as subprocesses over throwaway repository fixtures, so tests exercise the real
+ * command, exit code and stderr. The SBOM generator also exits the process on failure, which an
+ * in-process test could not survive. Tools are invoked directly rather than through `pnpm` to avoid
+ * package-manager startup and to keep pnpm failures distinct; one test per tool still covers the
+ * `pnpm` script wiring.
  */
 
 import { spawnSync } from "node:child_process";
@@ -260,19 +251,12 @@ export function createOutputDirectory(): { readonly directory: string; dispose()
   };
 }
 
-/* ------------------------------------------------------------------ *
- * The fixture contents
- *
- * A minimal pnpm workspace in lockfileVersion 9.0: a root importing `left-pad`,
- * which pulls `tiny-lru` transitively, and one member package importing
- * `right-pad`. Each drift case below is one targeted string edit away from
- * this state, which is what makes the expected message obvious.
- *
- * The `integrity` values are genuine base64 SHA-512 digests rather than
- * placeholders: the SBOM generator turns them into CycloneDX `hashes`, whose
- * schema pins the hex length, so a fake digest would fail validation for a
- * reason that has nothing to do with the behaviour under test.
- * ------------------------------------------------------------------ */
+/*
+ * Fixture contents: a minimal lockfileVersion 9.0 workspace with a root importing `left-pad` (which
+ * pulls `tiny-lru`) and one member importing `right-pad`. Each drift case is one targeted edit away
+ * from this state. The `integrity` values are real SHA-512 digests because the SBOM schema
+ * validates their length.
+ */
 
 export const FIXTURE_ROOT_MANIFEST = JSON.stringify(
   {

@@ -1,16 +1,8 @@
 /**
- * Dependency-scanning gate (Issue 207).
- *
- * The deliverable is a command a workflow runs, so every case here spawns it
- * and asserts on the exit code *and* the message. A gate whose failure nobody
- * can interpret gets bypassed, and the message is also the only place the
- * exception process is visible when it fires.
- *
- * The audit reports are captured fixtures rather than live `pnpm audit` output:
- * a test that reaches the npm registry fails when the network does, and reports
- * on vulnerabilities published since it was written instead of on the
- * behaviour under test. The fixture package manifest in the same directory is
- * the intentionally vulnerable dependency the report describes.
+ * Dependency-scanning gate. Every case runs the command and asserts on both exit code and message.
+ * Audit reports are captured fixtures, so results do not depend on the network or on advisories
+ * published later; the fixture manifest alongside is the deliberately vulnerable dependency they
+ * describe.
  */
 
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";

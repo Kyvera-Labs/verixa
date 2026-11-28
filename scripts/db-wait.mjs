@@ -1,18 +1,10 @@
 #!/usr/bin/env node
-// Polls Postgres until the server itself answers, or gives up.
+// Waits until Postgres itself answers, or gives up. Dependency-free. A TCP connect is not enough,
+// because Docker's published-port proxy accepts connections before Postgres is listening, so each
+// attempt sends the 8-byte SSLRequest and waits for the server's one-byte reply (`S` or `N`).
 //
-// Deliberately dependency-free (no `pg` driver, no Prisma). A bare TCP
-// connect is not enough, though: Docker publishes a container port through
-// a proxy that accepts connections on the host as soon as the container
-// starts, before Postgres inside is listening. A connect-only check passed
-// at once there, and the `prisma migrate deploy` right after it failed with
-// P1001 (seen in CI's quickstart job). So each attempt sends the 8-byte
-// SSLRequest that opens every Postgres session and waits for the server's
-// one-byte reply ('S' or 'N'). Only Postgres sends that byte; a proxy with
-// nothing behind it just closes the connection.
-//
-// Usage: node scripts/db-wait.mjs [connectionUrl]
-// Falls back to DATABASE_URL, then the local dev default.
+// Usage: node scripts/db-wait.mjs [connectionUrl] (falls back to DATABASE_URL, then the local
+// default).
 
 import { createConnection } from "node:net";
 import { setTimeout as delay } from "node:timers/promises";

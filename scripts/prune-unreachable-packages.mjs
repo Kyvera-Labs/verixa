@@ -1,25 +1,15 @@
 #!/usr/bin/env node
 /**
- * Remove every package in a `pnpm deploy` bundle that the app cannot reach
- * without going through an excluded package (by default the `prisma` CLI,
- * `typescript` and `@types/*`).
+ * Removes every package in a `pnpm deploy` bundle that the app can only reach through an excluded
+ * package (by default the `prisma` CLI, `typescript` and `@types/*`).
  *
- * `@prisma/client` declares both as optional peers, and the lockfile resolves
- * them, so `pnpm deploy --prod` installs them into the bundle. Neither is read
- * at runtime: the client loads only the generated `.prisma` output. Deleting
- * the two package directories by name was enough for Prisma 6, whose CLI had a
- * handful of dependencies. The Prisma 7 CLI brings a much larger tree of its
- * own (Prisma Studio, React, charting libraries and their `@types/*`
- * packages), which stayed behind and failed CI's dev-dependency check.
+ * `@prisma/client` declares the CLI and TypeScript as optional peers, so `pnpm deploy --prod`
+ * installs them, and the Prisma 7 CLI brings a large tree of its own. Instead of naming packages,
+ * this walks the bundle the way Node resolves it, from the app's `node_modules` through pnpm's
+ * sibling dependency links, never entering an excluded package. Unreached store entries and
+ * dangling links are deleted.
  *
- * So instead of naming packages, this walks the bundle the way Node resolves
- * it. It starts from the app's own `node_modules` and follows each package's
- * dependency links (pnpm keeps them as siblings under
- * `.pnpm/<key>/node_modules`), never stepping into an excluded package. Store
- * entries the walk never reached are deleted, as are links left dangling.
- *
- * Runs before the Dockerfile's load proof, so if the app did need something
- * removed here, the image build fails there rather than in a running pod.
+ * Runs before the Dockerfile's load proof, so anything the app needed fails the build there.
  *
  * Usage: node scripts/prune-unreachable-packages.mjs <bundle> [excluded-name...]
  */

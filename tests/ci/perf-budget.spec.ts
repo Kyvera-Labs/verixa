@@ -1,16 +1,8 @@
 /**
- * Test-suite performance budget gate (Issue 415).
- *
- * The gate's job is to fail a PR that makes the suite meaningfully slower, and
- * to say which suite and by how much. These cases pin down each rule of
- * `infra/ci/perf-budget.ts`: within tolerance passes, over tolerance fails, a
- * budgeted suite that was never timed fails, a new unbudgeted suite is
- * reported without failing, and a baseline the gate cannot read is an input
- * error (exit 2), never a pass.
- *
- * Each case asserts on the message as well as the exit code, for the same
- * reason the other gates in this directory do: a failure nobody can interpret
- * gets bypassed.
+ * Test-suite performance budget gate. Pins each rule of `infra/ci/perf-budget.ts`: within tolerance
+ * passes, over tolerance fails, a budgeted suite never timed fails, a new unbudgeted suite is
+ * reported without failing, and an unreadable baseline exits 2. Each case checks the message as
+ * well as the exit code.
  */
 
 import { readFileSync, writeFileSync } from "node:fs";

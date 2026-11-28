@@ -164,17 +164,10 @@ export default tseslint.config(
     },
   },
   {
-    // Layering enforcement, which is the rule this whole architecture rests
-    // on and the one a new contributor breaks first.
-    //
-    // Domain and application code must not reach for infrastructure. A domain
-    // entity that imports Prisma cannot be unit-tested without a database, and
-    // a use case that imports Fastify cannot be reused outside HTTP — at which
-    // point the ports are decoration and the layering is a naming convention.
-    //
-    // The fix, when this fires, is almost always to define a port in
-    // `application/ports/` and let the composition root supply the adapter.
-    // See docs/guides/domain-modeling.md.
+    // Layering: domain and application code must not import infrastructure, or they can no longer
+    // be tested without a database or reused outside HTTP. When this fires, define a port in
+    // `application/ports/` and let the composition root supply the adapter (see
+    // docs/guides/domain-modeling.md).
     files: ["packages/*/domain/**/*.ts", "packages/*/application/**/*.ts"],
     ignores: ["**/*.spec.ts"],
     rules: {
@@ -214,20 +207,11 @@ export default tseslint.config(
     },
   },
   {
-    // Injection hardening (Issue 210, docs/security/injection-hardening.md).
-    //
-    // Prisma parameterizes by default, which is exactly why this needs a rule:
-    // the escape hatches it offers (`$queryRawUnsafe`, and any raw call fed a
-    // built string) look like ordinary API and behave like concatenating user
-    // input into a shell command. Every raw site in this repo is safe today;
-    // nothing here stops the next one from being otherwise, and a reviewer
-    // reading `EXPLAIN ${sql}` in a diff will not always notice.
-    //
-    // What is deliberately NOT flagged: the tagged-template form
-    // `prisma.$executeRaw\`WHERE id = ${value}\``. It reads like a template
-    // literal and is the safe pattern — Prisma emits `$1` and binds `value`.
-    // Those are `TaggedTemplateExpression` nodes, not `CallExpression`s, so
-    // these selectors do not reach them.
+    // Injection hardening (docs/security/injection-hardening.md): flags Prisma's unsafe raw-query
+    // escape hatches, such as `$queryRawUnsafe` or any raw call given a built string. The
+    // tagged-template form (`prisma.$executeRaw` with `${value}` inside the template) is safe,
+    // because Prisma binds the values; those are `TaggedTemplateExpression` nodes, which these
+    // selectors do not match.
     files: ["**/*.ts"],
     rules: {
       "no-restricted-syntax": [

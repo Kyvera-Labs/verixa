@@ -15,16 +15,9 @@ const repoRoot = fileURLToPath(new URL(".", import.meta.url));
 export default defineConfig({
   resolve: {
     alias: {
-      // @stellar/stellar-sdk pulls in debug/supports-color through a chain
-      // that gives @verixa/stellar-anchor a peer-dependency signature, which
-      // makes pnpm materialize it as a content-filtered `file:` copy for
-      // some consumers (apps/api) instead of a plain workspace symlink
-      // (packages/audit gets the symlink and never hits this). A `file:`
-      // copy only contains git-tracked files, so the gitignored `dist/`
-      // output built by `pnpm build` is silently missing from it, and
-      // Vite's stricter entry resolution in v6 fails rather than guessing.
-      // Aliasing straight to the real build output sidesteps node_modules
-      // resolution for this one package entirely.
+      // `@stellar/stellar-sdk`'s peer dependencies make pnpm install `@verixa/stellar-anchor` as a
+      // `file:` copy for some consumers, and that copy omits the gitignored `dist/`. Aliasing
+      // straight to the build output avoids that resolution.
       "@verixa/stellar-anchor": `${repoRoot}packages/stellar-anchor/dist/index.js`,
     },
   },
@@ -45,18 +38,10 @@ export default defineConfig({
     pool: "forks",
 
     /**
-     * Half the cores per package, not Vitest's default of all cores but one.
-     *
-     * `pnpm test` runs up to four packages at once (`pnpm -r`), and each
-     * package's Vitest starts its own pool. At the default that was up to
-     * twelve forks on a four-thread machine, which made the run slower and
-     * flaky: a guard test in `@verixa/authorization` timed out at 5s under
-     * the contention. At 50%, the unit suite went from 296.7s/216.5s to
-     * 222.6s/150.6s over two runs each, and the timeout went away. Figures
-     * and method: docs/guides/testing/performance-budget.md.
-     *
-     * A percentage rather than a fixed count, so a larger machine still gets
-     * more workers. A cap of 1 per package was considered and not measured.
+     * Half the cores per package rather than Vitest's default. `pnpm test` runs up to four packages
+     * at once, each with its own pool, and the default oversubscribed the machine, slowing runs and
+     * causing timeouts. A percentage so larger machines still get more workers (figures in
+     * docs/guides/testing/performance-budget.md).
      */
     maxWorkers: "50%",
     coverage: {
