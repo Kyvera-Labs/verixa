@@ -1,5 +1,3 @@
-// pino's CJS export interop
- 
 import pino, { type DestinationStream, type Logger, type LoggerOptions } from "pino";
 
 import { getActiveTraceId, getRequestContext } from "./request-context.js";
