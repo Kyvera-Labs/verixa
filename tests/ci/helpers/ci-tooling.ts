@@ -69,7 +69,7 @@ function run(command: string, args: readonly string[], cwd: string): ToolResult 
   const result = spawnSync(command, args, {
     cwd,
     encoding: "utf8",
-    // Windows spawns `pnpm` through a.cmd shim, which needs a shell. Node and
+    // Windows spawns `pnpm` through a .cmd shim, which needs a shell. Node and
     // the tsx CLI are real executables, so this only applies to the pnpm cases
     // — the same conditional the other shelling-out specs use.
     shell: process.platform === "win32" && command === "pnpm",

@@ -86,7 +86,7 @@ export class ConfirmPasswordReset {
     //
     // Guesses spread across freshly issued links do not share it. That case
     // belongs to the throttle on issuance and to the request-rate limiter
-    //, not to this gate, and saying otherwise would overstate what
+    // rather than to this gate, and saying otherwise would overstate what
     // is wired here.
     if (this.bruteForce !== undefined) {
       const gate = await this.bruteForce.check("password-reset", tokenHash);

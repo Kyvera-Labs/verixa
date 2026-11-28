@@ -18,7 +18,7 @@ export class UnknownResourceTypeError extends Error {
 }
 
 /**
- * Maps resource types (`"document"`, `"verificationCase"`,...) to the {@link
+ * Maps resource types (`"document"`, `"verificationCase"`, ...) to the {@link
  * ResourceAttributeResolver} that fetches their attributes. Other contexts register resolvers from
  * their composition roots, so supporting a new resource type needs no change here or in the engine.
  */

@@ -82,7 +82,7 @@ function inspectDestructiveOperation(statement: string): { isDestructive: boolea
 }
 
 /**
- * Extracts table and column names from an ALTER TABLE... ADD statement using tokenization.
+ * Extracts table and column names from an ALTER TABLE ... ADD statement using tokenization.
  */
 function extractTableAndColumn(statement: string): { tableName: string; columnName: string } {
   const words = statement.trim().split(/\s+/);
@@ -202,7 +202,7 @@ export function checkMigrationSql(sql: string, filePath = "migration.sql"): Migr
   for (const stmt of cleanedStatements) {
     const text = stmt.text;
 
-    // -: Forward-only policy (no undocumented destructive drops) ---
+    // --- Forward-only policy (no undocumented destructive drops) ---
     const dropCheck = inspectDestructiveOperation(text);
     if (dropCheck.isDestructive) {
       if (!hasDataPreservationNote) {
@@ -222,7 +222,7 @@ export function checkMigrationSql(sql: string, filePath = "migration.sql"): Migr
       }
     }
 
-    // -: Zero-downtime rolling deploy checklist ---
+    // --- Zero-downtime rolling deploy checklist ---
     const notNullCheck = inspectNotNullWithoutDefault(text);
     if (notNullCheck.isUnsafe) {
       issues.push({
