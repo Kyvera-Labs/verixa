@@ -21,25 +21,10 @@ export interface RetentionEnforcementJobOptions {
 }
 
 /**
- * Applies each active retention rule to the records its context reports as
- * past retention.
- *
- * Designed to be run on a schedule and to be re-run at any time, including
- * after a crash halfway through a batch. That is the same at-least-once
- * reasoning as any queue consumer: assume every step can happen twice and make
- * the second time harmless. Two things provide that:
- *
- * 1. `RetentionTarget.apply` is idempotent, so applying an action twice is a
- *    no-op the second time. This covers the unavoidable window between "the
- *    record was changed" and "the job logged it".
- * 2. The job consults the log first and skips what already completed, so a
- *    re-run does not even call the target for finished work.
- *
- * Alternative rejected: a run lock plus "mark progress, then act". It makes
- * crash recovery depend on cleaning up the lock and the marker; idempotent
- * actions need no cleanup.
- *
- * Governance never touches another context's data. It talks to targets only.
+ * Applies each active retention rule to the records its context reports as expired. Safe to rerun
+ * at any time, including after a crash mid-batch, because `RetentionTarget.apply` is idempotent and
+ * the job skips work its log already records as done. Governance only ever talks to targets, never
+ * another context's data.
  */
 export class RetentionEnforcementJob {
   private readonly batchSize: number;
