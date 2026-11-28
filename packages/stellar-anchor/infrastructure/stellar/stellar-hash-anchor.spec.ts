@@ -19,19 +19,10 @@ import { fakeKmsClient } from "../testing/fake-kms-sign-client.js";
 import { StellarHashAnchor } from "./stellar-hash-anchor.js";
 
 /**
- * Offline tests for the credential surface of the Stellar adapter — the part
- * Issue #129 changed.
- *
- * The anchoring path itself needs a funded account and a reachable Horizon, so
- * `stellar-hash-anchor.testnet.spec.ts` covers it against the testnet and is
- * excluded from default CI. What *is* testable here, and what matters most, is
- * the boundary: which operations require a signer, what happens when one is
- * missing, and whether bytes produced across the `TransactionSigner` seam are
- * accepted by the SDK without the key ever being present in this process.
- *
- * Seeds are generated at runtime rather than committed: a fixture that looks
- * like a real key is a secret waiting to be mistaken for one, and the
- * contributor checks workflow fails the build on that shape alone.
+ * Offline tests of the Stellar adapter's signing boundary: which operations need a signer, what
+ * happens without one, and whether an externally produced signature is accepted by the SDK.
+ * Anchoring itself is covered by `stellar-hash-anchor.testnet.spec.ts`. Seeds are generated at
+ * runtime so no key-shaped fixture is committed.
  */
 describe("StellarHashAnchor signing boundary", () => {
   describe("configured without a signer", () => {
@@ -109,15 +100,9 @@ describe("StellarHashAnchor signing boundary", () => {
   });
 
   /**
-   * The seam this issue exists to create, tested against the real SDK rather
-   * than a mock of it.
-   *
-   * `TransactionBuilder` produces a digest, a key service signs those 32 bytes
-   * somewhere else, and the resulting signature has to be attachable to the
-   * transaction. `addSignature` verifies before attaching, so this is also the
-   * assertion that a remote signer's output is *the right kind of bytes* — a
-   * DER-wrapped signature from the same key fails here, which is precisely the
-   * failure `KmsTransactionSigner` refuses to pass on.
+   * Signs a transaction's 32-byte digest outside the transaction object and attaches it with the
+   * real SDK. `addSignature` verifies before attaching, so this also proves a remote signer's
+   * output has the right format; a DER-wrapped signature fails here.
    */
   it("accepts a signature produced outside this process", async () => {
     const kms = fakeKmsClient();

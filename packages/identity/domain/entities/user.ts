@@ -43,7 +43,7 @@ interface UserProps {
    *
    * Redundant with `status === "deleted"` on purpose. The status drives
    * behavior; this records *when*, which the status alone cannot — and which
-   * audit, retention schedules, and the eventual erasure job (Phase 24) all
+   * audit, retention schedules, and the eventual erasure job all
    * need. {@link User.reconstitute} rejects the two disagreeing.
    */
   readonly deletedAt?: Date | undefined;
@@ -103,7 +103,7 @@ export class User {
 
   /**
    * Rebuilds a `User` from already-trusted data (e.g. a database row read
-   * back by a repository in Phase 03). Unlike {@link register}, this does not
+   * back by a repository). Unlike {@link register}, this does not
    * go through status-transition validation — the data is assumed to already
    * represent a previously-valid state, not a new transition being made now.
    * Never carries pending domain events: a rehydrated aggregate represents
@@ -166,15 +166,9 @@ export class User {
   }
 
   /**
-   * Soft-deletes the user: marks the status `deleted` and stamps
-   * {@link deletedAt}. The row is never removed.
-   *
-   * Terminal — see {@link ALLOWED_TRANSITIONS}. Deleting keeps the row so
-   * that everything referencing this user by id stays resolvable: an audit
-   * entry saying "user X suspended user Y" is unreadable if Y's row is gone,
-   * and every foreign key pointing at it would have to be nulled or cascaded.
-   * See docs/guides/database.md on the tradeoffs, including why Phase 24
-   * still needs genuine erasure on top of this.
+   * Soft-deletes the user: sets status `deleted` and stamps {@link deletedAt}. Terminal. The row is
+   * kept so audit entries and foreign keys referencing the user stay resolvable; genuine erasure is
+   * a separate concern (see docs/guides/database.md).
    */
   delete(reason?: string): Result<User, ValidationError> {
     const transitioned = this.transitionTo("deleted", reason);

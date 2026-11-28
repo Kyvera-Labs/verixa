@@ -18,89 +18,29 @@ export interface RecordAuditEventCommand {
 const DEFAULT_MAX_ATTEMPTS = 3;
 
 /**
- * Anything that takes an audit record for a domain event that happened.
+ * Records an audit entry for a domain event that already happened. A port so routes do not depend
+ * on whether the synchronous writer or the batched writer is wired.
  *
- * ## Why this is a port when one implementation already existed
- *
- * `RecordAuditEvent` writes synchronously: it returns once the entry is in the
- * log. `BatchedAuditWriter` returns once the entry is *queued*, which is the
- * whole point of it under load. Those are different latencies with the same
- * meaning to the caller -- "this event was offered for recording" -- and no route
- * in `apps/api` should have to know which one was wired. Without the port,
- * turning batching on means editing every call site.
- *
- * ## What implementations owe the caller
- *
- * `execute` resolves with the entry that was written, or `undefined` when nothing
- * was written. It must never reject: the operation being audited already
- * succeeded, and an audit failure reported as a thrown error converts a
- * bookkeeping problem into a user-facing outage.
- *
- * `undefined` therefore covers three different situations -- a transient write
- * failure, a lost race, and a full queue -- and they are not distinguishable from
- * the return value by design. Anything that needs to tell them apart is a metrics
- * consumer and should read the writer's overflow and failure reports instead of
- * inferring them from a route.
+ * `execute` resolves with the written entry, or `undefined` if nothing was written (write failure,
+ * lost race or full queue). It must never reject: the audited operation already succeeded. Use the
+ * writer's failure and overflow reports to tell the cases apart.
  */
 export interface AuditRecorder {
   execute(command: RecordAuditEventCommand): Promise<AuditLogEntry | undefined>;
 }
 
 /**
- * Appends one entry to the audit log.
+ * Appends one entry to the audit log. Failures are logged and swallowed, never thrown, so a failed
+ * audit write does not fail the operation being audited. The resulting gap is detectable by
+ * `verifyChain` and by the anchored head.
  *
- * ## Why this returns nothing and throws nothing
+ * Appends race on a unique `sequence`; a `ChainConflictError` is retried by re-reading the head and
+ * relinking, up to a fixed limit.
  *
- * Audit recording sits alongside the operation being audited, not in front of
- * it. A login that succeeded should not be reported as failed because the
- * audit write failed, and a caller should not have to decide what to do about
- * it — so failures are swallowed here and reported through the logger.
- *
- * That is a real trade and worth being explicit about: it means an attacker
- * who can reliably break audit writes can act unrecorded. The mitigation is
- * not to fail the user's request, which mostly produces an outage; it is that
- * a gap in the sequence is *visible* — `verifyChain` reports `sequence_gap`,
- * and the anchored chain head will not match what the operator expects.
- *
- * ## Serialization
- *
- * Appends must not run concurrently. Two entries built from the same
- * predecessor produce two chains claiming the same sequence, and the second
- * insert fails on the unique index — which is the correct outcome, but only
- * because the index is there. This is why `sequence` is unique in the schema
- * rather than merely indexed.
- *
- * The repository turns that failure into a `ChainConflictError` rather than
- * leaving it as a database error, and this class is where the *response* lives:
- * re-read the head, relink onto it, try again. Retrying is safe precisely
- * because the losing append never landed — the retry is not writing a second
- * entry, it is completing the one the caller asked for.
- *
- * Bounded, because an unbounded retry loop under sustained contention is a
- * memory and CPU leak that turns a throughput problem into an outage. Giving
- * up and reporting through `onError` is the right endpoint: a missing audit
- * entry is bad, a wedged process is worse, and the gap is detectable either
- * way.
- * ## Metadata bounds are checked here; content is not
- *
- * Metadata is the one part of an entry that usually comes from outside the
- * process, so this is where `AuditMetadata` puts its limits: how many fields,
- * how long each key and value, and that every value is a string. Those are
- * checked on the way in because a bound cannot be imposed later — by the time
- * an exporter is writing a cell, the oversized bag is already the record.
- *
- * What is *not* done here is escaping newlines, commas, or control characters.
- * That is the encoder's job, at each boundary where text could be misread (see
- * `AuditMetadata.toLogFields` and `ExportAuditEvents`), and rewriting values on
- * the way in would mean the digest commits to something other than what was
- * supplied. The distinction is deliberate and worth keeping: **bounds on input,
- * escaping on output.**
- *
- * When the bounds are exceeded the entry is still appended, with the bag
- * replaced by a marker naming the reason. Refusing to record would let anyone
- * who can trigger a rejected write act unrecorded, which is the worse failure;
- * the marker means the attempt is visible in the log rather than silently
- * dropped.
+ * Metadata bounds (field count, key and value length, string values) are enforced here because they
+ * cannot be applied later. Escaping happens only on output, so the digest commits to exactly what
+ * was supplied. When bounds are exceeded the entry is still written, with the metadata replaced by
+ * a marker naming the reason.
  */
 export class RecordAuditEvent implements AuditRecorder {
   constructor(
@@ -149,14 +89,8 @@ export class RecordAuditEvent implements AuditRecorder {
 }
 
 /**
- * Records a burst of events as one atomic chain extension.
- *
- * The batch counterpart to {@link RecordAuditEvent}, and the reason the
- * `AuditLogRepository` port has `appendMany`. Entries are linked in the order
- * given, so a caller recording N events gets one chain of N new entries rather
- * than N independent compare-and-sets — which matters both for throughput (one
- * transaction) and for evidence (a batch that cannot be partially applied is a
- * batch whose ordering is guaranteed).
+ * Records a burst of events as one atomic chain extension, linked in the given order: one
+ * transaction, and an ordering that cannot be partially applied.
  */
 export async function recordAuditEventBatch(
   repository: AuditLogRepository,

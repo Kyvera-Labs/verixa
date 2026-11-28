@@ -655,14 +655,14 @@ flowchart LR
 
 #### Case 1: Adding a Mandatory Column
 
-❌ **Unsafe Single-Step Migration (Blocked by CI advisory check):**
+**Unsafe Single-Step Migration (Blocked by CI advisory check):**
 
 ```sql
 -- Fails zero-downtime check: existing rows have no value, and old replicas insert NULL
 ALTER TABLE "users" ADD COLUMN "organization_role" TEXT NOT NULL;
 ```
 
-✅ **Safe Expand/Contract Strategy:**
+**Safe Expand/Contract Strategy:**
 
 - **Step 1 (Expand - Release N):** Add the column as nullable (or with a safe constant DEFAULT):
   ```sql
@@ -680,13 +680,13 @@ ALTER TABLE "users" ADD COLUMN "organization_role" TEXT NOT NULL;
 
 #### Case 2: Renaming a Column
 
-❌ **Unsafe Single-Step Migration:**
+**Unsafe Single-Step Migration:**
 
 ```sql
 ALTER TABLE "users" RENAME COLUMN "given_name" TO "first_name";
 ```
 
-✅ **Safe Expand/Contract Strategy:**
+**Safe Expand/Contract Strategy:**
 
 - **Step 1 (Expand):** Add `first_name` as a nullable column.
 - **Step 2 (Deploy):** Update application code to write to both `given_name` and `first_name` (dual-write), but read from `given_name`.

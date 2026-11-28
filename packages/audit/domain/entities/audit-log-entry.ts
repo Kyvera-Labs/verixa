@@ -44,7 +44,7 @@ export type AuditAction =
   | "audit.queried"
   | "audit.exported"
   | "audit.access_denied"
-  // API key lifecycle (Issue 233)
+  // API key lifecycle
   | "api_key.created";
 
 /**
@@ -71,40 +71,13 @@ interface AuditLogEntryProps {
 }
 
 /**
- * One tamper-evident record of something that happened.
+ * One tamper-evident audit record. Each entry's hash covers its predecessor's hash and its own
+ * content, so altering or removing an entry breaks every later hash.
  *
- * ## Why entries are chained rather than merely timestamped
- *
- * An audit log that is just rows in a table proves nothing against the one
- * adversary it most needs to resist: someone with write access to that table.
- * They can delete the row recording what they did, or edit it, and no
- * evidence of the change remains.
- *
- * Each entry therefore commits to its predecessor: `hash = SHA256(previous
- * hash ‖ this entry's content)`. Removing or altering any entry breaks every
- * hash after it, so tampering is no longer a matter of editing one row — it
- * requires rewriting the entire log from that point forward.
- *
- * ## What chaining alone does *not* give you
- *
- * Exactly that: it requires rewriting the log, and an attacker with full
- * database access can do precisely that. A rewritten chain is internally
- * consistent and indistinguishable from an honest one.
- *
- * Chaining makes the log tamper-**evident** to anyone holding an earlier copy
- * of a hash. It does not make it tamper-**proof**. Closing that gap needs a
- * commitment stored somewhere the operator cannot rewrite, which is what
- * anchoring the chain head to Stellar is for — see
- * `docs/adr/0003-stellar-audit-anchoring.md`. The two mechanisms are
- * complementary and neither is sufficient alone, which is worth stating
- * plainly because "we hash-chain our audit log" is frequently claimed as
- * though it were the whole answer.
- *
- * ## No update or delete
- *
- * There is deliberately no method to modify an entry. Append-only is the
- * property being protected, and an aggregate that could edit itself would
- * make the chain a formality.
+ * Chaining is tamper-evident, not tamper-proof: someone with full database access can rewrite the
+ * whole chain. Anchoring the head to Stellar closes that gap (see
+ * `docs/adr/0003-stellar-audit-anchoring.md`). Entries are append-only and have no update or
+ * delete.
  */
 export class AuditLogEntry {
   readonly id: AuditLogEntryId;
@@ -130,28 +103,13 @@ export class AuditLogEntry {
   }
 
   /**
-   * The canonical byte representation an entry's hash is computed over.
+   * The canonical bytes an entry's hash is computed over: fixed field order, sorted metadata keys,
+   * and a UTF-8 byte length before every field.
    *
-   * Field order is fixed, metadata keys are sorted, and **every field carries
-   * its own byte length**. That last part is the one to read carefully.
-   *
-   * This used to join the fields with newlines, on the reasoning that an
-   * explicit separator makes concatenation unambiguous. It does not, when the
-   * separator can appear *inside* a field: `actorId` and `subjectId` are
-   * routinely supplied from outside the process, and an entry with actor
-   * `"a\nb"` and subject `"c"` serialized identically to a different entry with
-   * actor `"a"` and subject `"b\nc"`. Two different facts, one digest — which
-   * inverts the property the chain exists to provide. The same bug class
-   * reappears wherever a value is embedded in a syntax by concatenation, so it
-   * is treated as a threat in its own right in
-   * `docs/security/threat-model-audit.md`.
-   *
-   * A length prefix declares how many bytes belong to the field, so nothing
-   * inside it can be read as framing. The form is versioned and mechanical
-   * rather than pretty, because the digest has to be re-derivable years later
-   * from the stored columns by somebody not running this code — hence UTF-8
-   * *byte* lengths rather than JavaScript character counts, which disagree
-   * about anything outside ASCII.
+   * Length prefixes matter because fields such as `actorId` come from outside. With a plain
+   * separator, actor `a\nb` plus subject `c` would hash the same as actor `a` plus subject `b\nc`.
+   * The format is versioned and byte-based so the digest can be re-derived from stored columns
+   * without this code.
    */
   private static canonicalize(props: Omit<AuditLogEntryProps, "hash" | "id">): string {
     const fields = [
@@ -246,20 +204,9 @@ export class AuditLogEntry {
   }
 
   /**
-   * A one-record-per-entry projection of this entry, safe to write into any
-   * line-oriented sink.
-   *
-   * No field can contain a character a reader would take for a line break, so
-   * the number of lines in the output equals the number of entries — the
-   * property an auditor counting rows is silently relying on, and the reason
-   * this projection, rather than the raw values, is what `ExportAuditEvents`
-   * builds its CSV rows from.
-   *
-   * Note what this does *not* do: it does not change what is stored or hashed.
-   * The escaping is a property of this rendering, not of the data, so the same
-   * entry can be logged, exported as CSV, and exported as JSON without any of
-   * the three agreeing on how to write a newline — and without any of them
-   * rewriting the record.
+   * Projection of this entry that is safe for line-oriented sinks: no field can contain a line
+   * break, so one entry is always one line. It changes only the rendering, never what is stored or
+   * hashed.
    */
   toLogFields(): Readonly<Record<string, string>> {
     // `sequence`, `occurredAt`, and the two hashes are structurally safe — a
@@ -286,14 +233,8 @@ export interface ChainBreak {
 }
 
 /**
- * Verifies a contiguous run of entries, seeded with the entry that precedes
- * the run.
- *
- * The seed is what makes verification work on a *window* of a log rather than
- * only from its genesis: a caller that pages through a million-entry log never
- * holds the whole chain in memory, but each page still has to know what its
- * first entry was supposed to link to. Pass `undefined` for the run that starts
- * the chain.
+ * Verifies a contiguous run of entries, seeded with the entry before the run, so a large log can be
+ * verified page by page. Pass `undefined` for the run that starts the chain.
  */
 export function verifyChainFrom(
   previous: AuditLogEntry | undefined,
@@ -323,19 +264,13 @@ export function verifyChainFrom(
 }
 
 /**
- * Verifies a chain, in order, and reports the first break.
+ * Verifies a chain in order and reports the first break; later breaks are consequences of the
+ * first.
  *
- * Returns the *first* break rather than all of them because everything after
- * a break is unreliable anyway — once an entry is altered, every subsequent
- * link mismatches as a consequence, and listing them all would bury the one
- * fact that matters under noise it caused.
- *
- * Checks three distinct failures, and they mean different things:
- * - `content_altered` — an entry's own hash no longer matches its content.
- * - `link_broken` — the entry is intact but does not follow its predecessor,
- *   which is what a *deletion* looks like.
- * - `sequence_gap` — numbering skips, which catches a removal that also fixed
- *   up the hashes but not the counter.
+ * - `content_altered`: an entry's hash no longer matches its content.
+ * - `link_broken`: an intact entry does not follow its predecessor, as after a deletion.
+ * - `sequence_gap`: the numbering skips, catching a removal that re-derived the hashes but not the
+ *   counter.
  */
 export function verifyChain(entries: readonly AuditLogEntry[]): ChainBreak | undefined {
   return verifyChainFrom(undefined, entries);

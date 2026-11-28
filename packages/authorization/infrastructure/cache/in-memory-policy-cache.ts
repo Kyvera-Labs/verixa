@@ -29,22 +29,10 @@ interface StoredEntry {
 }
 
 /**
- * The in-memory {@link PolicyCache}: one process, one map, no I/O.
- *
- * Production uses the Redis adapter so that every node shares one view and
- * invalidation reaches all of them; this one exists for the deployments that
- * don't need that (a single-node API, a test, a CLI simulating a policy) and as
- * the reference implementation the shared contract suite is written against.
- *
- * ## Generations, not deletion
- *
- * Invalidation does not walk the map removing matching keys. Each resource type
- * has a generation counter, the entry key embeds the generation it was written
- * under, and `invalidateResourceType` / `invalidateAll` bump the counter. The
- * entries stay in the map until their TTL passes, but they are *unreachable*
- * from the moment the generation changes — which is the property the contract
- * promises ("no stale-policy window"), and the same shape the Redis adapter
- * uses so that both behave identically under the shared contract suite.
+ * Single-process {@link PolicyCache} for single-node deployments, tests and the CLI, and the
+ * reference implementation for the contract suite. Like the Redis adapter, invalidation bumps a
+ * generation counter instead of deleting entries, so old entries become unreachable immediately and
+ * expire by TTL.
  */
 export class InMemoryPolicyCache implements PolicyCache {
   private readonly entries = new Map<string, StoredEntry>();

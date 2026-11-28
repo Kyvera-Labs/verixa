@@ -37,17 +37,9 @@ function uniqueViolation(): Error {
 }
 
 /**
- * A stand-in for the Prisma audit table, plus the transaction runner the
- * adapter is constructed with.
- *
- * Enforces the two unique constraints the schema declares (`sequence` and
- * `hash`) by raising the error Prisma raises, so the adapter's error
- * translation is exercised without a database. `createMany` is all-or-nothing
- * for the same reason a real multi-row statement is.
- *
- * Tests that need to interpose between the adapter's head read and its insert
- * wrap `createMany` (see the race case below) — that seam is the only way to
- * reproduce the window a compare-and-set read cannot close on its own.
+ * Fake Prisma audit table and transaction runner. Enforces the unique `sequence` and `hash`
+ * constraints with Prisma's error so the adapter's error translation is tested without a database.
+ * Tests wrap `createMany` to inject a race between the head read and the insert.
  */
 function fakeDatabase(): { table: AuditDelegate; rows: AuditRowInput[] } {
   const rows: AuditRowInput[] = [];

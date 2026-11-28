@@ -9,28 +9,13 @@ import { LocalTransactionSigner } from "../signing/local-transaction-signer.js";
 import { StellarHashAnchor, type StellarNetwork } from "../stellar/stellar-hash-anchor.js";
 
 /**
- * Command-line access to anchoring and verification.
+ * Command-line anchoring and verification. Verification needs no secret key or funded account, so
+ * an auditor, regulator or user can check a hash and transaction reference against the public
+ * ledger independently.
  *
- * The verification half matters more than it might look. An audit log's
- * integrity guarantee is worthless if only the operator's own software can
- * check it — the whole point of anchoring externally is that a third party
- * (an auditor, a regulator, a suspicious user) can confirm the commitment
- * without trusting, or even having access to, the operator's systems. This
- * CLI is that capability in its most portable form: give someone a hash and
- * a transaction reference, and they can check it themselves.
- *
- * Verifying needs no secret key and no funded account — it only reads public
- * ledger data.
- *
- * ## Anchoring through this CLI is a development path
- *
- * The CLI signs with a key read from the environment, which is the arrangement
- * `TransactionSigner` was introduced to replace. It stays because a testnet
- * experiment should not require a KMS, and because the alternative — no CLI at
- * all — would push operators to write their own, worse version. So it refuses to
- * sign on the public network unless explicitly overridden. Production anchoring
- * goes through the API's composition root, where a `KmsTransactionSigner` is
- * wired. See `docs/security/stellar-key-management.md`.
+ * Anchoring through this CLI signs with a key from the environment and is meant for development and
+ * testnet. It refuses the public network unless explicitly overridden; production anchoring uses
+ * the API's `KmsTransactionSigner` (see docs/security/stellar-key-management.md).
  */
 
 const USAGE = `
@@ -66,14 +51,10 @@ function resolveNetwork(): StellarNetwork {
 }
 
 /**
- * Prints the anchoring account's balance as one structured metric line and
- * exits non-zero when the account is running down, so the same command can be
- * a dashboard input and a cron probe.
- *
- * Reads the account with `STELLAR_ANCHOR_PUBLIC_KEY` when it is available: a
- * funding check has no need for a signing key, and the process that watches
- * the account should not be the process that can spend it. The secret key is
- * accepted only as a fallback, deriving the public one from it.
+ * Prints the anchoring account's balance as one structured metric line and exits non-zero when it
+ * is running low, so it works as a dashboard input and a cron probe. Uses
+ * `STELLAR_ANCHOR_PUBLIC_KEY` when set, so the watcher does not need the spending key; the secret
+ * key is only a fallback.
  */
 async function reportBalance(): Promise<never> {
   const network = resolveNetwork();

@@ -2,18 +2,9 @@ import type { BruteForceAttemptStore } from "../ports/brute-force-attempt-store.
 import type { RateLimiter } from "../ports/rate-limiter.js";
 
 /**
- * The kinds of attempt this policy is allowed to count (Issue 209).
- *
- * A union rather than a free string: an unrecognised scope would silently
- * create its own counter bucket, so a typo would appear to work while
- * protecting nothing. Making it a type error is the only way to catch that
- * without a test for every spelling.
- *
- * `login` and `password-reset` are wired into the credential endpoints today.
- * `mfa` and `api-key` are declared so the key derivation and the tests cover
- * them, and the endpoints that use them can adopt the same instance without a
- * redesign — see `docs/security/brute-force-protection.md` for why the MFA
- * endpoint is not wired yet.
+ * Attempt kinds the policy may count. A union, not a free string, so a typo cannot silently create
+ * an unprotected counter. `login` and `password-reset` are wired to the credential endpoints; `mfa`
+ * and `api-key` are declared for later adoption (see docs/security/brute-force-protection.md).
  */
 export type BruteForceScope = "login" | "mfa" | "password-reset" | "api-key";
 
@@ -66,47 +57,16 @@ export interface BruteForceDecision {
 }
 
 /**
- * Refuses repeated guessing against one secret, keyed by who is being
- * impersonated rather than by what they typed.
+ * Limits repeated guessing per `scope:identifier`, adding to the per-account lockout on
+ * `Credential`. It also covers identifiers with no account (otherwise enumeration of a stolen user
+ * list is unthrottled) and makes password spraying visible per target.
  *
- * ## What this adds to the per-account lockout
+ * `check` requires both this policy and the rate limiter to allow: a limiter counts requests, this
+ * counts failures. Refused requests record no failure, so being told to wait does not extend a
+ * lockout.
  *
- * `Credential.recordFailedAttempt` already counts failures and locks an
- * account. It cannot help with the two cases that matter most to an attacker:
- *
- * - **An identifier with no account.** A probe against `nobody@example.com`
- *   advances nothing, because there is no row to advance. Mass enumeration of
- *   a stolen user list is therefore completely unthrottled by a per-row
- *   counter.
- * - **A distributed guess.** Password spraying tries one common password
- *   against thousands of accounts, one attempt each — below every per-account
- *   threshold, forever.
- *
- * This policy counts failures per `scope:identifier` in a store of its own, so
- * the first case accumulates and the second is visible at least per target.
- * It is a gate in front of the use case, not a replacement for the aggregate's
- * own counter: the two are additive, and a real lockout still comes from the
- * row that a restart cannot erase.
- *
- * ## Why it composes with a rate limiter instead of wrapping one
- *
- * A limiter counts *requests*; this counts *failures*. They answer different
- * questions, and the dangerous combination is the one where each sees the
- * other as satisfied: a limiter that permits 10 requests a minute and a policy
- * with a threshold of 5 would let a burst through if either gate were checked
- * alone. So `check` requires both to allow, and reports which refused.
- *
- * What that deliberately does not do is multiply penalties. A refused request
- * records no failure, so an attacker already in lockout does not climb the
- * backoff ladder for being told to wait — the counter moves on failures, and
- * the gate is read-only.
- *
- * ## The honest limits
- *
- * In-memory, per process. A restart clears it, a second API replica has its
- * own, and the identifier is only as good as the caller's normalisation. Phase
- * 15 replaces the store with a durable one behind the same port; nothing here
- * changes when that happens.
+ * The in-memory store is per process: a restart clears it and each replica has its own. A durable
+ * store can replace it behind the same port.
  */
 export class BruteForcePolicy {
   private readonly thresholds: BruteForceThresholds;
@@ -126,14 +86,9 @@ export class BruteForcePolicy {
   }
 
   /**
-   * The bucket a set of attempts shares.
-   *
-   * Lowercased and trimmed so `Admin@Example.com ` and `admin@example.com` are
-   * one key. This is *not* an attempt at canonicalising an address — the two
-   * differ in the local part for some providers, and getting that wrong would
-   * merge two people's budgets. It only has to be close enough that the same
-   * attacker typing the same string does not get a fresh bucket for each
-   * spelling mistake.
+   * The bucket a set of attempts shares: scope plus the identifier lowercased and trimmed, so
+   * trivial spelling variants of the same input share one bucket. It does not try to canonicalize
+   * email addresses.
    */
   static key(scope: BruteForceScope, identifier: string): string {
     return `${scope}:${identifier.trim().toLowerCase()}`;

@@ -21,15 +21,12 @@ export interface AssignRoleToUserCommand {
 export type AssignRoleToUserError = NotFoundError | ValidationError | ConflictError;
 
 /**
- * Orchestrates assigning a role to a user within an organization or globally (Issue 133).
+ * Assigns a role to a user within an organization or globally.
  *
- * ## Business Invariants & Privilege Management:
- * 1. **Role Existence:** Verifies that the target role exists in `RoleRepository`.
- * 2. **Scope Compatibility:** If a role is scoped to a specific tenant organization,
- *    it cannot be assigned to a different organization or assigned globally.
- * 3. **Idempotency:** If the user already has an active, non-expired assignment for the
- *    exact same role and scope, the operation completes idempotently and returns the existing assignment.
- * 4. **Persistence:** Newly created assignments are persisted via `UserRoleAssignmentRepository`.
+ * 1. The role must exist.
+ * 2. An organization-scoped role cannot be assigned to another organization or globally.
+ * 3. If an active assignment for the same role and scope exists, it is returned unchanged.
+ * 4. New assignments are persisted through `UserRoleAssignmentRepository`.
  */
 export class AssignRoleToUser {
   constructor(

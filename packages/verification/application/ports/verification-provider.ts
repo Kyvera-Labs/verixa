@@ -2,46 +2,19 @@ import type { Evidence } from "../../domain/entities/evidence.js";
 import type { ProviderCheckResult } from "../dtos/provider-check-result.js";
 
 /**
- * A third-party automated identity-verification vendor, behind a port.
+ * A third-party identity-verification vendor behind a port, chosen in the composition root so
+ * swapping vendors is a one-file change (see docs/guides/verification-provider-integration.md).
  *
- * ## Why a port and not a direct SDK call
+ * Every implementation must:
  *
- * Verixa is infrastructure meant to be reused across projects, so hardcoding
- * one vendor's SDK into a use case would violate the hexagonal dependency
- * rule and lock every consumer into that vendor. The application layer names
- * only this interface; the concrete adapter — vendor A, vendor B, or the
- * shipped `ManualReviewProvider` that calls nobody — is chosen in the
- * composition root. Swapping vendors is then a one-file change, which is the
- * Adapter pattern doing exactly what it is for.
- *
- * See `docs/guides/verification-provider-integration.md` for the reference
- * implementation a new adapter should copy.
- *
- * ## The contract every implementation must fulfil
- *
- * - **Return a normalized {@link ProviderCheckResult}, never a vendor type.**
- *   No vendor field names, error codes, or SDK classes may appear in the
- *   returned value. If a vendor's answer cannot be mapped, return
- *   `inconclusive` — do not invent a pass or a fail.
- * - **Say `inconclusive` when you cannot decide.** A provider that is unsure,
- *   timed out at the vendor, or has no opinion (the manual-review default)
- *   must not be represented as `passed` or `failed`. This is the outcome that
- *   routes a case to a human, and collapsing it is how a person is wrongly
- *   denied or a fraudster wrongly admitted.
- * - **Never decide the request.** A provider returns an *opinion*. It does not
- *   approve, reject, or transition the request — `RunAutomatedCheck` (Issue
- *   172) records the result and sends the case to `in_review` regardless of
- *   the outcome, and only a human reviewer makes the terminal decision in this
- *   phase.
- * - **Do not throw for a negative result.** `failed` is an expected answer,
- *   not an error. Throw/reject only when the *check itself* could not be
- *   completed (network failure, misconfiguration); the caller treats that as
- *   an infrastructure failure and still routes the case to a human.
- * - **Handle exactly the evidence given.** `evidence.storageRef` is an opaque
- *   pointer — fetch the bytes through `EvidenceStorage` (Issue 166), never
- *   assume a filesystem path or a public URL.
- * - **Treat the result as untrusted input on the way back.** Validate through
- *   `ProviderCheckResult.isValid` before returning it.
+ * - Return a normalized {@link ProviderCheckResult}, never vendor types; return `inconclusive` if
+ *   the answer cannot be mapped.
+ * - Return `inconclusive` whenever it cannot decide.
+ * - Never decide the request. It gives an opinion; `RunAutomatedCheck` records it and sends the
+ *   case to a human reviewer regardless.
+ * - Not throw for a negative result. Throw only when the check itself could not run.
+ * - Read evidence bytes through `EvidenceStorage`, treating `evidence.storageRef` as opaque.
+ * - Validate its result with `ProviderCheckResult.isValid` before returning.
  */
 export interface VerificationProvider {
   /**

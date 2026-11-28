@@ -27,15 +27,8 @@ export interface QueryAuditEventsCommand {
 }
 
 /**
- * One page of the log, plus where the next page starts.
- *
- * A keyset cursor rather than an offset: `OFFSET 1000` makes the database read
- * and discard a thousand rows before returning any, and the cost grows with
- * depth, whereas "everything after sequence N" is a range scan on an indexed
- * column and costs the same however far into the log it reaches. The trade is
- * that a caller can only continue forward, not jump to an arbitrary page —
- * acceptable for an audit log, where the access pattern is "show me what
- * happened" rather than "show me page 40".
+ * One page of the log and the cursor for the next. Keyset pagination keeps every page a cheap
+ * indexed range scan; the trade-off is forward-only paging.
  */
 export interface QueryAuditEventsResult {
   readonly entries: readonly AuditLogEntry[];
@@ -45,26 +38,11 @@ export interface QueryAuditEventsResult {
 }
 
 /**
- * Reads one page of an organization's audit log, on behalf of someone allowed
- * to read it, and leaves a record that they did.
+ * Reads one page of an organization's audit log and records the read before returning entries.
+ * Requires `audit:query` in that organization.
  *
- * ## Who audits the auditors
- *
- * An audit log is the most concentrated record of who did what in the system,
- * which makes it one of the most sensitive things in it. If reading it were
- * unprivileged, or privileged but unobserved, the log would become the easiest
- * way to learn what an organization's users do — and nobody would know it had
- * been used that way. So every read requires `audit:query` within the
- * requested organization, and every read is itself appended to the audit log
- * before any entry is returned. Compliance regimes (SOC 2's CC7 monitoring
- * criteria, among others) expect exactly this.
- *
- * ## Why the page size is capped
- *
- * `audit:query` is granted more widely than `audit:export`. Without a cap, a
- * query with `limit: 10_000_000` is an export by another name, reached with
- * the weaker permission. The cap keeps the two permissions meaning different
- * things.
+ * Page size is capped so a large query cannot act as an export under the weaker `audit:query`
+ * permission.
  */
 export class QueryAuditEvents {
   constructor(

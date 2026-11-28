@@ -72,7 +72,7 @@ describe("GetUserOrganizations", () => {
 });
 
 /**
- * Added in Issue 417: kills the mutants at get-user-organizations.ts:26 that
+ * Kills the mutants at get-user-organizations.ts:26 that
  * the mutation-testing spike found surviving (the `status === "active"`
  * filter replaced by `true`, or removed). Every existing test used only
  * active memberships, so dropping the filter changed nothing they checked.

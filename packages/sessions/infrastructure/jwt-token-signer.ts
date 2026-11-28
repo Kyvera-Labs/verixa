@@ -30,23 +30,12 @@ function isAccessTokenClaims(value: unknown): value is AccessTokenClaims {
 }
 
 /**
- * Signs and verifies access tokens as HS256 JWTs, hand-rolled against
- * `node:crypto` rather than a JWT library.
+ * Signs and verifies access tokens as HS256 JWTs using `node:crypto`, without a JWT library. The
+ * format is standard; implementing a single algorithm avoids `alg: none` and algorithm confusion,
+ * and adds no dependency on a security-critical path.
  *
- * The format (three base64url segments — header, payload, HMAC signature)
- * is exactly what any JWT library produces; there is no compatibility gap.
- * Rolling it here trades a well-trodden dependency for zero new supply chain
- * surface on a security-critical path, and the entire implementation is
- * short enough to read start to finish in the time it takes to audit
- * whether a third-party library's defaults match what this file assumes
- * anyway (no `alg: none`, no algorithm confusion between HMAC and RSA — both
- * moot here because only one algorithm is ever implemented).
- *
- * Deliberately minimal claims: `sessionId` and `userId`, nothing else. There
- * is no `role` or permission claim to keep in sync with the database and
- * potentially go stale between issuance and use — authorization decisions
- * re-check current state via `sessionId`/`userId` rather than trusting a
- * cached claim from token-issuance time. See `docs/security/authentication-flows.md`.
+ * Claims are only `sessionId` and `userId`. Authorization re-checks current state rather than
+ * trusting role claims that could go stale (see docs/security/authentication-flows.md).
  */
 export class JwtTokenSigner implements TokenSigner {
   constructor(private readonly keyProvider: SigningKeyProvider) {}

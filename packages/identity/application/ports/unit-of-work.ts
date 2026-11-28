@@ -12,28 +12,13 @@ export interface IdentityRepositories {
 }
 
 /**
- * Runs work spanning more than one aggregate atomically.
+ * Runs work spanning several aggregates atomically, for example creating an organization together
+ * with its owner's membership. Hands the callback a set of repositories rather than a transaction
+ * handle, so use cases never see persistence types (see docs/guides/domain-modeling.md).
  *
- * `CreateOrganization` (Issue 034) is the motivating case: it writes an
- * `Organization` *and* the owner's `OrganizationMembership`, and an
- * organization that exists with no owner-member is a corrupt state no
- * subsequent code knows how to interpret. Two independent `save` calls can
- * produce exactly that if the process dies between them.
- *
- * The port deliberately hands the caller a *set of repositories* rather than
- * exposing a transaction handle. A use case must not know whether it's inside
- * a Postgres transaction, a savepoint, or an in-memory fake — it only needs
- * the guarantee that everything in the callback commits together or not at
- * all. Leaking a `PrismaTransactionClient` here would put an ORM type in the
- * application layer and undo the point of the ports (see
- * docs/guides/domain-modeling.md).
- *
- * Contract:
- * - If `work` resolves, every write inside it is committed together.
- * - If `work` throws or rejects, every write inside it is rolled back and the
- *   error propagates. Returning a `Result.err` is **not** a rollback signal —
- *   an expected domain failure is a normal outcome, and by the time one is
- *   returned nothing should have been written anyway.
+ * - If `work` resolves, every write inside it commits together.
+ * - If `work` throws or rejects, every write is rolled back and the error propagates. Returning
+ *   `Result.err` is not a rollback signal.
  */
 export interface UnitOfWork {
   run<T>(work: (repositories: IdentityRepositories) => Promise<T>): Promise<T>;

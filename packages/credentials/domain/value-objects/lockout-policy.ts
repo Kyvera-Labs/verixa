@@ -12,14 +12,9 @@ export interface LockoutPolicy {
   /** How long the first lock lasts. */
   readonly baseDurationMs: number;
   /**
-   * Multiplier applied per additional failure past the threshold.
-   *
-   * Exponential rather than fixed because a fixed window is close to useless
-   * against a patient attacker: locking for 15 minutes after 5 attempts still
-   * permits ~480 guesses a day indefinitely, forever. Doubling makes a
-   * sustained campaign collapse into impracticality within a handful of
-   * rounds, while costing a legitimate user who mistypes twice almost
-   * nothing.
+   * Multiplier applied per failure past the threshold. Exponential backoff makes a sustained
+   * guessing campaign impractical, while a fixed window would still allow hundreds of guesses a
+   * day.
    */
   readonly backoffFactor: number;
   /**
@@ -29,7 +24,7 @@ export interface LockoutPolicy {
    * attackers: anyone who knows an address can lock its owner out for years
    * by failing enough times. The cap is what keeps lockout a speed bump for
    * the attacker rather than a weapon against the user. Account recovery
-   * (Issue 069) is the escape hatch that makes even the cap survivable.
+   * is the escape hatch that makes even the cap survivable.
    */
   readonly maxDurationMs: number;
 }

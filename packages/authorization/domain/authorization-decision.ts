@@ -1,13 +1,7 @@
 /**
- * The decision model returned by every authorization path, plus the precedence
- * contract that composes them.
- *
- * Two rules from `docs/security/threat-model-abac.md` are executable here
- * rather than only described there. Threat E-1 (RBAC/ABAC precedence bugs) is
- * the reason the precedence strategy below is a named, resolved value instead
- * of an if-order inside the service; threat E-2 (over-grant by combining) is
- * the reason `deny-overrides` is the default. A change to either has to be a
- * deliberate edit to this file, reviewed as a security change.
+ * The decision model returned by every authorization path, and the precedence contract that
+ * combines them. Precedence is a named value and `deny-overrides` is the default (threats E-1 and
+ * E-2 in docs/security/threat-model-abac.md); changing either is a security change.
  */
 
 /** The two terminal outcomes a decision can have. There is no "abstain" at this layer. */
@@ -36,26 +30,12 @@ export interface AuthorizationDecision {
 }
 
 /**
- * The composition contract between the RBAC layer (Phase 07) and the ABAC
- * layer (Issue 148).
+ * How RBAC and ABAC decisions combine. The order is configuration, but {@link
+ * assertAuthorizationPrecedenceIsSafe} rejects any configuration that breaks these rules:
  *
- * Issue 152 asks for a *documented, configurable* precedence order. Both halves
- * matter, and they pull in opposite directions: a deployment should be able to
- * state the order it runs under, but the two rules below are the ones that stop
- * a coarse role grant from silently outranking a fine-grained policy denial.
- * The resolution is that the order is configuration — resolved once, carried as
- * a value, and asserted in tests — while {@link assertAuthorizationPrecedenceIsSafe}
- * refuses any configuration that weakens it, so a typo or an optimistic local
- * edit fails loudly instead of shipping an over-grant.
- *
- * - An explicit ABAC `DENY` always overrides an RBAC `PERMIT`: an attribute
- *   policy is the only place that can express "not this time" for a role that
- *   would otherwise be allowed (working hours, clearance, tenant boundaries).
- *   Threat E-1 is exactly this rule failing, and it is rated the highest-risk
- *   failure of the phase.
- * - An ABAC `PERMIT` never overrides an RBAC `DENY`, and an ABAC
- *   `NOT_APPLICABLE` never upgrades to a permit. Role denials stay final, and
- *   "no policy matched" is a denial, not an approval.
+ * - An explicit ABAC `DENY` always overrides an RBAC `PERMIT`, so a policy can withhold what a role
+ *   grants.
+ * - An ABAC `PERMIT` never overrides an RBAC `DENY`, and `NOT_APPLICABLE` never becomes a permit.
  */
 export interface AuthorizationPrecedence {
   /** When false, a role grant short-circuits the policy engine and an applicable `DENY` policy becomes unreachable. Mandated `true`. */
@@ -82,16 +62,9 @@ export class UnsafeAuthorizationPrecedenceError extends Error {
 }
 
 /**
- * Rejects a precedence order that would weaken the composition contract.
- *
- * Called by the service at construction time, so a bad configuration stops the
- * process at boot rather than granting access wrongly at request time. The
- * rejected alternative that motivated this: making the order fully free-form,
- * including an `rbac-first` mode that consults policies only when no role
- * matched. It is one indexed lookup cheaper and it reads like the issue's own
- * summary sentence, but it makes every policy denial unreachable for subjects
- * who hold a role — the policy layer could then only add authority, never
- * withhold it. That is threat E-1 with a configuration flag on it.
+ * Rejects a precedence order that weakens the composition contract. Called at service construction
+ * so a bad configuration fails at boot. For example, an `rbac-first` mode that skips policies when
+ * a role matches would let roles bypass every policy denial.
  */
 export function assertAuthorizationPrecedenceIsSafe(
   precedence: AuthorizationPrecedence,

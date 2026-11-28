@@ -274,7 +274,6 @@ export class PrometheusMetricsRecorder implements MetricsRecorder {
       }
     }
 
-    // Check maximum cardinality limit per metric
     const labelKeyFingerprint = JSON.stringify(labels);
     let labelSets = this.distinctLabelSets.get(metricName);
     if (!labelSets) {

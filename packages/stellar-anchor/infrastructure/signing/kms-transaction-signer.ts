@@ -6,15 +6,9 @@ import {
 } from "../../application/ports/transaction-signer.js";
 
 /**
- * The remote signing capability this adapter needs, and nothing more.
- *
- * Deliberately one method, taking the key's identifier and the bytes to sign.
- * Every cloud KMS offers that shape — AWS `kms:Sign`, GCP Cloud KMS
- * `asymmetricSign`, Azure Key Vault `sign` — so an operator's adapter is a
- * request mapper, not a redesign. Anything more capable than this (create key,
- * rotate, enable/disable) belongs in the operator's runbook, not in a signing
- * interface used by application code: the more of the KMS API a request path can
- * reach, the more of it is exposed to whatever can compromise the request path.
+ * The remote signing capability this adapter needs: one method taking a key identifier and the
+ * bytes to sign, which maps to AWS `kms:Sign`, GCP `asymmetricSign` and Azure Key Vault `sign`. Key
+ * management operations stay out of the request path.
  */
 export interface KmsSignClient {
   /**
@@ -53,29 +47,10 @@ export interface KmsTransactionSignerOptions {
 }
 
 /**
- * Signs through a KMS or HSM, so the anchoring account's private key never
- * exists in this process.
- *
- * ## What this buys, stated exactly
- *
- * The application holds a key *identifier* and a public account. It never holds
- * a seed. That removes every disclosure path that made the environment-variable
- * arrangement dangerous: there is nothing to print in a crash dump, nothing to
- * leak in a log line, nothing in a manifest backup, and nothing an
- * over-privileged CI job can read. What an attacker who fully compromises this
- * process gets is the ability to *ask* the KMS to sign anchoring transactions —
- * which still costs the account's funds, still requires network access to the
- * KMS, still is authorized only by that service's IAM policy, and above all is
- * recorded in the KMS's own CloudTrail-equivalent audit log. The difference is
- * not "impossible" versus "possible", it is that the operation now has a
- * permission system, an alert, and a paper trail.
- *
- * ## What it does not buy
- *
- * If the deployment's IAM role can call `kms:Sign`, so can anything running as
- * that role. This adapter is why a leaked secret stops being possible; it is not
- * a substitute for scoping who may call the key, which is the other half of the
- * runbook.
+ * Signs through a KMS or HSM, so the private key never exists in this process. Nothing can leak
+ * through crash dumps, logs, manifests or CI. A fully compromised process can still ask the KMS to
+ * sign, but only within its IAM policy and with the KMS's audit trail. Scoping who may call the key
+ * remains the operator's job.
  */
 export class KmsTransactionSigner implements TransactionSigner {
   constructor(private readonly options: KmsTransactionSignerOptions) {}

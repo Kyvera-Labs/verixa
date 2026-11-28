@@ -13,7 +13,7 @@ export interface CoverageMetrics {
 }
 
 /**
- * Checked-in coverage baseline schema (Issue 413).
+ * Checked-in coverage baseline schema.
  */
 export interface CoverageBaseline {
   version: number;
@@ -266,18 +266,16 @@ export function formatRatchetMarkdown(result: RatchetComparisonResult): string {
 
   if (result.passed && !result.overrideApplied) {
     lines.push(
-      "✅ **All coverage ratchet gates satisfied.** No coverage regression detected beyond tolerance.",
+      "**All coverage ratchet gates satisfied.** No coverage regression detected beyond tolerance.",
     );
   } else if (result.passed && result.overrideApplied) {
-    lines.push(
-      "⚠️ **Coverage ratchet override applied.** Drops allowed by policy or override flag.",
-    );
+    lines.push("**Coverage ratchet override applied.** Drops allowed by policy or override flag.");
     if (result.overrideReason) {
       lines.push(`> **Override Reason:** ${result.overrideReason}`);
     }
   } else {
     lines.push(
-      "❌ **Coverage ratchet check failed.** One or more targets regressed beyond the permitted tolerance.",
+      "**Coverage ratchet check failed.** One or more targets regressed beyond the permitted tolerance.",
     );
   }
 
@@ -296,11 +294,11 @@ export function formatRatchetMarkdown(result: RatchetComparisonResult): string {
       return `${diff.current}% (\`${sign}${diff.delta}%\`)`;
     });
 
-    let statusBadge = "✅ Maintained";
+    let statusBadge = "Maintained";
     if (targetResult.status === "improved") {
-      statusBadge = "📈 Improved";
+      statusBadge = "Improved";
     } else if (targetResult.status === "regressed") {
-      statusBadge = "❌ Regressed";
+      statusBadge = "Regressed";
     }
 
     return `| **${targetResult.target}** | ${metricCols.join(" | ")} | ${statusBadge} |`;
@@ -328,15 +326,10 @@ export function formatRatchetMarkdown(result: RatchetComparisonResult): string {
 }
 
 /**
- * Adapts the summary `coverage-merge.ts` writes to the shape the ratchet
- * compares.
- *
- * The merge writes the workspace totals under `aggregate` and keys packages
- * by directory (`packages/audit`). The baseline, and therefore the ratchet,
- * key them by package name (`@verixa/audit`) and read totals from `total`.
- * Without this, every target read as 0% and the ratchet failed on every run.
- * A directory key is renamed to the `name` in its `package.json`; a key that
- * is already a name, or whose manifest cannot be read, is kept as it is.
+ * Converts the summary `coverage-merge.ts` writes into the shape the ratchet compares: totals from
+ * `aggregate` become `total`, and directory keys (`packages/audit`) become package names
+ * (`@verixa/audit`) from each `package.json`. Keys that are already names, or whose manifest cannot
+ * be read, are kept.
  */
 export function normalizeCoverageSummary(
   raw: unknown,

@@ -28,29 +28,17 @@ export interface RecoverMfaAccessDeps {
 }
 
 /**
- * Last-resort recovery for a user who has lost access to all enrolled MFA
- * methods and exhausted their backup codes.
+ * Last-resort recovery for a user who lost every MFA method and backup code.
  *
- * ## Why this is not self-service
+ * Never self-service: recovery paths are a common target for social engineering, so it requires an
+ * authorized, audit-logged action by a different principal (`MfaRecoveryAuthorizer`), and the actor
+ * is always recorded.
  *
- * Every MFA recovery path is a potential MFA bypass in disguise. The classic
- * real-world attack is social-engineering a support agent into "helping" an
- * attacker recover access, so this flow deliberately requires a strongly
- * authorized, audit-logged action by a *different* principal rather than a
- * convenient unauthenticated reset. The authorization check is a port
- * (`MfaRecoveryAuthorizer`), and the actor identity is always recorded.
- *
- * ## What recovery does — and does not do
- *
- * 1. **Clears every enrolled method** (active, pending, and disabled) instead of
- *    silently reactivating or deleting only the active ones. A leftover pending
- *    method whose secret the attacker already saw would otherwise survive.
- * 2. **Revokes all active sessions** as a precaution: the lost device may still
- *    hold a live session, and recovery must not leave it usable.
- * 3. **Returns the user to a re-enrollment state.** Because no method remains,
- *    an enforcement policy of `required` (see `MfaEnforcementPolicy`) reports
- *    `requiresEnrollment`, forcing re-enrollment on next login — recovery
- *    cannot be used to end up with *less* MFA than before.
+ * 1. Clears every enrolled method (active, pending and disabled), so a pending method whose secret
+ *    an attacker saw cannot survive.
+ * 2. Revokes all sessions, since the lost device may still hold one.
+ * 3. Leaves no methods, so a `required` policy reports `requiresEnrollment` and forces
+ *    re-enrollment at the next login.
  */
 export class RecoverMfaAccess {
   constructor(private readonly deps: RecoverMfaAccessDeps) {}

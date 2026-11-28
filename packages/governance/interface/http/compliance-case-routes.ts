@@ -97,16 +97,12 @@ function sendDomainError(reply: FastifyReply, error: DomainError): FastifyReply 
 }
 
 /**
- * Registers `/organizations/:orgId/compliance-cases/*` on the given scope
- * (mounted under `/admin` by the API composition).
+ * Registers `/organizations/:orgId/compliance-cases/*`, mounted under `/admin`. Every route
+ * authenticates the caller, checks a permission scoped to the organization in the path, then
+ * delegates to a use case.
  *
- * Handlers translate HTTP to use cases and back. Every route authenticates the
- * caller, checks a permission *scoped to the organization in the path*, then
- * delegates; the transition and approval rules live in the domain.
- *
- * The caller is identified by the `x-user-id` header, the same interim
- * arrangement `registerAdminAuthorizationRoutes` uses until the principal
- * plugin lands. It must only be reachable behind the session layer.
+ * The caller is identified by the `x-user-id` header until the principal plugin is used, so these
+ * routes must only be reachable behind the session layer.
  */
 export function registerComplianceCaseRoutes<TLogger extends FastifyBaseLogger>(
   app: FastifyInstance<

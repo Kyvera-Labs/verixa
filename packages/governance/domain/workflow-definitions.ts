@@ -1,14 +1,7 @@
 /**
- * Compliance workflow definitions, expressed as data.
- *
- * The transition table below is the single place a compliance auditor needs to
- * read to learn which moves a case may make. `ComplianceCase` contains no
- * per-workflow `if`/`switch`; it looks the move up here. Adding a workflow type
- * is therefore a data change that does not touch the aggregate.
- *
- * Alternative rejected: one subclass per workflow overriding a `canTransition`
- * method. That spreads the rules across files and turns "what can happen from
- * state X" into a question answered by reading code paths, not a table.
+ * Compliance workflow definitions as data. The transition table is the single place to read which
+ * moves a case may make; `ComplianceCase` has no per-workflow branching, so adding a workflow type
+ * is a data change.
  */
 
 export const WORKFLOW_TYPES = ["verification-review", "data-subject-request"] as const;

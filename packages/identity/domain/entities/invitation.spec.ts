@@ -142,7 +142,7 @@ describe("Invitation", () => {
   });
 });
 
-/** Added in Issue 417: kills mutants the mutation-testing spike found surviving in invitation.ts. */
+/** Kills mutants the mutation-testing spike found surviving in invitation.ts. */
 describe("Invitation: default lifetime, the expiry instant, and events per action", () => {
   it("expires seven days after it is created when no lifetime is given", () => {
     // Kills :31 (the DEFAULT_TTL_MS arithmetic) and :118 (`?? DEFAULT` ->

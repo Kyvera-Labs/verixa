@@ -44,7 +44,6 @@ describe("requirePermission Fastify route guards", () => {
     userRoleAssignmentRepository = new InMemoryUserRoleAssignmentRepository();
     checker = new PermissionChecker(userRoleAssignmentRepository, roleRepository);
 
-    // Create roles
     const editorRole = Role.create({
       name: "editor",
       permissions: ["articles:read", "articles:write"],

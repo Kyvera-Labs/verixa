@@ -49,7 +49,7 @@ export interface UserRoleAssignmentRepositoryContractOptions {
 
 /**
  * Behavioral contract every `UserRoleAssignmentRepository` implementation must satisfy.
- * Follows the Issue 031 contract-testing pattern.
+ * Follows the shared contract-testing pattern.
  */
 export function userRoleAssignmentRepositoryContract(
   createRepository: () => UserRoleAssignmentRepository,

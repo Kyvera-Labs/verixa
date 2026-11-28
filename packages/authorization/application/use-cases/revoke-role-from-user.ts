@@ -26,16 +26,9 @@ export interface RevokeRoleFromUserCommand {
 export type RevokeRoleFromUserError = NotFoundError | ValidationError;
 
 /**
- * Orchestrates revoking a user's role assignment (Issue 133).
- *
- * ## Revocation Capabilities & Semantics:
- * 1. **By Assignment ID:** Looks up the exact assignment by ID; if found, revokes it.
- *    If the assignment does not exist, returns `NotFoundError`.
- * 2. **By User, Role, and Scope:** Finds the matching active assignment for the given
- *    `(userId, roleId, orgId)` tuple and revokes it. Returns `NotFoundError` if no active
- *    assignment exists.
- * 3. **Input Validation:** Rejects queries where neither `assignmentId` nor the complete
- *    `(userId, roleId, orgId)` tuple is provided.
+ * Revokes a role assignment, either by assignment ID or by the `(userId, roleId, orgId)` tuple.
+ * Returns `NotFoundError` when no matching active assignment exists, and rejects input that
+ * provides neither form.
  */
 export class RevokeRoleFromUser {
   constructor(private readonly userRoleAssignmentRepository: UserRoleAssignmentRepository) {}

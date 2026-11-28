@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createHttpTestClient, type HttpTestClient } from "./helpers/http-client.js";
 
 /**
- * `/.well-known/security.txt` (Issue 211).
+ * `/.well-known/security.txt`.
  *
  * The assertions here are about RFC 9116 conformance rather than about the
  * wording of the policy: this file's only job is to be *parsed by a stranger's

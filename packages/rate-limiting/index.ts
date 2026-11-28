@@ -37,7 +37,7 @@ export {
   type HttpGeoIpResolverConfig,
 } from "./infrastructure/adapters/http-geo-ip-resolver.js";
 
-// Domain (Issue 313 / 281)
+// Domain
 export {
   TokenBucket,
   type TokenBucketOptions,
@@ -45,7 +45,7 @@ export {
   type Clock,
 } from "./domain/token-bucket.js";
 
-// Infrastructure (Issue 314 / 282)
+// Infrastructure
 export {
   RedisBucketStore,
   type RedisBucketStoreOptions,
@@ -54,7 +54,7 @@ export {
   CONSUME_BUCKET_LUA,
 } from "./infrastructure/redis-bucket-store.js";
 
-// Application Policy (Issue 315 / 284)
+// Application Policy
 export {
   routePolicyConfigSchema,
   type RoutePolicyConfig,
@@ -67,7 +67,7 @@ export {
   RateLimitPolicyRegistry,
 } from "./application/rate-limit-policy.js";
 
-// Application Allowlist (Issue 304 / 289)
+// Application Allowlist
 export {
   RateLimitAllowlist,
   type RateLimitAllowlistOptions,
@@ -78,7 +78,7 @@ export {
   matchIpv6Cidr,
 } from "./application/allowlist.js";
 
-// Application Abuse Prevention & Strategies (Issues 300, 301, 302, 305, 306, 307)
+// Application Abuse Prevention & Strategies
 export {
   CaptchaTriggerPolicy,
   type CaptchaTriggerPolicyOptions,

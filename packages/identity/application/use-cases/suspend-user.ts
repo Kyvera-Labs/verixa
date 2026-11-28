@@ -14,7 +14,7 @@ export type SuspendUserError = ValidationError | NotFoundError;
  * Admin-triggered moderation/security action. Unlike `User.suspend()`
  * itself (where a reason is optional), this use case *requires* one — an
  * admin suspending an account without recording why is exactly the kind of
- * unaccountable action the audit trail (Phase 10) exists to prevent.
+ * unaccountable action the audit trail exists to prevent.
  */
 export class SuspendUser {
   constructor(private readonly userRepository: UserRepository) {}

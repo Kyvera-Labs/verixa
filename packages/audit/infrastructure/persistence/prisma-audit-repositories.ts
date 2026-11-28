@@ -74,29 +74,16 @@ export interface AuditDelegate {
   }): Promise<AuditRow[]>;
   create(args: { data: AuditRowInput }): Promise<AuditRow>;
   /**
-   * Inserts several rows in one statement. Used by the batched writer
-   * (`docs/performance/audit-write-throughput.md`) — one round trip per batch
-   * rather than per entry is the entire throughput argument.
-   *
-   * `data` is mutable here rather than `readonly`, matching what the generated
-   * client accepts: making it `readonly` would mean this delegate could not be
-   * satisfied by Prisma's own without an adapter whose only job is to drop the
-   * modifier.
+   * Inserts several rows in one statement for the batched writer. `data` is mutable to match the
+   * generated client's signature.
    */
   createMany(args: { data: AuditRowInput[] }): Promise<{ count: number }>;
   count(): Promise<number>;
 }
 
 /**
- * Runs `work` inside a single database transaction, on a client whose audit
- * delegate is bound to that transaction.
- *
- * Injected as a function rather than taken off a `PrismaClient` so this
- * package keeps its structural-typing convention: Prisma types appear only in
- * adapters, and the composition root supplies the closure that touches
- * `$transaction`. It also makes the transaction boundary a *visible argument*
- * at the construction site instead of something the repository reaches for
- * whenever it likes.
+ * Runs `work` in one database transaction. Injected as a function so Prisma types stay in adapters
+ * and the transaction boundary is explicit at the construction site.
  */
 export type AuditTransaction = <T>(work: (entries: AuditDelegate) => Promise<T>) => Promise<T>;
 
@@ -163,21 +150,10 @@ export const AuditLogEntryMapper = {
 /**
  * Prisma-backed, append-only `AuditLogRepository`.
  *
- * ## How the append stays race-safe
- *
- * The compare-and-set is a *read plus insert inside one transaction*, and the
- * thing making it correct is the unique index on `sequence`, not the
- * transaction alone. At Postgres' default `READ COMMITTED` isolation two
- * overlapping transactions can both read the same head — a transaction on its
- * own gives you a consistent *snapshot*, not a lock on a row you have not
- * inserted yet. So the check is best-effort and cheap, and the index is the
- * real gate: whichever writer commits second raises `P2002`, which is
- * translated into the same `ChainConflictError` a failed check would have
- * produced. Callers cannot tell the two apart and should not need to.
- *
- * That is why the two operations are one method rather than a `headMatches()`
- * predicate plus an `insert()`. Split them and every caller has to discover,
- * by accident, that the gap between the two is where chains fork.
+ * Append reads the head and inserts in one transaction, but under READ COMMITTED two writers can
+ * read the same head. The unique index on `sequence` is the real guard: the losing insert raises
+ * `P2002`, which is reported as the same `ChainConflictError` as a failed head check. Check and
+ * insert stay in one method so callers cannot split them.
  */
 export class PrismaAuditLogRepository implements AuditLogRepository {
   constructor(
@@ -334,14 +310,8 @@ export class PrismaAuditLogRepository implements AuditLogRepository {
 }
 
 /**
- * Whether a thrown error is Prisma's unique-constraint violation (`P2002`).
- *
- * Detected structurally rather than with `instanceof Prisma.PrismaClientKnownRequestError`,
- * so this package does not have to depend on the generated client — the same
- * reason the delegates above are structural interfaces. Duck-typing an error
- * code is a little loose, but the only consequence of a false positive here is
- * reporting a conflict instead of an unexpected error, and the caller's
- * response to both is to re-read the head.
+ * Whether an error is Prisma's unique-constraint violation (`P2002`). Checked structurally to avoid
+ * depending on the generated client; a false positive only causes a retry.
  */
 function isUniqueViolation(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && error.code === "P2002";

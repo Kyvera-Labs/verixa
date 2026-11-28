@@ -5,7 +5,7 @@ import type { UserId, UserStatus } from "../entities/user.js";
 /**
  * Recorded whenever a `User`'s status transition succeeds
  * (activate/suspend/delete). `reason` is set by admin-triggered transitions
- * (e.g. `SuspendUser`/`ReactivateUser`, Issue 033) that require one for the
+ * (e.g. `SuspendUser`/`ReactivateUser`) that require one for the
  * audit trail; it's `undefined` for self-service transitions that don't
  * (e.g. activation via email verification).
  */

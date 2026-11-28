@@ -23,21 +23,9 @@ interface ReviewAssignmentProps {
 }
 
 /**
- * A reviewer's temporary claim on one request in the queue.
- *
- * Modelled explicitly, and as an *expiring lease* rather than a boolean
- * `isClaimed` flag, because both halves of that choice prevent a real failure:
- *
- * - Explicit: "who owns this case right now" is a first-class value the queue
- *   can query, not an implicit consequence of some other field. Two reviewers
- *   working the same case is a race the domain should be able to detect and
- *   refuse (see `VerificationRequest.claimBy`), not a mystery to debug.
- * - Expiring: a permanent lock means a reviewer who closes their laptop
- *   leaves the case unworkable forever, with nothing in the system able to
- *   notice. An expiry releases itself, the same way a credential lockout
- *   uses an expiry rather than a flag (see `docs/security/authentication-flows.md`).
- *
- * This is a value object: once claimed, a claim is replaced, never mutated.
+ * A reviewer's temporary claim on one request: an explicit, expiring lease. Explicit so the domain
+ * can detect and refuse two reviewers on one case; expiring so an abandoned claim releases itself.
+ * Immutable: a claim is replaced, never changed.
  */
 export class ReviewAssignment {
   readonly requestId: VerificationRequestId;

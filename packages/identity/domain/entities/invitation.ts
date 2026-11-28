@@ -44,14 +44,8 @@ interface InvitationProps {
 }
 
 /**
- * A pending invitation for someone to join an `Organization`. This is a
- * **domain-level skeleton**: it models the full invitation lifecycle
- * (issued, single-use, expires) now, in Phase 02, even though nothing sends
- * the invitation email yet — that adapter doesn't exist until Phase 14
- * (Notifications). Modeling intent before the delivery mechanism exists
- * means the notifications work later only has to *send* an already-correct
- * domain concept, not redesign identity's org-membership model around it.
- * See `docs/guides/domain-modeling.md`.
+ * A pending invitation to join an `Organization`: issued, single-use and expiring (see
+ * docs/guides/domain-modeling.md).
  */
 export class Invitation {
   readonly id: InvitationId;
@@ -84,19 +78,9 @@ export class Invitation {
   }
 
   /**
-   * Issues a new pending invitation.
-   *
-   * Returns the raw token *alongside* the invitation rather than on it,
-   * because this is the only moment it will ever exist. The invitation
-   * itself stores only {@link tokenHash}, so once this return value is
-   * discarded the raw token is unrecoverable from the system — exactly as
-   * intended, since the only party who should hold it is the recipient it
-   * gets mailed to (Phase 14).
-   *
-   * The token is distinct from `id` on purpose: `id` is an ordinary database
-   * key that may appear in URLs and logs, while the token is a bearer
-   * credential. Using one as the other would conflate an identifier with a
-   * secret.
+   * Issues a new pending invitation. The raw token is returned alongside the invitation, not stored
+   * on it: only {@link tokenHash} is persisted, so the token exists only in this return value and
+   * the recipient's email. The token is separate from `id`, which may appear in URLs and logs.
    */
   static create(params: {
     organizationId: OrganizationId;
@@ -126,15 +110,8 @@ export class Invitation {
   }
 
   /**
-   * Whether `token` is the raw token this invitation was issued with.
-   *
-   * Compares with {@link timingSafeEqual} rather than `===`. String equality
-   * short-circuits at the first differing byte, so how long it takes leaks
-   * how much of a guess was correct — enough, across many attempts, to
-   * reconstruct a secret byte by byte. That attack is impractical against
-   * 128 bits of entropy behind a database round-trip, but timing-safe
-   * comparison is the correct habit for secret material and costs nothing
-   * here. Phase 11 covers this properly.
+   * Whether `token` is this invitation's raw token, compared with {@link timingSafeEqual} so timing
+   * does not reveal how much of a guess matched.
    */
   matchesToken(token: string): boolean {
     const candidate = Buffer.from(Invitation.hashToken(token), "hex");

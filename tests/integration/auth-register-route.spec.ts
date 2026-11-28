@@ -5,15 +5,8 @@ import { createTestPrismaClient, databaseAvailability } from "./helpers/database
 import { createHttpTestClient, type HttpTestClient } from "./helpers/http-client.js";
 
 /**
- * The first genuinely end-to-end test: real HTTP → route → use case →
- * repository → Postgres.
- *
- * Everything below has been tested in isolation for months — the domain
- * against no infrastructure, use cases against fakes, adapters against
- * contract suites. None of that proves the pieces *compose*. A container that
- * wires the wrong repository, a route that never reaches its use case, a
- * Prisma client that works in a test harness and not under Fastify: all of
- * those typecheck perfectly and all of them are caught here and nowhere else.
+ * Registration end to end: HTTP, route, use case, repository and Postgres. Catches wiring mistakes
+ * that typecheck but break at runtime.
  */
 
 const available = await databaseAvailability();

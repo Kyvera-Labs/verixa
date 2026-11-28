@@ -1,30 +1,8 @@
 /**
- * Renders a parsed roadmap entry into a GitHub issue body.
- *
- * ## What this is optimising for
- *
- * A contributor who has never seen this codebase should be able to open one
- * issue and start work without asking a question first. That is the bar, and
- * it is a higher bar than "the task is described".
- *
- * Concretely, every issue answers four things the roadmap alone does not:
- *
- * 1. **Where does this sit?** — the phase context, and what already exists
- *    that this builds on.
- * 2. **What should I copy?** — a real file in the repository that solves the
- *    same shape of problem. This codebase is deliberately repetitive, so
- *    there is almost always a pattern to follow, and pointing at it converts
- *    a blank page into a diff.
- * 3. **When am I done?** — a checklist, not a paragraph.
- * 4. **What should I NOT do?** — scope boundaries, which is the section that
- *    prevents the 900-line pull request nobody can review.
- *
- * ## What this deliberately does not do
- *
- * It does not pad. The long exploratory format that suits an integration
- * spike — where the central question is "does this even work" — would be
- * noise on "add a use case following the existing pattern". Length here
- * tracks genuine uncertainty, and most of these issues are not uncertain.
+ * Renders a parsed roadmap entry into a GitHub issue body that a new contributor can start from
+ * without asking questions. Every issue states where the work sits, which existing file to copy, a
+ * done checklist, and what is out of scope. Length follows genuine uncertainty; routine issues stay
+ * short.
  */
 
 /** Which package a file path belongs to, used to pick the right exemplars. */

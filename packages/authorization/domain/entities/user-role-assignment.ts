@@ -4,15 +4,8 @@ export type UserRoleAssignmentId = Id<"UserRoleAssignmentId">;
 export type UserId = Id<"UserId">;
 export type RoleId = Id<"RoleId">;
 /**
- * An organization id.
- *
- * Branded `"OrganizationId"`, matching `packages/identity`'s
- * `OrganizationId`, not `"OrgId"`. Both spellings were declared here at once
- * after a merge, and the difference is not cosmetic: branded types are nominal,
- * so an `Id<"OrgId">` and an `Id<"OrganizationId">` are not assignable to each
- * other, and an organization id coming from the identity context could not be
- * passed to anything here. The short local name is kept because this package
- * uses it throughout.
+ * An organization ID. Branded `"OrganizationId"` to match `packages/identity`, since branded types
+ * are nominal and a differently branded ID could not be passed between the two contexts.
  */
 export type OrgId = Id<"OrganizationId">;
 
@@ -47,28 +40,12 @@ export interface CreateUserRoleAssignmentParams {
 }
 
 /**
- * An explicit join entity linking a {@link UserId} to a {@link RoleId}, scoped
- * to an organization via `orgId` (or `null` for global roles), with audit
- * attribution (`assignedBy`, `assignedAt`) and optional time-bound elevation
- * (`expiresAt`).
+ * Links a {@link UserId} to a {@link RoleId}, scoped to an organization (`orgId`, or `null` for a
+ * global role), with attribution (`assignedBy`, `assignedAt`) and optional expiry (`expiresAt`).
  *
- * ## Why role assignment is its own entity
- *
- * Modeling role assignment as a distinct entity — rather than an array of roles
- * embedded on `User` or a property of `OrganizationMembership` — provides two
- * crucial architecture benefits:
- *
- * 1. **Decoupled Bounded Contexts:** Identity (`packages/identity`) owns user
- *    credentials, lifecycle, and organization membership. Authorization
- *    (`packages/authorization`) owns permissions, roles, and assignments. Keeping
- *    them separate avoids polluting identity models with authorization policies and
- *    allows independent schema and access pattern evolution.
- *
- * 2. **Multi-Tenant Scoping and Temporal Elevation:** A single user can hold different
- *    roles in different organizations (e.g., `admin` in Org A and `viewer` in Org B),
- *    as well as system-wide global roles (`super-admin`). Modeling assignments as
- *    first-class records also naturally accommodates temporary, time-bound access
- *    elevations via `expiresAt` without mutating role definitions or user profiles.
+ * A separate entity keeps authorization out of the identity context, lets one user hold different
+ * roles in different organizations, and supports temporary elevation without changing roles or
+ * users.
  */
 export class UserRoleAssignment {
   readonly id: UserRoleAssignmentId;

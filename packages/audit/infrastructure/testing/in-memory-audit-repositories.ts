@@ -15,14 +15,8 @@ import { ChainConflictError } from "../../application/ports/audit-log-repository
 import { type AuditLogEntry, GENESIS_HASH } from "../../domain/entities/audit-log-entry.js";
 
 /**
- * In-memory `AuditLogRepository` for testing without a database.
- *
- * Enforces the append protocol the real table enforces with an index. That
- * matters more than usual here: the whole append protocol depends on a
- * compare-and-set losing, and a fake that accepted a stale `previousHash`
- * would let tests pass against a forked chain that production would have
- * refused. The `PrismaAuditLogRepository` and this class are held to the same
- * behaviour by `auditLogRepositoryContract`.
+ * In-memory `AuditLogRepository` for tests. It enforces the same append protocol as the database's
+ * unique index, checked by `auditLogRepositoryContract`.
  */
 export class InMemoryAuditLogRepository implements AuditLogRepository {
   private readonly entries: AuditLogEntry[] = [];
@@ -39,14 +33,8 @@ export class InMemoryAuditLogRepository implements AuditLogRepository {
   }
 
   /**
-   * Appends atomically: either the whole batch lands or none of it does, and
-   * the head is checked exactly once.
-   *
-   * The synchronous body is deliberate — there is no `await` between the check
-   * and the push, so no interleaving can slip between them. JavaScript's
-   * run-to-completion semantics give this fake the serialisation the real
-   * adapter gets from a unique index, which is the closest honest equivalent:
-   * it reproduces the *guarantee*, not the mechanism.
+   * Appends atomically, checking the head once. There is no `await` between the check and the push,
+   * so run-to-completion gives the same serialization the real adapter gets from its unique index.
    */
   appendMany(
     entries: readonly AuditLogEntry[],
@@ -175,7 +163,7 @@ export class InMemoryAnchorRecordRepository implements AnchorRecordRepository {
  * In-memory `AuditEventReader` for testing without a database.
  *
  * Entries are filed under an organization explicitly with {@link seed}, since
- * `AuditLogEntry` does not carry one yet (Issue 181). Every read is recorded in
+ * `AuditLogEntry` does not carry one yet. Every read is recorded in
  * {@link reads}, so a test can prove a refused request never reached storage
  * at all — "returned an error" and "returned an error without looking" are
  * different guarantees, and only the second one is the point.

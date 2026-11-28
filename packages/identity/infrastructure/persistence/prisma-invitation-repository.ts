@@ -87,17 +87,8 @@ export class PrismaInvitationRepository implements InvitationRepository {
   }
 
   /**
-   * Pending invitations for an organization that have not yet lapsed.
-   *
-   * Expiry is filtered in SQL rather than by loading everything and calling
-   * `isExpired()` in memory. Both give the same answer today; only one still
-   * works when an organization has thousands of historical invitations. The
-   * `expires_at` index exists for exactly this query.
-   *
-   * Not part of the `InvitationRepository` port — nothing in the application
-   * layer needs it yet. It lives here rather than being speculatively added
-   * to the port, so the port keeps describing what use cases actually
-   * require.
+   * Pending, unexpired invitations for an organization. Expiry is filtered in SQL using the
+   * `expires_at` index. Not on the port, since no use case needs it yet.
    */
   async findActiveByOrganization(
     organizationId: string,

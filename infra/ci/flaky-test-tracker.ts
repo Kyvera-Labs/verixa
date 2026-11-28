@@ -63,7 +63,7 @@ export interface FlakyCliOptions {
 }
 
 /**
- * Classifies a test execution based on its attempt sequence (Issue 414).
+ * Classifies a test execution based on its attempt sequence.
  *
  * Distinguishes:
  * - "stable": Passed on first attempt
@@ -270,17 +270,17 @@ export function formatFlakyReportMarkdown(
 
   if (flakyTests.length === 0 && failingTests.length === 0 && expiredQuarantines.length === 0) {
     lines.push(
-      "✅ **No flaky tests or expired quarantines detected.** Test suite execution was stable.",
+      "**No flaky tests or expired quarantines detected.** Test suite execution was stable.",
     );
   } else {
-    lines.push("⚠️ **Test stability anomalies detected.** Review the tables below for details.");
+    lines.push("**Test stability anomalies detected.** Review the tables below for details.");
   }
 
   lines.push("");
 
   // Flaky tests section
   if (flakyTests.length > 0) {
-    lines.push(`### ⚠️ Flaky Tests (${flakyTests.length})`);
+    lines.push(`### Flaky Tests (${flakyTests.length})`);
     lines.push("");
     lines.push("These tests failed on initial execution but succeeded on subsequent retries:");
     lines.push("");
@@ -299,7 +299,7 @@ export function formatFlakyReportMarkdown(
 
   // Quarantined tests section
   if (quarantines.length > 0) {
-    lines.push(`### 🔒 Quarantined Tests (${quarantines.length})`);
+    lines.push(`### Quarantined Tests (${quarantines.length})`);
     lines.push("");
     lines.push("| Test Identifier | Expiration Date | Status | Issue | Reason |");
     lines.push("| :--- | :---: | :---: | :---: | :--- |");
@@ -307,8 +307,8 @@ export function formatFlakyReportMarkdown(
     for (const q of quarantines) {
       const statusBadge =
         q.status === "expired"
-          ? `🚨 EXPIRED (${q.daysRemainingOrOverdue}d overdue)`
-          : `🔒 Active (${q.daysRemainingOrOverdue}d left)`;
+          ? `EXPIRED (${q.daysRemainingOrOverdue}d overdue)`
+          : `Active (${q.daysRemainingOrOverdue}d left)`;
       lines.push(
         `| \`${q.metadata.testId}\` | \`${q.metadata.until}\` | ${statusBadge} | ${q.metadata.issue ?? "-"} | ${q.metadata.reason} |`,
       );
@@ -318,7 +318,7 @@ export function formatFlakyReportMarkdown(
 
   // Expired quarantine alerts
   if (expiredQuarantines.length > 0) {
-    lines.push("### 🚨 Expired Quarantines Alert");
+    lines.push("### Expired Quarantines Alert");
     lines.push("");
     lines.push(
       "The following tests have reached their quarantine expiration deadline and **cannot remain skipped**:",
@@ -337,7 +337,7 @@ export function formatFlakyReportMarkdown(
 
   // Consistently failing tests
   if (failingTests.length > 0) {
-    lines.push(`### ❌ Failing Tests (${failingTests.length})`);
+    lines.push(`### Failing Tests (${failingTests.length})`);
     lines.push("");
     for (const ft of failingTests) {
       lines.push(`- **\`${ft.testId}\`**: ${ft.message}`);
@@ -426,7 +426,6 @@ export function runFlakyTracker(options: FlakyCliOptions = {}): number {
     ];
   }
 
-  // Check if report file was passed
   if (options.reportPath) {
     const reportFile = resolve(rootDir, options.reportPath);
     if (existsSync(reportFile)) {

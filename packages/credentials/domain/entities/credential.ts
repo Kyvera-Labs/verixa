@@ -24,14 +24,9 @@ interface CredentialProps {
   /** When the current lock expires, or `undefined` when not locked. */
   readonly lockedUntil: Date | undefined;
   /**
-   * Ordered list of previous password hashes (most recent first).
-   * Current password is NOT in this list — it is in passwordHash.
-   * Capped at PasswordHistoryPolicy.depth entries.
-   *
-   * Optional on the way in and defaulted to empty, the same way `User`
-   * treats `domainEvents`. A credential reconstituted from a row written
-   * before history existed has no list, and that is not the same thing as a
-   * malformed record -- it simply predates the feature.
+   * Previous password hashes, most recent first, excluding the current one, capped at
+   * `PasswordHistoryPolicy.depth`. Optional and defaulted to empty for rows created before history
+   * existed.
    */
   readonly passwordHistory?: string[];
   readonly createdAt: Date;
@@ -49,19 +44,8 @@ const REDACTED = "[REDACTED]";
 const DELETED_SENTINEL = "[DELETED]";
 
 /**
- * How a user proves who they are — deliberately a separate aggregate from
- * `User`.
- *
- * Splitting them answers a question that arrives later and is expensive to
- * retrofit: what happens when a user has *no* password? An SSO-only account,
- * a passkey-only account, or a service account all have an identity and no
- * credential. With the hash on `User`, those become a nullable column plus a
- * rule nothing enforces. As a separate aggregate, "no credential row" says it
- * exactly, and adding a second authentication method later means a new
- * aggregate rather than more nullable columns on `User`.
- *
- * It also narrows exposure. Loading a user for a profile page does not load
- * their password hash, because it isn't there.
+ * How a user proves who they are, separate from `User` so SSO-only, passkey-only and service
+ * accounts simply have no credential, and so loading a user never loads a password hash.
  */
 export class Credential {
   readonly id: CredentialId;
@@ -85,14 +69,9 @@ export class Credential {
   }
 
   /**
-   * Creates a credential from an **already-hashed** password.
-   *
-   * The signature is the point: there is no factory taking a `RawPassword`,
-   * so this aggregate cannot hash — and therefore cannot hash *wrongly*, or
-   * accidentally store a plaintext. Hashing belongs to the `PasswordHasher`
-   * port, and the use case is responsible for calling it first. A domain
-   * entity that could hash would need to know the algorithm, which is exactly
-   * what the port exists to keep out of the domain.
+   * Creates a credential from an already-hashed password. There is no factory taking a
+   * `RawPassword`, so the aggregate can never hash wrongly or store plaintext; hashing belongs to
+   * `PasswordHasher`.
    */
   static create(params: { userId: CredentialUserId; passwordHash: string }): Credential {
     const now = new Date();
@@ -123,7 +102,7 @@ export class Credential {
     // Clears the lockout too. A password change is a legitimate owner
     // demonstrating control of the account, so carrying a lock across it
     // would leave them locked out of the credential they just set -- and
-    // after a reset (Issue 070) that is the one moment they have no way to
+    // after a reset that is the one moment they have no way to
     // wait it out, because the failures were not theirs.
     return new Credential({
       ...this,
@@ -168,16 +147,8 @@ export class Credential {
    * system into a write on each request.
    */
   /**
-   * Marks the credential permanently unusable after its user is deleted.
-   *
-   * Called by `HandleUserDeleted`. The hash is replaced with a sentinel
-   * rather than left in place: a deleted account cannot be logged into, so
-   * retaining a verifiable hash keeps an offline-grindable secret for an
-   * account nobody can use -- exactly the data erasure is meant to remove.
-   *
-   * The failure counter and lock are cleared at the same time. There is no
-   * way to recover from a lock on a deleted account, so carrying the state
-   * forward complicates observability without protecting anything.
+   * Makes the credential permanently unusable after its user is deleted. The hash is replaced with
+   * a sentinel so no crackable secret is retained, and the lockout state is cleared.
    */
   invalidateForDeletedUser(now: Date = new Date()): Credential {
     return new Credential({
@@ -204,20 +175,17 @@ export class Credential {
   }
 
   /**
-   * Checks whether a candidate plaintext password matches the current password
-   * or any entry in the password history.
-   *
-   * Uses async comparison (argon2) for each entry. Short-circuits on first match.
+   * Whether a candidate matches the current password or any history entry, short-circuiting on the
+   * first match.
    *
    * @param candidatePassword - Plaintext password to check
-   * @param comparePassword - Injected comparison function (e.g., PasswordHasher.verify)
-   * @returns true if candidate matches current or any history entry
+   * @param comparePassword - Injected comparison function (for example `PasswordHasher.verify`)
+   * @returns true if the candidate matches the current password or any history entry
    */
   async isPasswordReused(
     candidatePassword: string,
     comparePassword: (plain: string, hash: string) => Promise<boolean>,
   ): Promise<boolean> {
-    // Check current password first
     const matchesCurrent = await comparePassword(candidatePassword, this.passwordHash);
     if (matchesCurrent) return true;
 
@@ -231,11 +199,8 @@ export class Credential {
   }
 
   /**
-   * Rotates the password: pushes current hash to history, sets new hash,
-   * and caps history at the policy depth.
-   *
-   * Called instead of directly mutating passwordHash to maintain history
-   * invariants.
+   * Rotates the password: moves the current hash to history, sets the new hash and caps history at
+   * the policy depth.
    *
    * @param newPasswordHash - Already-hashed new password
    * @param historyPolicy - Configuration for history depth

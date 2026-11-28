@@ -83,15 +83,10 @@ export interface ComplianceCaseProps {
 }
 
 /**
- * A compliance case moving through a workflow's transition table.
- *
- * Immutable: each operation returns a new instance, and events raised by that
- * operation are available from {@link pendingEvents} until the case is
- * persisted and the events are published.
- *
- * The case never accepts a target state from a caller. Callers name an
- * *event* (`confirm`, `escalate`); the table decides where that leads, or
- * that it leads nowhere.
+ * A compliance case moving through a workflow's transition table. Immutable; each operation returns
+ * a new instance, and its events are available from {@link pendingEvents} until the case is
+ * persisted and they are published. Callers name an event (`confirm`, `escalate`), never a target
+ * state; the table decides where it leads.
  */
 export class ComplianceCase {
   private constructor(

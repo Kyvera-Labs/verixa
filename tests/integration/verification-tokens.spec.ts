@@ -6,19 +6,9 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { createTestPrismaClient, databaseAvailability } from "./helpers/database.js";
 
 /**
- * Email verification and password reset against a real Postgres (Issues
- * 068–070).
- *
- * The unit tests for these flows run against in-memory repositories, which
- * proves the orchestration and none of the persistence. What is unproven
- * without a database is exactly the category of thing that typechecks
- * perfectly and fails at runtime: whether `updateMany` filters on the right
- * column, whether a `consumedAt` of `undefined` round-trips through a
- * nullable `timestamptz`, whether the unique index on `token_hash` is where
- * the schema says.
- *
- * The container is used rather than hand-built repositories, so the wiring is
- * under test too.
+ * Email verification and password reset against a real Postgres, covering what in-memory tests
+ * cannot: filters, nullable `timestamptz` round trips and the `token_hash` unique index. Uses the
+ * real container so wiring is tested too.
  */
 
 const available = await databaseAvailability();

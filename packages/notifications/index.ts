@@ -1,5 +1,5 @@
 // Public surface of @verixa/notifications. Curating it (and deciding whether
-// the registry stays internal) is Issue 279's deliverable.
+// the registry stays internal) is still to be done.
 
 export {
   NotificationTemplate,

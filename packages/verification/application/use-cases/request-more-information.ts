@@ -22,20 +22,10 @@ export type RequestMoreInformationError =
   ValidationError | NotFoundError | InvalidStatusTransitionError | ReviewDecisionNotPermittedError;
 
 /**
- * `in_review → needs_more_info`: the reviewer cannot decide yet and asks the
- * subject for something specific (a clearer scan, a second document).
- *
- * This is the non-terminal third option a real review flow needs. Without it
- * a reviewer facing incomplete evidence has only two choices, both wrong:
- * approve on partial evidence, or reject a subject who could have fixed the
- * problem in two minutes. The note is mandatory for the same reason a
- * decision's rationale is — the subject has to be told what to do next, and
- * "your verification needs more information" with no information is not an
- * instruction.
- *
- * The request is *not* decided and keeps its history: the subject re-enters
- * the evidence flow via `VerificationRequest.reopenForEvidence`, and the
- * request can cycle through this state repeatedly. See Issue 176.
+ * Moves `in_review` to `needs_more_info` when the reviewer needs something specific from the
+ * subject. The note is mandatory because it tells the subject what to do. The request is not
+ * decided and can cycle through this state; the subject re-enters through
+ * `VerificationRequest.reopenForEvidence`.
  */
 export class RequestMoreInformation {
   constructor(private readonly requests: VerificationRequestRepository) {}

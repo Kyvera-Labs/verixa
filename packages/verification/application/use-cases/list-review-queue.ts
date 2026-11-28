@@ -28,14 +28,8 @@ export const DEFAULT_QUEUE_PAGE_SIZE = 25;
 export const MAX_QUEUE_PAGE_SIZE = 100;
 
 /**
- * The statuses a queue page may contain.
- *
- * `submitted` (waiting on the automated check, Issue 172) and `in_review`
- * (waiting on a reviewer) are the only two states that represent work someone
- * can pick up. `pending_evidence` is the subject's turn, `needs_more_info` has
- * been handed back to them, and `approved`/`rejected` are history — listing any
- * of those would fill a reviewer's queue with rows no reviewer action exists
- * for.
+ * Statuses a queue page may contain: `submitted` (awaiting the automated check) and `in_review`
+ * (awaiting a reviewer), the only states a reviewer can act on.
  */
 const REVIEWABLE_STATUSES: readonly VerificationStatusValue[] = ["submitted", "in_review"];
 
@@ -73,24 +67,9 @@ export interface ReviewQueueClaim {
 }
 
 /**
- * One row of the reviewer queue: enough to render the list and to decide which
- * case to open, and deliberately nothing more.
- *
- * ## What is not here, and why
- *
- * No evidence. Not the storage reference, not the checksum, and not a signed
- * URL. A queue row is a summary — the reviewer opening a case is a separate
- * fetch (Issue 178's per-request detail route), and that is where a document
- * is actually looked at.
- *
- * The alternative rejected was a `includeEvidenceUrls` flag on this query, on
- * the grounds that the issue calls for signed URLs "only on demand". A flag
- * cannot deliver that here: the port that mints a signed URL is
- * `EvidenceStorage` (Issue 166), which does not exist yet, so the flag would
- * either be a parameter that silently does nothing or a dependency of the
- * queue read on a storage adapter it otherwise never touches. Signing belongs
- * on the detail path, where the URL is rendered, rather than in a list where
- * every row would be signed for a view that never shows one.
+ * One row of the reviewer queue: enough to list and choose a case, and nothing more. Evidence,
+ * storage references and signed URLs are deliberately absent; they belong on the per-request detail
+ * route.
  */
 export interface ReviewQueueItem {
   readonly requestId: VerificationRequestId;
@@ -109,46 +88,18 @@ export interface ReviewQueuePage {
   readonly limit: number;
   readonly offset: number;
   /**
-   * Whether at least one more row exists after this page.
-   *
-   * Derived by asking the store for one row more than the page size, not by a
-   * second `COUNT(*)` query. A count is a second round-trip over the same
-   * predicate, and on a queue that changes while it is being read it is also
-   * the wrong number — the count and the page would be read at different
-   * instants, so `hasMore` could disagree with the rows actually returned. The
-   * extra row costs one row of read and cannot disagree with itself.
+   * Whether another row exists after this page, found by fetching one extra row rather than running
+   * a separate `COUNT(*)` that could disagree with the page.
    */
   readonly hasMore: boolean;
 }
 
 /**
- * Lists the reviewer queue: reviewable work, oldest first, filtered and
- * paginated.
+ * Lists reviewable work, oldest first, filtered and paginated.
  *
- * ## Why this returns a page object and not an array of requests
- *
- * Everything the reviewer queue UI (Issue 178) needs to render a row has to
- * come out of one query, and everything it must *not* have — evidence bytes,
- * storage references, decision notes — has to be structurally absent rather
- * than merely unused. Returning the aggregates and letting the caller pick
- * fields would make "the API response carries no evidence pointer" a property
- * of whichever serializer happens to be written later, which is the wrong
- * place for it. The projection happens here, once, where it can be tested. See
- * Issue 095 for the same read-model-shaped-for-its-consumer principle applied
- * to a different list.
- *
- * ## Why the filtering is not done here
- *
- * `status`, `verificationType`, `assignment`, `limit` and `offset` are all
- * passed to the repository, not applied to results after they come back. A
- * use case that fetched a page and then filtered it would return short pages —
- * "25 rows were asked for, three came back" — and would silently skip rows that
- * a later page should have contained, because the rows dropped by the filter
- * were already counted against `limit`. The store has the index for this; the
- * use case does not have the data set.
- *
- * What is *not* delegated is the ordering the pagination depends on: the port
- * promises oldest-first, and `offset` is only a stable cursor because it does.
+ * Returns a projection, not aggregates, so evidence and decision notes are structurally absent from
+ * the response. Filtering, `limit` and `offset` are applied by the store; filtering after fetching
+ * would return short pages and skip rows. Pagination relies on the port's oldest-first ordering.
  */
 export class ListReviewQueue {
   constructor(private readonly requests: VerificationRequestRepository) {}

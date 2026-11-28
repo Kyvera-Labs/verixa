@@ -18,15 +18,9 @@ import {
 } from "./cookie-config.js";
 
 /**
- * The cookie policy for the sessions context (roadmap Issue 214).
- *
- * Two halves. The first is the attribute decisions themselves — the refresh
- * token is `HttpOnly`, the CSRF token is not, `Path` scopes the credential to
- * the one endpoint that needs it, and no `Domain` is ever emitted so every
- * cookie stays host-only. The second is the wire: a `Set-Cookie` is a header,
- * headers are a framing format, and the only way to know the serialized strings
- * arrive as two cookies rather than one mangled one is to read them off a
- * socket.
+ * Tests the cookie attributes (HttpOnly refresh token, readable CSRF token, scoped `Path`, never a
+ * `Domain`) and reads `Set-Cookie` headers off a real socket to confirm they arrive as separate,
+ * intact cookies.
  */
 
 const REFRESH_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;

@@ -23,43 +23,17 @@ export interface ConfirmPasswordResetResult {
 }
 
 /**
- * Completes a password reset: validates the token, enforces the password
- * policy, replaces the credential, and revokes every existing session.
+ * Completes a password reset: validates the token, enforces the password policy, replaces the
+ * credential and revokes every existing session.
  *
- * ## The step everyone forgets
+ * Revoking sessions is essential: the reset usually means someone else has the account, and a new
+ * password does nothing about their existing session.
  *
- * **Revoking sessions is not cleanup.** It is the reason the flow exists.
+ * The rate limiter is checked first and reset on success.
  *
- * The scenario a reset is for is "someone else has my account". If they got
- * in, they are holding a session. Replacing the password revokes their
- * knowledge of the *credential* and does precisely nothing about the session
- * they already have — they stay signed in, indefinitely, while the user
- * believes they have just locked them out.
- *
- * The danger is not that the reset is insecure. It is that it is *believed to
- * have worked*. A user who knows they are still compromised takes further
- * action; one who thinks they are safe does not.
- *
- * Sessions are Phase 05, so `SessionRevoker` has no real implementation yet.
- * The call is here anyway, against a port, because the alternative is a
- * comment saying "remember to revoke sessions when Phase 05 lands" — and that
- * is the comment nobody reads.
- *
- * ## Rate limiting
- *
- * The rate limiter is consulted at the start via the {@link RateLimiter} port
- * to prevent abuse of the confirmation endpoint. On successful confirmation,
- * the limit is reset to allow the user to make another attempt if needed.
- *
- * ## Ordering
- *
- * Token consumed → credential replaced → sessions revoked, all inside one
- * transaction except the revocation, which cannot be (it is an external
- * system). The consequence is stated rather than hidden: if revocation fails,
- * the password has still changed. That is the right way round — a user whose
- * password changed but whose old sessions survive is better off than one
- * whose reset silently did nothing — but it is a real partial failure, and
- * the error says so instead of reporting success.
+ * The token is consumed and the credential replaced in one transaction; session revocation is
+ * external and runs after. If it fails, the password has still changed, and the error reports the
+ * partial failure instead of success.
  */
 export class ConfirmPasswordReset {
   constructor(
@@ -112,7 +86,7 @@ export class ConfirmPasswordReset {
     //
     // Guesses spread across freshly issued links do not share it. That case
     // belongs to the throttle on issuance and to the request-rate limiter
-    // (Phase 15), not to this gate, and saying otherwise would overstate what
+    // rather than to this gate, and saying otherwise would overstate what
     // is wired here.
     if (this.bruteForce !== undefined) {
       const gate = await this.bruteForce.check("password-reset", tokenHash);
@@ -162,7 +136,6 @@ export class ConfirmPasswordReset {
       // otherwise strand a valid token against a missing row.
       const existing = await repositories.credentials.findByUserId(user.id);
 
-      // Check for password reuse before updating (Issue 072)
       if (existing !== undefined) {
         const isReused = await existing.isPasswordReused(command.newPassword, (plain, hash) =>
           this.passwordHasher.verify(plain, hash),
@@ -226,7 +199,6 @@ export class ConfirmPasswordReset {
       );
     }
 
-    // Reset rate limit counter on successful password reset confirmation
     await this.rateLimiter.reset(rateLimitKey);
 
     return Result.ok({ user: outcome.user });

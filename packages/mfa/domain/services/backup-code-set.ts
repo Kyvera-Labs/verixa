@@ -31,7 +31,7 @@ export class BackupCodeSet {
       const code = this.generateSingleCode();
       rawCodes.push(code);
 
-      // Hash using Argon2. We use standard parameters (Issue 061).
+      // Hash using Argon2. We use standard parameters.
       // Since backup codes are basically passwords, Argon2 provides protection against offline brute force.
       const hash = await argon2Hash(code, {
         memoryCost: 19456, // 19 MiB

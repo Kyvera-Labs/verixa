@@ -101,61 +101,19 @@ export interface VerifyAuditChainResult {
 export type VerifyAuditChainError = ValidationError | AnchorFailure;
 
 /**
- * Walks the audit log re-deriving every hash, and reports the first divergence.
+ * Walks the audit log re-deriving every hash and reports the first divergence. This detects
+ * tampering; it cannot prevent it. `infrastructure/cli/verify-chain.ts` is the operator-facing
+ * form.
  *
- * ## Why this exists as a runnable check
+ * The walk is batched and runs outside any transaction, so it does not hold a connection while
+ * hashing. Entries appended during a run are harmless.
  *
- * `verifyChain` is a property of the domain model, and a property nobody can
- * invoke is not a security control. Tamper-evidence only bites when someone
- * actually looks — an operator, an auditor, or a scheduled job re-hashing the
- * log and comparing. This use case is that action, and
- * `infrastructure/cli/verify-chain.ts` is its operator-facing form.
+ * There is one global chain, so an organization-scoped run verifies the whole range and reports
+ * which entries belong to the tenant; re-hashing a filtered subsequence would report false breaks.
  *
- * Detection, not prevention. The append-only constraints mean Verixa itself
- * cannot edit these rows, but nothing here stops an attacker holding database
- * credentials, and no check can. What this produces is proof that they did.
- *
- * ## Why the walk is batched, and outside any transaction
- *
- * Hashing a million entries is CPU work. Doing it with a transaction open — or
- * a pooled connection parked on it — turns a verification into an outage for
- * everything else sharing that database. Each batch is one independent read, so
- * the connection returns to the pool between them and a verification running
- * alongside live traffic is just another reader. Expensive work stays outside
- * transaction boundaries, as every use case here requires.
- *
- * The consequence is that a verification is a snapshot taken over time: the
- * chain may grow while it runs, which is harmless, since new entries link to
- * the old head and cannot invalidate what was already checked.
- *
- * ## Organization scoping, and the alternative that was rejected
- *
- * There is one chain and `organizationId` is a field inside it, so filtering to
- * one tenant's entries and re-deriving hashes over that filtered list reports a
- * break on every entry after the first — a subsequence of a chain is not a
- * chain, because each entry commits to its *global* predecessor. Per-organization
- * chains would need a per-organization `sequence`, and `sequence` is globally
- * unique precisely because that is what makes a forked append impossible.
- *
- * So an organization-scoped run verifies the entire range and reports which
- * entries inside it belong to the tenant. That answers the question an operator
- * actually has — "are this organization's records, and the links running
- * through everyone else's records between them, intact?" — at the same cost as
- * an unscoped run.
- *
- * ## Anchored ranges
- *
- * When `checkAnchors` is set, each receipt is checked two ways, and the two
- * answers mean different things:
- * - `matchesDatabaseChain` — the hash this database recomputes at that sequence
- *   equals the hash the receipt claims was anchored. Fails when the local log
- *   was rewritten after anchoring.
- * - `matchesLedger` — the public ledger really holds that hash under that
- *   reference, which is independent of Verixa entirely: it is what an auditor
- *   with no access to our systems would find.
- *
- * Ledger matches but database mismatch is the tampering signal. Database
- * matches but ledger mismatch means the receipt is fabricated.
+ * With `checkAnchors`, each receipt is checked against both the recomputed chain
+ * (`matchesDatabaseChain`) and the public ledger (`matchesLedger`). Ledger match with a database
+ * mismatch indicates tampering; the reverse indicates a fabricated receipt.
  */
 export class VerifyAuditChain {
   constructor(

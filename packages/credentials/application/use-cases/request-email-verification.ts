@@ -22,22 +22,9 @@ export interface RequestEmailVerificationResult {
 }
 
 /**
- * Sends (or silently declines to send) an email verification link.
- *
- * Returns success unconditionally — unknown address, already-verified
- * account, suspended user, all of them — for the same reason
- * `AuthenticateWithPassword` returns one error for five causes. A
- * verification endpoint that says "no account with that address" is an
- * enumeration oracle with no password guessing required at all, which makes
- * it a *cheaper* oracle than the login form.
- *
- * The thing that makes this testable rather than merely asserted is
- * {@link RequestEmailVerificationResult.issued}: the response is identical
- * either way, so the test observes the internal outcome instead. That is also
- * the shape Issue 069's acceptance criterion asks for in so many words —
- * "verified via internal event, not response".
- *
- * See `docs/security/authentication-flows.md`.
+ * Sends, or silently declines to send, an email verification link. Always returns success, whatever
+ * the account state, so the endpoint cannot be used to discover accounts. Tests observe {@link
+ * RequestEmailVerificationResult.issued} instead (see docs/security/authentication-flows.md).
  */
 export class RequestEmailVerification {
   constructor(

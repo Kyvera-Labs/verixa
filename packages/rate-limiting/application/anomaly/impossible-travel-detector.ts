@@ -63,15 +63,10 @@ export function calculateHaversineDistanceKm(
 }
 
 /**
- * ImpossibleTravelDetector
- *
- * Implements an advisory impossible-travel heuristic for authentication attempts:
- * 1. Resolves client IP to approximate geographic coordinates using GeoIpResolver.
- * 2. Compares the current login against the account's previous observed login location and timestamp.
- * 3. Flags an anomaly if implied travel speed exceeds commercial flight thresholds.
- *
- * Note: Per architectural design, this detector is advisory only: it raises an AnomalyFlag for
- * risk scoring, stepped-up authentication (MFA/CAPTCHA), or audit logging, but does NOT block logins.
+ * Advisory impossible-travel check for authentication attempts: resolves the client IP to
+ * coordinates, compares it with the account's previous login, and flags an anomaly when the implied
+ * speed exceeds commercial flight. It raises an `AnomalyFlag` for risk scoring, step-up or audit,
+ * but never blocks a login.
  */
 export class ImpossibleTravelDetector {
   private readonly maxPlausibleSpeedKmH: number;

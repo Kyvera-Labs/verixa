@@ -29,21 +29,10 @@ const SHA256_HEX_PATTERN = /^[0-9a-f]{64}$/u;
 const MAX_STORAGE_REF_LENGTH = 1024;
 
 /**
- * One piece of evidence attached to a `VerificationRequest`: a government ID
- * scan, a selfie, a utility bill.
- *
- * The entity deliberately holds a **pointer** (`storageRef` + `checksum`),
- * not the bytes. The domain layer must never hold binary blobs or know whether
- * the bytes are in S3, on a local disk, or somewhere else — that boundary is
- * what lets `EvidenceStorage` (Issue 166) change without a domain change, and
- * what keeps a domain entity small enough to log. See
- * `docs/security/evidence-handling.md`.
- *
- * Evidence is its own aggregate rather than a field on the request for the
- * same reason a `Credential` is not a field on `User`: it has its own
- * lifecycle, its own access rules, and the audit trail needs to name one
- * specific artifact ("the front of the ID, uploaded at 14:02"), not "the
- * request was edited".
+ * One piece of evidence on a `VerificationRequest`, such as an ID scan, selfie or utility bill.
+ * Holds a pointer (`storageRef` and `checksum`), never the bytes, so storage can change without
+ * touching the domain (see docs/security/evidence-handling.md). Its own aggregate, with its own
+ * lifecycle and access rules.
  */
 export class Evidence {
   readonly id: EvidenceId;
@@ -67,7 +56,7 @@ export class Evidence {
    *
    * The `verificationType` is a parameter even though the request carries one
    * because the domain cannot reach through to the request from here without
-   * making evidence persistence-aware; the calling use case (Issue 168) has
+   * making evidence persistence-aware; the calling use case has
    * both objects loaded and passing the type in keeps this a pure function of
    * its inputs.
    */

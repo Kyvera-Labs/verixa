@@ -3,17 +3,10 @@ import { Result, ValidationError } from "@verixa/shared-kernel";
 const MAX_PART_LENGTH = 128;
 
 /**
- * A person's structured legal/given name — entirely optional on a `User`
- * (see {@link DisplayName} for the name shown throughout the product).
- *
- * Deliberately does **not** enforce a Latin charset, a specific casing, or
- * that every person has both a given and a family name: many cultures use a
- * single mononym, list family name first, or don't split names into
- * given/family at all. `familyName` is optional for exactly this reason —
- * requiring it would incorrectly reject real names, not just malformed
- * input. This is intentionally permissive; see
- * `docs/guides/domain-modeling.md` for the internationalization pitfalls
- * this sidesteps.
+ * A person's optional structured name (see {@link DisplayName} for the name shown in the product).
+ * Deliberately permissive: no character set, casing or given/family requirement, since many names
+ * are mononyms or family-name-first. `familyName` is optional for that reason (see
+ * docs/guides/domain-modeling.md).
  */
 export class PersonName {
   readonly givenName: string;

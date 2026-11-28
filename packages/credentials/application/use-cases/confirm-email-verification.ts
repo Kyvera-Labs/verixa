@@ -15,28 +15,9 @@ export interface ConfirmEmailVerificationResult {
 /**
  * Redeems a verification link, moving the user from `pending` to `active`.
  *
- * ## Why this one *does* say what went wrong
- *
- * Every other failure path in this package returns a single opaque error.
- * This one distinguishes "expired", "already used" and "not a token we
- * issued", and that is a considered difference rather than an inconsistency.
- *
- * Enumeration resistance protects a secret the attacker is *trying to
- * discover*: which addresses have accounts. Reaching this use case requires
- * already holding a 256-bit token, which is not guessable and which only
- * arrives by controlling the mailbox. There is nothing left to disclose — and
- * "this link expired" is genuinely useful, because the fix ("request another
- * one") is different from the fix for "already used" ("you are already
- * verified; just sign in").
- *
- * Copying the login rule here would produce a worse product for no security
- * gain, which is the failure mode of applying a good principle without its
- * reason.
- *
- * ## The rule that still applies
- *
- * An unknown token is reported identically to an expired one. That one *is* a
- * guess, so it gets nothing back.
+ * Unlike login, this reports "expired" and "already used" separately: the caller already holds an
+ * unguessable token from the mailbox, so nothing is disclosed, and the fixes differ. An unknown
+ * token is reported the same as an expired one, since that may be a guess.
  */
 export class ConfirmEmailVerification {
   constructor(private readonly unitOfWork: CredentialsUnitOfWork) {}
@@ -54,7 +35,7 @@ export class ConfirmEmailVerification {
     return this.unitOfWork.run(async (repositories) => {
       const token = await repositories.emailVerificationTokens.findByTokenHash(tokenHash);
       // `security/detect-possible-timing-attacks` matches the operand name
-      // "token" and assumes a secret comparison (Issue 208). This is a null
+      // "token" and assumes a secret comparison. This is a null
       // check on a lookup result, and its timing reveals only whether the row
       // exists — which the response already reveals. The actual secret
       // comparison, `matchesToken`, is constant-time below.
@@ -108,7 +89,7 @@ export class ConfirmEmailVerification {
       await repositories.users.save(activated.value);
 
       // The `UserStatusChanged` event is already on the aggregate, emitted by
-      // `activate`. Issue 068 asks for an event on success and the identity
+      // `activate`. An event is required on success and the identity
       // model supplies it — this use case does not need its own, and adding a
       // second one would mean two records of one fact that can disagree.
       return Result.ok({ user: activated.value });

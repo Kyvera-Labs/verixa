@@ -20,27 +20,12 @@ import {
 import type { PolicyEffect } from "../../domain/authorization-decision.js";
 
 /**
- * The `policy-simulate` command (Issue 155, roadmap 155).
+ * The `policy-simulate` command, written with its I/O injected ({@link PolicySimulateIo}) so a CLI
+ * only has to pass stdout, a file reader and return the exit code.
  *
- * Lives in `packages/authorization/infrastructure/` rather than
- * `apps/cli/src/commands/` because `apps/cli` does not exist yet — this is the
- * same call the sibling tooling issue (roadmap 156, the policy linter) made for
- * the same reason. The command is written as an adapter with its I/O injected
- * ({@link PolicySimulateIo}), so it is a complete, testable command rather than a
- * stub: mounting it in the CLI application is then a matter of passing
- * `process.stdout.write` and `fs.readFile` and returning the exit code, with no
- * logic moving between layers.
- *
- * ## Exit codes are the CI contract
- *
- * Three outcomes, not two, because collapsing them is how a CI check starts
- * lying. `1` means the policy decided something its author did not expect — the
- * signal this tool exists to produce, and the one a pipeline should fail on.
- * `2` means the simulation never ran (unusable arguments, an unreadable or
- * malformed fixture file, an unreachable policy store): also a failure, but a
- * different one, and a reviewer reading the log needs to be able to tell them
- * apart. A malformed fixtures file reported as "policy mismatch" would send an
- * author hunting through rules for a bug that is a stray comma.
+ * Exit codes: `0` all fixtures matched; `1` the policy decided something the author did not expect;
+ * `2` the simulation could not run (bad arguments, an unreadable or malformed fixture file, an
+ * unreachable policy store).
  */
 
 export const POLICY_SIMULATE_EXIT_CODES = {
@@ -278,15 +263,8 @@ export function parseArgv(argv: readonly string[]): Result<PolicySimulateOptions
 }
 
 /**
- * Parses the fixture file into a typed {@link PolicyFixtureSet}.
- *
- * Strict about *shape* — an unknown key or a misspelled `expectedEffect` is an
- * error, because a fixture that silently ignored a key would still "pass" while
- * asserting something other than what its author wrote. Lenient about *context
- * axes*: a fixture that only exercises `resource` and `subject` may omit the
- * other two, which are then empty. Requiring all four would add noise to every
- * fixture to say "this axis is unused", and an empty bag is already the domain's
- * representation of "nothing resolved".
+ * Parses the fixture file into a {@link PolicyFixtureSet}. Unknown keys are rejected so a
+ * misspelled assertion cannot silently pass. Context axes may be omitted and default to empty.
  */
 export function parseFixtureSet(
   raw: unknown,

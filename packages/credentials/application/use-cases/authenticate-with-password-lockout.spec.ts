@@ -17,7 +17,7 @@ import { AuthenticateWithPassword } from "./authenticate-with-password.js";
 import { RegisterUserWithPassword } from "./register-user-with-password.js";
 
 /**
- * Account lockout (Issue 067), in its own file because it is a distinct
+ * Account lockout, in its own file because it is a distinct
  * behaviour with its own fixture: a deliberately tiny policy, so the suite
  * observes real expiry without sleeping for a minute.
  *
@@ -120,16 +120,9 @@ describe("AuthenticateWithPassword — lockout", () => {
 
   describe("disclosure", () => {
     it("is distinct to the caller and identical to a client", async () => {
-      // Two requirements pulling against each other. Operationally a lockout
-      // and a bad password are very different signals, and collapsing them
-      // makes a credential-stuffing campaign look like ordinary user error.
-      // On the wire they must be indistinguishable, because lockout state
-      // exists only for accounts that exist — so "fail five times and watch
-      // what changes" would be an enumeration oracle, undoing what the
-      // generic error is for.
-      //
-      // Resolved by distinguishing the error *type* while keeping code,
-      // status and message identical.
+      // A lockout must be distinguishable internally (credential stuffing versus user error) but
+      // identical on the wire, or repeated failures would reveal which accounts exist. Only the
+      // error type differs; code, status and message match.
       await reachThreshold();
 
       const locked = await authenticate.execute({ email: EMAIL, password: PASSWORD });
@@ -244,7 +237,7 @@ describe("AuthenticateWithPassword — lockout", () => {
     });
 
     it("clears the lock when the password is changed", async () => {
-      // After a reset (Issue 070) the failures were not the owner's, and they
+      // After a reset the failures were not the owner's, and they
       // have no way to wait out a lock on a credential they have just
       // replaced.
       await reachThreshold();

@@ -88,7 +88,7 @@ describe("ReactivateUser", () => {
 });
 
 /**
- * Added in Issue 417: kills mutants in reactivate-user.ts that the
+ * Kills mutants in reactivate-user.ts that the
  * mutation-testing spike found surviving. The existing tests checked only the
  * error code, not which field it names, and never sent a whitespace reason.
  */

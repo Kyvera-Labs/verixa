@@ -1,31 +1,7 @@
 /**
- * Audit action types.
- *
- * A closed set of action identifiers for auditable events across all contexts.
- * Each action represents a specific, security-relevant operation that warrants
- * recording in the audit trail.
- *
- * ## Naming convention
- *
- * Actions follow the pattern `<context>.<entity>.<verb>` (e.g.,
- * `identity.user.registered`, `credentials.password.reset_completed`). This
- * three-part structure makes the source and nature of an event immediately
- * apparent in query results and exports, and groups related actions together
- * when sorted lexicographically.
- *
- * ## Why a closed set
- *
- * Free-form action strings scatter equivalent events under different spellings
- * (`login_failed` vs. `LOGIN_FAILURE` vs. `user.login.failed`), making queries
- * unreliable and compliance reports incomplete. A typed enum catches typos at
- * compile time and ensures every query for "failed logins" finds them all.
- *
- * ## Extension strategy
- *
- * New actions are added here as new auditable operations are introduced. The
- * central registry is deliberate: it forces every new security-relevant
- * operation to declare itself explicitly, rather than silently not being
- * audited because someone forgot to add logging.
+ * Closed set of auditable actions, named `<context>.<entity>.<verb>` (for example
+ * `identity.user.registered`). A closed set keeps spellings consistent so queries find every
+ * matching event, and new security-relevant operations must be registered here explicitly.
  */
 export type AuditAction =
   // Identity context

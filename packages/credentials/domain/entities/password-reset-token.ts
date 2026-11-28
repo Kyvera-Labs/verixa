@@ -8,17 +8,8 @@ export type PasswordResetTokenId = Id<"PasswordResetTokenId">;
 export type PasswordResetUserId = Id<"UserId">;
 
 /**
- * Default lifetime: one hour.
- *
- * Much shorter than email verification's 24 hours, and the asymmetry is
- * deliberate. This token can *change a password* — it is a complete account
- * takeover in a URL, and the only thing standing between an attacker and the
- * account is that they do not have it. Verification only confirms a fact
- * about an address someone already registered.
- *
- * An hour is comfortably longer than the minute or two a real reset takes,
- * and short enough that a link sitting in a mail archive, a forwarded thread,
- * or a scanner's log is almost always already dead.
+ * Default lifetime: one hour, much shorter than email verification because a reset link can take
+ * over the account.
  */
 const DEFAULT_TTL_MS = 60 * 60 * 1000;
 
@@ -39,16 +30,9 @@ export interface IssuedPasswordResetToken {
 }
 
 /**
- * Authority to set a new password without knowing the old one.
- *
- * The most dangerous token in the system, which is why it is the shortest
- * lived and the most narrowly scoped. Holding one is equivalent to holding
- * the account.
- *
- * Single-use matters more here than anywhere else. A reusable reset link in
- * an old email is a permanent backdoor that survives every subsequent
- * password change — the user picks a new password, believes they are safe,
- * and the link still works.
+ * Authority to set a new password without knowing the old one: holding it is equivalent to holding
+ * the account. Short-lived and single-use, so an old link cannot become a backdoor that survives
+ * later password changes.
  */
 export class PasswordResetToken {
   readonly id: PasswordResetTokenId;
@@ -117,16 +101,9 @@ export class PasswordResetToken {
   }
 
   /**
-   * Retires the token without redeeming it.
-   *
-   * Distinct from {@link consume}, which enforces the redemption rules and
-   * refuses an expired token. Retiring is not redeeming: when a replacement
-   * link is issued, every outstanding token must stop working, and an already
-   * expired one is no exception. Routing that through `consume` would leave
-   * expired tokens un-retired on a technicality.
-   *
-   * Idempotent — retiring an already-consumed token leaves it alone, so the
-   * original redemption time survives for the audit trail.
+   * Retires the token without redeeming it, including an expired one, so every outstanding link
+   * stops working when a replacement is issued. Idempotent; an already-consumed token keeps its
+   * original redemption time.
    */
   invalidate(now: Date = new Date()): PasswordResetToken {
     if (this.isConsumed) {

@@ -14,17 +14,9 @@ import { sendApiError, sendDomainError, sendError } from "../http/error-response
 import { registerZodSchema } from "../openapi/zod-registry.js";
 
 /**
- * JSON Schema for the registration body.
- *
- * Validates **shape only** — types and presence. Rules like "at least 12
- * characters" are deliberately absent, even though Fastify supports
- * `minLength`, because the password policy lives in `RawPassword` and
- * duplicating it here would create two sources of truth that drift: someone
- * raises the minimum in the domain, the schema still accepts 8, and the
- * mismatch surfaces as a confusing 400 that names a rule nobody can find.
- *
- * The split: schema rejects requests that are malformed. The domain rejects
- * requests that are well-formed and wrong.
+ * Registration body schema. Validates shape only; password rules live in `RawPassword` so there is
+ * a single source of truth. The schema rejects malformed requests, the domain rejects well-formed
+ * but invalid ones.
  */
 const registerBodyZodSchema = z
   .object({
@@ -39,15 +31,9 @@ const registerBodyZodSchema = z
 type RegisterBody = z.infer<typeof registerBodyZodSchema>;
 
 /**
- * JSON Schema for the login body.
- *
- * Shape only, and noticeably thinner than registration's — no `minLength` on
- * the password, no format check on the email. That is the same rule applied
- * for a sharper reason: on this endpoint, a 400 saying "email must be a valid
- * email" tells an attacker their input never reached the credential lookup,
- * which is one more bit than a failed login should give away. Malformed
- * addresses are rejected by the use case, as failed logins, indistinguishable
- * from every other kind.
+ * Login body schema: shape only, with no email format or password length checks. A format error
+ * would reveal that the input never reached the credential lookup, so malformed input fails like
+ * any other login.
  */
 const loginBodyZodSchema = z.object({ email: z.string(), password: z.string() }).strict();
 
@@ -77,18 +63,9 @@ const resetPasswordBodyZodSchema = z
 type ResetPasswordBody = z.infer<typeof resetPasswordBodyZodSchema>;
 
 /**
- * Authentication routes.
- *
- * Handlers here do one thing: translate HTTP to a use case and back. No
- * business logic, no repository access, no knowledge of Prisma. That is what
- * keeps the use cases testable without an HTTP server, and it is the pattern
- * every route added later should copy.
- *
- * Generic over the logger type for the same reason `buildApp` does not
- * annotate its return as a plain `FastifyInstance`: the app is built with a
- * concrete pino `Logger`, which is not structurally identical to Fastify's
- * own `FastifyBaseLogger` (Fastify's does not require `msgPrefix`). Pinning
- * the default here would reject the very instance `buildApp` produces.
+ * Authentication routes. Handlers only translate HTTP to a use case and back, with no business
+ * logic or repository access. Generic over the logger because `buildApp`'s pino `Logger` is not
+ * structurally a `FastifyBaseLogger`.
  */
 export function registerAuthRoutes<TLogger extends FastifyBaseLogger>(
   app: FastifyInstance<

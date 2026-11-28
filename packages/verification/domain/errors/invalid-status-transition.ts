@@ -3,19 +3,10 @@ import { DomainError } from "@verixa/shared-kernel";
 import type { VerificationStatusValue } from "../value-objects/verification-status.js";
 
 /**
- * A status change the request's state machine does not permit — deciding an
- * unclaimed request, re-deciding a terminal one, submitting evidence for a
- * request that is already under review.
- *
- * Returned rather than thrown, because an illegal transition is a *rejected
- * request* from the caller's point of view, not a broken invariant: two
- * reviewers racing to approve the same case is routine, and the loser should
- * receive a clear conflict rather than a 500. See `docs/guides/error-handling.md`.
- *
- * 409 rather than 400: the request was well-formed and the caller was allowed
- * to make it, but the resource's current state refuses it — the definition of
- * a conflict. A 400 would say the *input* was wrong, which would send a client
- * to fix a field that has nothing to do with the problem.
+ * A status change the state machine does not allow, such as deciding an unclaimed request or
+ * re-deciding a terminal one. Returned, not thrown, since races between reviewers are routine (see
+ * docs/guides/error-handling.md). Maps to 409: the request was valid but the resource's state
+ * refuses it.
  */
 export class InvalidStatusTransitionError extends DomainError {
   readonly code = "INVALID_STATUS_TRANSITION";

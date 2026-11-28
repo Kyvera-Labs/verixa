@@ -1,29 +1,11 @@
 /**
- * Metrics port abstraction (Phase 18 Observability, Issue 347 / #459).
+ * Backend-agnostic metrics port, bound at the composition root (`apps/api/src/server.ts`): a
+ * capturing no-op adapter in tests, Prometheus or OpenTelemetry in production.
  *
- * Provides a backend-agnostic seam for emitting numeric telemetry across
- * domain, application, and infrastructure layers without coupling call sites
- * to any concrete vendor library (e.g., `prom-client`, DataDog, AWS CloudWatch).
- *
- * ## Architectural Seam
- *
- * Application use cases and domain services measure operational signals
- * (counter increments, latency observations, gauge levels) through this port.
- * The concrete backend is bound at the composition root (`apps/api/src/server.ts`),
- * allowing unit tests to run with a memory-capturing no-op adapter and production
- * environments to route measurements to Prometheus or OpenTelemetry metrics.
- *
- * ## Method Contracts & Naming Conventions
- *
- * 1. Metric names must follow Prometheus / OpenTelemetry naming rules:
- *    - Lowercase alphanumeric characters and underscores: `[a-z][a-z0-9_]*`
- *    - Monotonic counters should end in `_total` (e.g. `verixa_http_requests_total`).
- *    - Histograms should include measurement unit suffix (e.g. `_seconds`, `_bytes`).
- * 2. Label cardinality:
- *    - Labels must represent low-cardinality discrete dimensions (e.g., `method`, `route`, `status_class`).
- *    - Call sites must NEVER include high-cardinality values such as user IDs, tokens, emails,
- *      or raw interpolated paths (e.g., `/users/123e4567-e89b...`). Adapters are required
- *      to reject or sanitize unbounded label values.
+ * 1. Names follow Prometheus and OpenTelemetry rules: `[a-z][a-z0-9_]*`, counters end in `_total`,
+ *    histograms carry a unit suffix such as `_seconds` or `_bytes`.
+ * 2. Labels must be low-cardinality (`method`, `route`, `status_class`). Never use user IDs,
+ *    tokens, emails or raw paths; adapters must reject or sanitize unbounded values.
  */
 
 export type MetricLabelValue = string | number | boolean;
@@ -66,14 +48,12 @@ export interface MetricsRecorder {
   recordHistogram(name: string, value: number, labels?: MetricLabels): void;
 
   /**
-   * Sets the current value of a gauge representing an instantaneous level.
+   * Sets a gauge's current value, which can rise or fall (in-flight requests, active connections,
+   * cache size).
    *
-   * Gauges can increase, decrease, or remain stationary over time (e.g., in-flight requests,
-   * active connections, cache item count).
-   *
-   * @param name The metric name (e.g. 'verixa_http_in_flight_requests')
+   * @param name The metric name (for example `verixa_http_in_flight_requests`)
    * @param value The current gauge value
-   * @param labels Low-cardinality dimensional labels
+   * @param labels Low-cardinality labels
    */
   setGauge(name: string, value: number, labels?: MetricLabels): void;
 

@@ -1,19 +1,7 @@
 /**
- * The HTML seam for surfaces served by this API (Issue 212).
- *
- * The API answers in JSON, so nothing renders HTML yet. This exists ahead of
- * the Swagger UI of Issue 237 and whatever admin page follows, for one reason:
- * a nonce is only worth having if the thing that renders the document is the
- * thing that receives it. A page builder written later, under time pressure,
- * will reach for `inline: true` in a template helper or a `<script>` written by
- * hand, and the policy in `plugins/security-headers.ts` will have been undone
- * at the point of contact — invisibly, because the response header still looks
- * correct.
- *
- * `body` is markup this repository authored, not data. Anything user-supplied
- * has to be escaped at its own boundary, where the rules of that content are
- * known; a generic "render a page" helper cannot guess whether a markdown
- * renderer has already sanitized.
+ * Builds HTML responses with a CSP nonce applied by the same code that renders the document, so a
+ * future page cannot undo the policy in `plugins/security-headers.ts` with an inline script. `body`
+ * must be markup authored in this repository; escape any user-supplied content at its own boundary.
  */
 
 const ESCAPES: ReadonlyMap<string, string> = new Map([

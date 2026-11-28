@@ -48,7 +48,7 @@ export interface MigrationSafetySummary {
 }
 
 /**
- * Comment marker required for destructive changes to document data preservation (Issue 393).
+ * Comment marker required for destructive changes to document data preservation.
  */
 const DATA_PRESERVATION_NOTE_PATTERN = /DATA[-_ ]?PRESERVATION\s*:|@data-preservation/i;
 
@@ -199,11 +199,10 @@ export function checkMigrationSql(sql: string, filePath = "migration.sql"): Migr
     });
   }
 
-  // Check each statement against safety policies
   for (const stmt of cleanedStatements) {
     const text = stmt.text;
 
-    // --- Issue 393: Forward-only policy (no undocumented destructive drops) ---
+    // --- Forward-only policy (no undocumented destructive drops) ---
     const dropCheck = inspectDestructiveOperation(text);
     if (dropCheck.isDestructive) {
       if (!hasDataPreservationNote) {
@@ -223,7 +222,7 @@ export function checkMigrationSql(sql: string, filePath = "migration.sql"): Migr
       }
     }
 
-    // --- Issue 394: Zero-downtime rolling deploy checklist ---
+    // --- Zero-downtime rolling deploy checklist ---
     const notNullCheck = inspectNotNullWithoutDefault(text);
     if (notNullCheck.isUnsafe) {
       issues.push({

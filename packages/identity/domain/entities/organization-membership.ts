@@ -21,7 +21,7 @@ interface OrganizationMembershipProps {
  * and lifecycle) rather than a bare foreign-key pair, because membership
  * itself has domain meaning (it can be revoked, it has a joined-at date)
  * that a plain join table can't express. Role assignment is a separate
- * concern, added in Phase 07.
+ * concern, handled by the authorization package.
  */
 export class OrganizationMembership {
   readonly id: OrganizationMembershipId;
@@ -41,7 +41,7 @@ export class OrganizationMembership {
   /**
    * Creates a new active membership for `userId` in `organizationId`.
    * `existingMemberships` should be every membership currently known for
-   * that user+organization pair (until Phase 03, callers pass this in
+   * that user+organization pair (callers pass this in
    * directly; once a repository exists, it will supply this list) — a
    * duplicate *active* membership is rejected, but a revoked one doesn't
    * block rejoining.

@@ -27,8 +27,8 @@ export interface IssuedSession {
 export type IssueSessionError = ValidationError;
 
 /**
- * Zero (the default) disables enforcement — see Issue 094's acceptance
- * criterion "limit of 0/unset disables enforcement." Sizing this above zero
+ * Zero (the default) disables enforcement, as required:
+ * "limit of 0/unset disables enforcement." Sizing this above zero
  * is a per-deployment product decision (banking apps tend to pick 1–3,
  * consumer SaaS often skips it entirely), which is why it is a constructor
  * parameter here rather than a constant: the composition root reads it from
@@ -38,30 +38,12 @@ export type IssueSessionError = ValidationError;
 const DEFAULT_MAX_CONCURRENT_SESSIONS = 0;
 
 /**
- * Opens a new `Session` for a user who just authenticated (e.g. via
- * `AuthenticateWithPassword` in `packages/credentials`), and issues the
- * first access/refresh token pair for it.
+ * Opens a session for an already-authenticated user and issues the first access and refresh tokens.
+ * Authentication itself happens in the credentials context.
  *
- * Deliberately takes an already-authenticated `userId` rather than
- * credentials of its own — proving *who* someone is is a different
- * context's job (Phase 04); this use case only ever runs after that has
- * already succeeded, the same separation `Credential` vs. `User` draws in
- * `packages/identity`/`packages/credentials`.
- *
- * ## Concurrent-session eviction (Issue 094)
- *
- * When `maxConcurrentSessions` is positive and the user is already at the
- * limit, the least-recently-active existing session is evicted *before* the
- * new one is created — not after. If the new session were saved first, a
- * limit of `N` would briefly allow `N + 1` live sessions to exist, and a
- * crash between the save and the eviction would leave that extra session
- * behind permanently. Evicting first means the invariant ("at most `N`
- * active sessions") holds after every step, not just at the end of a
- * successful run.
- *
- * An evicted session's access token is denylisted on `RevocationList`,
- * keyed by the session's own id — see `RevocationList` for why that's
- * enough without `Session` tracking which token is current.
+ * When `maxConcurrentSessions` is positive and the user is at the limit, the least recently active
+ * session is evicted before the new one is created, so the limit holds at every step. The evicted
+ * session is added to `RevocationList`.
  */
 export class IssueSession {
   constructor(

@@ -6,14 +6,9 @@ export type PolicyId = Id<"PolicyId">;
 export type PolicyStatus = "draft" | "published" | "archived";
 
 /**
- * Which resource type and actions a {@link Policy} applies to.
- *
- * Kept as a plain selector rather than a `Condition` itself: "does this
- * policy even apply here" (a cheap lookup key used by
- * `findApplicableTo(resourceType, action)`, Issue 149) is a different
- * question from "does it grant or deny" (the rule tree's job), and folding
- * them together would force every applicability check through full
- * condition evaluation.
+ * Which resource type and actions a {@link Policy} applies to. Kept separate from the rule
+ * conditions so applicability is a cheap lookup in `findApplicableTo` rather than a full
+ * evaluation.
  */
 export interface PolicyTarget {
   readonly resourceType: string;
@@ -32,17 +27,9 @@ interface PolicyProps {
 }
 
 /**
- * The aggregate root of the ABAC model: a named, versioned set of
- * {@link Rule}s scoped to a {@link PolicyTarget}.
- *
- * Immutable, like `User` and `AuditLogEntry` before it (see
- * `docs/guides/domain-modeling.md`) — there is no method that mutates a
- * `Policy` in place. Publishing a new version (Issue 150) means creating a
- * *new* `Policy` instance with `version` incremented, never editing an
- * existing one, which is what makes append-only version history
- * (Issue 150's acceptance criterion) a property of how the aggregate is
- * used rather than something the persistence layer has to enforce on top of
- * a mutable model.
+ * Aggregate root of the ABAC model: a named, versioned set of {@link Rule}s for one {@link
+ * PolicyTarget}. Immutable; publishing creates a new instance with an incremented version, which
+ * keeps version history append-only.
  */
 export class Policy {
   readonly id: PolicyId;
@@ -66,14 +53,8 @@ export class Policy {
   }
 
   /**
-   * Creates version 1 of a brand-new policy.
-   *
-   * Validates the invariants a later DSL parser (Issue 143) and repository
-   * (Issue 150) both need to be able to rely on already holding: a policy
-   * with no rules can never produce a decision, and a nameless policy is
-   * unidentifiable in an audit trail or an admin UI — both are input
-   * mistakes an author can make, not aggregate-internal bugs, so they come
-   * back as a `Result` rather than throwing (see `docs/guides/error-handling.md`).
+   * Creates version 1 of a new policy. Returns a validation error for a policy with no rules or no
+   * name, since both are author input mistakes (see docs/guides/error-handling.md).
    */
   static create(params: {
     name: string;
@@ -114,7 +95,7 @@ export class Policy {
 
   /**
    * Rebuilds a `Policy` from already-trusted data (a database row, once
-   * Issue 150 lands). Skips {@link create}'s validation for the same reason
+   * a persistence adapter exists). Skips {@link create}'s validation for the same reason
    * `User.reconstitute` does — the data already represents a previously
    * valid state, so re-validating it as if it were new authoring input would
    * be redundant.

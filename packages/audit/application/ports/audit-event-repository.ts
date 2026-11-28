@@ -47,64 +47,15 @@ export interface PaginatedAuditEvents {
 /**
  * Repository port for audit events.
  *
- * ## Append-only by design
+ * Append-only: there is no update or delete. Immutability is enforced by the domain model, by this
+ * interface and by revoked UPDATE/DELETE grants in the database.
  *
- * This interface deliberately excludes any `update()` or `delete()` methods.
- * Audit events are immutable facts — once an action has occurred and been
- * recorded, that record cannot change. This is not merely convention; it is
- * enforced at three layers:
+ * `append` returns a Result so callers can log a failed write and carry on; blocking the operation
+ * that caused the event is worse than a gap in the trail (see `RecordAuditEvent`).
  *
- * 1. **Domain model**: `AuditEvent` has no setters
- * 2. **Repository port** (here): No mutation methods in the interface
- * 3. **Database**: UPDATE/DELETE grants revoked for the application role
- *
- * Making mutation unrepresentable in the type system (layer 2) is what
- * prevents a well-intentioned developer from adding an "edit audit log" feature
- * that would undermine the entire purpose of the audit trail. The signature
- * `append(event): Promise<Result<void>>` is the complete write API.
- *
- * ## Why append returns Result
- *
- * Even though appending to an audit log should always succeed in normal
- * operation, there are failure modes that must be handled:
- * - Database unavailable
- * - Disk full
- * - Constraint violation (e.g., duplicate ID, which should be impossible but
- *   is a database-level check)
- *
- * These are *exceptional* in the true sense — they should never happen in
- * production, but when they do, the caller needs to know. Unlike a use case
- * failure (invalid input, business rule violation), an audit append failure
- * is usually logged and the operation continues, because failing the operation
- * that *caused* the audit event (e.g., blocking a successful login because the
- * audit log is down) is worse than having a gap in the audit trail.
- *
- * See `RecordAuditEvent` use case for how append failures are handled.
- *
- * ## Query methods and tenant isolation
- *
- * Every query method requires `organizationId` in its filters. This is
- * non-negotiable: audit events from one organization must never be visible to
- * another without explicit permission escalation. The port enforces this at
- * the type level by making `organizationId` a required field in
- * `AuditEventFilters`.
- *
- * Implementations must enforce this at the database level as well (Row-Level
- * Security or equivalent), but the port's signature is the first line of
- * defense — it makes writing a cross-tenant query require actively working
- * around the type system.
- *
- * ## No count-only queries
- *
- * There is no separate `count()` method. If a caller needs a count, they
- * request it via the `totalCount` field in pagination parameters. This is
- * deliberate: counting audit events is expensive (potentially a full table
- * scan, depending on filters), and making it a side effect of an actual query
- * rather than a standalone operation discourages writing "how many events do
- * we have?" dashboards that scan the entire log on every page load.
- *
- * Implementations may return `undefined` for `totalCount` if computing it
- * would be prohibitively expensive for the given filter set.
+ * Every query requires `organizationId`, so a cross-tenant query cannot be written without working
+ * around the types. Implementations must also enforce tenancy in the database. There is no
+ * standalone count; `totalCount` is optional and may be omitted when it would be expensive.
  */
 export interface AuditEventRepository {
   /**
@@ -119,24 +70,17 @@ export interface AuditEventRepository {
   append(event: AuditEvent): Promise<Result<void, AppendAuditEventError>>;
 
   /**
-   * Finds an audit event by its ID.
-   *
-   * Used for lookups when an event ID is directly referenced (e.g., from
-   * another system's logs, or when confirming an anchoring reference).
+   * Finds an audit event by ID within one organization.
    *
    * @param id - The event ID to look up
-   * @param organizationId - The organization the event must belong to (tenant isolation)
-   * @returns The event if found and belongs to the specified organization, undefined otherwise
+   * @param organizationId - The organization the event must belong to
+   * @returns The event, or undefined if it does not exist in that organization
    */
   findById(id: AuditEventId, organizationId: string): Promise<AuditEvent | undefined>;
 
   /**
-   * Queries audit events matching the given filters.
-   *
-   * Results are ordered by timestamp descending (most recent first) within each
-   * page. Pagination is cursor-based (keyset pagination) rather than
-   * offset-based, to remain stable under concurrent inserts — an offset-based
-   * page 2 would shift if new events arrived between fetching page 1 and page 2.
+   * Queries audit events, newest first, with keyset pagination so pages stay stable under
+   * concurrent inserts.
    *
    * @param filters - Query filters (organizationId is required)
    * @param pagination - Pagination parameters
@@ -145,11 +89,7 @@ export interface AuditEventRepository {
   query(filters: AuditEventFilters, pagination: PaginationParams): Promise<PaginatedAuditEvents>;
 
   /**
-   * Retrieves a range of events for a given organization in sequence order.
-   *
-   * Used primarily for chain verification and anchoring — operations that need
-   * to walk the event sequence in order. Unlike `query()`, this is ordered by
-   * ID/insertion order (ascending), not timestamp.
+   * Returns an organization's events in insertion order, for chain verification and anchoring.
    *
    * @param organizationId - The organization whose events to retrieve
    * @param fromId - Start from this event ID (inclusive), or from the beginning if undefined

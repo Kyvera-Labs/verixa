@@ -84,32 +84,12 @@ async function seedDefaultRoles(prisma: PrismaClient): Promise<void> {
 }
 
 /**
- * Deterministic development fixtures.
+ * Deterministic development fixtures: `pnpm db:seed`. Idempotent, since every record is upserted by
+ * a fixed ID.
  *
- * Run with `pnpm db:seed`. Safe to run repeatedly: every record is upserted
- * against a fixed id, so a second run updates rather than duplicating. That
- * property is not a nicety — a seed you're afraid to re-run becomes a seed
- * nobody runs, and the fixtures drift out of sync with the schema until they
- * no longer work at all.
- *
- * ## This data is for local development only
- *
- * Every value here is obviously, deliberately fake: `@example.com` addresses
- * (an IANA-reserved domain that can never receive mail), names that read as
- * placeholders, and no secrets of any kind.
- *
- * That last part matters more than it looks. Seed files are copied,
- * committed, pasted into issues, and screenshotted in tutorials — so anything
- * in one should be worthless if disclosed. The failure mode isn't a leaked
- * seed password; it's that a realistic-looking one teaches the wrong habit
- * and eventually gets pasted somewhere real, or that a deployment
- * accidentally seeds a staging box with credentials someone then relies on.
- * Nothing here should ever be usable as a credential.
- *
- * There are no passwords yet because credentials arrive in Phase 04. When
- * they do, seeded accounts must use passwords that are clearly fake and
- * documented as unusable outside local development — never something that
- * looks like a real one.
+ * Local development only. Every value is obviously fake (`@example.com` addresses, placeholder
+ * names) and nothing here is usable as a credential. Any seeded password added later must be
+ * clearly fake.
  */
 
 // Prisma 6 read DATABASE_URL from .env by itself; Prisma 7 does not, and
@@ -128,16 +108,8 @@ if (databaseUrl === undefined || databaseUrl === "") {
 const prisma = createPrismaClient(databaseUrl);
 
 /**
- * Fixed ids, not random ones.
- *
- * Deterministic ids are what make the seed idempotent, and they also make
- * fixtures referenceable: a contributor debugging locally can point at
- * `00000000-0000-4000-8000-000000000001` and know exactly which user that is,
- * across resets and across machines. Random ids would change every run and be
- * useless in a bug report.
- *
- * The `4` and `8` in the third and fourth groups keep these valid UUIDv4s, so
- * anything that validates the format still accepts them.
+ * Fixed IDs make the seed idempotent and let a fixture be referenced across resets and machines.
+ * The `4` and `8` keep them valid UUIDv4s.
  */
 const IDS = {
   alice: "00000000-0000-4000-8000-000000000001",

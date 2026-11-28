@@ -1,15 +1,9 @@
 import { Result } from "@verixa/shared-kernel";
 
 /**
- * Unwraps a domain `Result` inside a builder step, rethrowing the domain's own
- * error object when the transition was refused.
- *
- * Deliberately not `unwrapResult` from `../factories`: that helper wraps the
- * error in a generic `Error` with a JSON message, which is fine for a factory
- * default that should never fail, but a builder exists to express
- * preconditions — when a chain describes an impossible history, the test
- * should be able to assert on `InvalidStatusTransitionError` /
- * `ValidationError` exactly as production callers would see it.
+ * Unwraps a domain `Result` in a builder step, rethrowing the domain's own error when a transition
+ * is refused, so tests can assert on `InvalidStatusTransitionError` or `ValidationError` exactly as
+ * production callers see them. Unlike `unwrapResult`, it does not wrap the error.
  */
 export function orThrowDomainError<T, E>(result: Result<T, E>): T {
   if (Result.isOk(result)) {

@@ -5,7 +5,7 @@ function isKnownRequestError(error: unknown): error is PrismaClientKnownRequestE
   return error instanceof PrismaClientKnownRequestError;
 }
 
-/** Keep Prisma's error codes inside the persistence adapter, following Issue 056. */
+/** Keep Prisma's error codes inside the persistence adapter. */
 export function mapPrismaError(error: unknown, entity: string): never {
   if (isKnownRequestError(error)) {
     switch (error.code) {

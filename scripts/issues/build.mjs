@@ -1,15 +1,10 @@
 #!/usr/bin/env node
 /**
- * Renders every roadmap entry to a markdown file so the output can be read
- * and reviewed before anything is pushed to GitHub.
+ * Renders every roadmap entry to a Markdown file in `build/issues/` (gitignored), so issues can be
+ * reviewed before anything is pushed to GitHub.
  *
- *     node scripts/issues/build.mjs              # all 504
+ *     node scripts/issues/build.mjs
  *     node scripts/issues/build.mjs --from 071 --to 100
- *
- * Output goes to `build/issues/`, which is gitignored. Reviewing a sample by
- * eye before a bulk push is the cheapest possible way to catch a template
- * mistake that would otherwise be repeated 200 times and have to be edited
- * back out one issue at a time.
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";

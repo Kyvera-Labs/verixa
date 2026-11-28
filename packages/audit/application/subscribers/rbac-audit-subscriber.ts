@@ -5,7 +5,7 @@ import type { RecordAuditEventCommand } from "../use-cases/record-audit-event.js
 import { AuditEventSubscriber } from "./audit-event-subscriber.js";
 
 /**
- * Placeholder for RoleAssigned event from Phase 07 (RBAC).
+ * Placeholder for the RBAC RoleAssigned event.
  *
  * This interface defines the expected shape of the RoleAssigned event.
  * When the RBAC package publishes this event, this subscriber will
@@ -21,7 +21,7 @@ export interface RoleAssignedEvent extends DomainEvent {
 }
 
 /**
- * Placeholder for PermissionGranted event from Phase 07 (RBAC).
+ * Placeholder for the RBAC PermissionGranted event.
  *
  * This interface defines the expected shape of the PermissionGranted event.
  * When the RBAC package publishes this event, this subscriber will
@@ -38,7 +38,7 @@ export interface PermissionGrantedEvent extends DomainEvent {
 }
 
 /**
- * Subscriber for RoleAssigned events (Phase 07).
+ * Subscriber for RoleAssigned events.
  *
  * Records each role assignment as an audit event with the assignedBy user as
  * the actor and the target user as the subject.
@@ -64,7 +64,7 @@ export class RoleAssignedAuditSubscriber extends AuditEventSubscriber<RoleAssign
 }
 
 /**
- * Subscriber for PermissionGranted events (Phase 07).
+ * Subscriber for PermissionGranted events.
  *
  * Records each permission grant as an audit event with the grantedBy user as
  * the actor and the target user as the subject.

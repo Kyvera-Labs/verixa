@@ -81,7 +81,6 @@ export class ConsumeBackupCode {
     // Match found. Consume the code by removing its hash.
     hashes.splice(matchedIndex, 1);
 
-    // Update the record with the remaining hashes.
     backupMethod.updateSecret(JSON.stringify(hashes));
     await this.mfaMethodRepository.save(backupMethod);
 
@@ -100,14 +99,9 @@ export class ConsumeBackupCode {
 }
 
 /**
- * Reads the stored backup-code hashes.
- *
- * `JSON.parse` is typed `any`, so the shape is checked rather than asserted: a
- * secret holding valid JSON of the wrong shape (an object, or an array with a
- * non-string in it) would otherwise flow on as a `string[]` and only fail
- * later, inside the verification loop, where it would read as a hashing fault
- * rather than corrupt data. Returns `null` for anything unusable, which the
- * caller treats as a failed attempt.
+ * Parses the stored backup-code hashes, checking the shape because `JSON.parse` returns `any`.
+ * Returns `null` for anything that is not an array of strings, which the caller treats as a failed
+ * attempt.
  */
 function parseStoredHashes(secret: string): string[] | null {
   let parsed: unknown;

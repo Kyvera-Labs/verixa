@@ -6,7 +6,7 @@ carries an `organization_id`, and Postgres **Row-Level Security** enforces
 that a connection only sees rows for the organization it is currently acting
 as.
 
-## ⚠️ Deployment requirement: do not connect as a superuser
+## Deployment requirement: do not connect as a superuser
 
 **A Postgres superuser bypasses RLS unconditionally.** There is no
 configuration that makes a superuser subject to a policy — not `ENABLE`, not
@@ -36,12 +36,12 @@ work, tracked for Phase 20.
 
 ## What is and isn't covered
 
-| Table                      | RLS                            | Why                              |
-| -------------------------- | ------------------------------ | -------------------------------- |
-| `organizations`            | ✅ scoped by `id`              | The organization _is_ the tenant |
-| `organization_memberships` | ✅ scoped by `organization_id` |                                  |
-| `invitations`              | ✅ scoped by `organization_id` |                                  |
-| `users`                    | ❌ not scoped                  | A user is a **global identity**  |
+| Table                      | RLS                         | Why                              |
+| -------------------------- | --------------------------- | -------------------------------- |
+| `organizations`            | scoped by `id`              | The organization _is_ the tenant |
+| `organization_memberships` | scoped by `organization_id` |                                  |
+| `invitations`              | scoped by `organization_id` |                                  |
+| `users`                    | not scoped                  | A user is a **global identity**  |
 
 `users` is excluded deliberately. A person can belong to several
 organizations at once — a consultant working with multiple clients — which is

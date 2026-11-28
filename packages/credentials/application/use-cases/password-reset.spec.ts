@@ -110,7 +110,7 @@ describe("password reset (Issues 069 and 070)", () => {
       expect(Result.isOk(unknown)).toBe(true);
       if (!Result.isOk(known) || !Result.isOk(unknown)) return;
 
-      // Issue 069's criterion in full: token generation is observable only
+      // Token generation is observable only
       // internally, never through the response.
       expect(known.value.issued).toBe(true);
       expect(unknown.value.issued).toBe(false);
@@ -256,7 +256,7 @@ describe("password reset (Issues 069 and 070)", () => {
     });
 
     it("reports every rejection identically, unlike email verification", async () => {
-      // The opposite call from Issue 068, and the stakes are why. An attacker
+      // The opposite choice from email verification, and the stakes are why. An attacker
       // holding a *used* reset token learns from "already used" that it was
       // real and that the account exists. Expired leaks the same. One message
       // for all three.
@@ -330,7 +330,6 @@ describe("password reset (Issues 069 and 070)", () => {
     });
 
     it("rejects reuse of a password from history", async () => {
-      // Set up a credential with password history
       const user = await loadUser();
       const credential = await unitOfWork.repositories.credentials.findByUserId(user.id);
       if (credential === undefined) throw new Error("fixture setup failed");

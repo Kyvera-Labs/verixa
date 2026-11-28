@@ -1,36 +1,17 @@
 /**
- * CycloneDX SBOM generator (Issue 215).
+ * Generates a CycloneDX 1.6 SBOM from `pnpm-lock.yaml` and validates it against the schema before
+ * writing.
  *
- * Turns `pnpm-lock.yaml` into a machine-readable inventory of every package a
- * release installs, and validates the result against the CycloneDX 1.6 JSON
- * schema before writing it.
+ * The lockfile is used rather than the installed tree because it is the reviewed artifact, it
+ * reflects pnpm's real graph (npm-based tools do not), and it already has versions and integrity
+ * hashes, so output is reproducible offline.
  *
- * Why the lockfile is the source of truth, rather than the installed tree:
- * - The lockfile is the only artifact here that is *reviewed*. `node_modules` on
- *   a release runner also reflects install-script behaviour, platform-specific
- *   optional dependencies and whatever that runner had cached, so a BOM built
- *   from it describes one machine rather than the release.
- * - The existing CycloneDX npm tooling shells out to `npm ls`, which does not
- *   understand pnpm's symlinked, peer-disambiguated store — it reports the tree
- *   npm would have built, not the graph this repository declares. Reading
- *   `pnpm-lock.yaml` directly is the difference between an inventory and a guess.
- * - Resolved versions and integrity hashes are already in the lockfile, so this
- *   needs no network and two runs of the same commit agree on every package.
+ * License expressions are omitted because they are not in the lockfile. Development-only packages
+ * are not marked `scope: optional`, so scanners do not skip them; they still run registry code in
+ * CI.
  *
- * What is deliberately absent from the output, and why:
- * - License expressions. They are not in the lockfile. Joining them in from each
- *   installed package's `package.json` would tie the SBOM to a completed install,
- *   and partially-filled license fields are worse than absent ones: an auditor
- *   cannot tell "no license declared" from "nobody looked".
- * - `scope: optional` on development-only packages. Marking them optional tells
- *   vulnerability scanners they may be skipped, and a dependency that only ever
- *   runs in CI still runs code fetched from the registry — that is the delivery
- *   path several well-known supply-chain attacks took. Everything this generator
- *   finds is therefore reported as part of the build.
- *
- * Usage:
- *   pnpm sbom:generate [--repo <path>] [--output <path>]
- *   pnpm sbom:generate --validate-only <path-to-bom>
+ * Usage: `pnpm sbom:generate [--repo <path>] [--output <path>]` or `pnpm sbom:generate
+ * --validate-only <path-to-bom>`.
  */
 
 import { randomUUID } from "node:crypto";

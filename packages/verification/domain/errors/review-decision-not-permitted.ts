@@ -3,18 +3,9 @@ import { DomainError } from "@verixa/shared-kernel";
 import type { VerificationRequestId } from "../entities/verification-request.js";
 
 /**
- * A reviewer tried to decide (approve, reject, or ask for more information)
- * a request they do not hold an active claim on.
- *
- * 403 rather than 409: the caller is not permitted to make this decision on
- * this resource right now. That is an authorization outcome, and it is
- * deliberately distinct from `InvalidStatusTransitionError` — "someone else
- * owns this case" is an operational fact a queue UI should retry around,
- * while "the request is already decided" is final and should not.
- *
- * Note that this is *claim* authorization, not role authorization: whether
- * the caller has the reviewer role at all is Phase 07's RBAC concern, checked
- * before the use case is reached. This error is about the specific case.
+ * A reviewer tried to decide a request they do not currently hold a claim on. Maps to 403, distinct
+ * from `InvalidStatusTransitionError`: a queue can retry around ownership, but not around a final
+ * decision. Role authorization is checked separately, before the use case.
  */
 export class ReviewDecisionNotPermittedError extends DomainError {
   readonly code = "REVIEW_DECISION_NOT_PERMITTED";

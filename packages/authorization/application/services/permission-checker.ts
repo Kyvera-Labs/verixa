@@ -9,7 +9,7 @@ export interface PermissionCheckerOptions {
 }
 
 /**
- * Application service responsible for resolving and evaluating a user's effective permissions (Issue 134).
+ * Application service responsible for resolving and evaluating a user's effective permissions.
  *
  * Enforces deny-by-default: a user with no role assignments or expired assignments has no permissions.
  * Aggregates all granted permissions across all active (non-expired) roles assigned to the user

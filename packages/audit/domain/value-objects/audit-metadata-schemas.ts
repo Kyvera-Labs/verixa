@@ -3,37 +3,13 @@ import { z } from "zod";
 import type { AuditAction } from "./audit-action.js";
 
 /**
- * Metadata schema registry for audit events.
+ * Metadata schema registry: one Zod schema per audit action, so metadata is structured, consistent
+ * and queryable.
  *
- * Each action type has a corresponding Zod schema that validates its metadata
- * shape. This ensures that:
- * 1. Metadata is structured and queryable, not an opaque blob
- * 2. Required context fields are never missing
- * 3. Field types are consistent across all events of the same action
- *
- * ## Schema design principles
- *
- * - Keep metadata **minimal**: only facts directly related to the action itself.
- *   The actor, resource, timestamp, and organization are already first-class
- *   fields on `AuditEvent` — don't duplicate them in metadata.
- *
- * - **Never include secrets**: passwords, tokens, session secrets, API keys,
- *   or any PII beyond what's necessary to identify the affected resource.
- *
- * - Use **consistent field names** across schemas: `oldValue`/`newValue` for
- *   changes, `reason` for human-supplied rationale, `ipAddress` for source IP.
- *
- * - All fields are **optional** unless their absence would make the event
- *   meaningless. An incomplete event is better than no event; required fields
- *   are a build-time contract that can break at runtime if a caller forgets.
- *
- * ## Adding new schemas
- *
- * When a new action is added to `AuditAction`, add its schema here. An action
- * without a schema defaults to accepting any JSON object, which defeats the
- * purpose — the first time someone queries "every role assignment last month",
- * they'll discover half the events are missing `roleId` because it was never
- * required.
+ * Keep metadata minimal and never include secrets or unnecessary PII; actor, resource, timestamp
+ * and organization are already fields on the event. Reuse field names (`oldValue`/`newValue`,
+ * `reason`, `ipAddress`). Fields are optional unless the event is meaningless without them. Add a
+ * schema here for every new action.
  */
 
 // Base schemas for common metadata patterns

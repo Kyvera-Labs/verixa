@@ -14,8 +14,8 @@ export interface RunAutomatedCheckCommand {
   readonly requestId: VerificationRequestId;
   /**
    * The evidence to check. Supplied by the caller rather than fetched here:
-   * this package has no `EvidenceRepository` yet (evidence persistence is
-   * Issues 166/168), and the upload flow that triggers an automated check
+   * this package has no `EvidenceRepository` yet (evidence persistence
+   * is not built yet), and the upload flow that triggers an automated check
    * already has the evidence it just accepted in hand.
    */
   readonly evidence: readonly Evidence[];
@@ -35,26 +35,11 @@ export interface RunAutomatedCheckResult {
 export type RunAutomatedCheckError = ValidationError | NotFoundError | InvalidStatusTransitionError;
 
 /**
- * Runs the configured {@link VerificationProvider} against a submitted
- * request's evidence and moves the case to `in_review` regardless of the
- * outcome (Issue 172).
- *
- * ## Why the status always lands on `in_review`, never auto-decided
- *
- * See `VerificationProvider`'s own doc: a provider holds an opinion, not
- * authority. `false positives or negatives in automated KYC carry severe
- * real-world consequences` (`docs/guides/use-cases.md`), so a human reviewer
- * stays the only one who can move a request to a terminal state. A provider
- * throwing (timeout, misconfiguration) is treated the same as it returning
- * `inconclusive` — both still route to a human, because the alternative is
- * leaving the request stuck in `submitted` on an infrastructure hiccup.
- *
- * ## Why results aren't stored on the aggregate
- *
- * Neither `VerificationRequest` nor `Evidence` has a field for a provider's
- * opinion — only a reviewer's terminal decision is domain state that
- * matters past the moment it's made. The per-evidence results are returned
- * to the caller to log or display; see `docs/guides/verification-provider-integration.md`.
+ * Runs the configured {@link VerificationProvider} on a submitted request's evidence and moves the
+ * case to `in_review` whatever the outcome. Providers never decide; only a human reviewer reaches a
+ * terminal state. A provider error is treated like `inconclusive` so the request does not get
+ * stuck. Results are returned to the caller, not stored on the aggregate (see
+ * docs/guides/verification-provider-integration.md).
  */
 export class RunAutomatedCheck {
   constructor(

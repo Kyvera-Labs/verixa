@@ -64,7 +64,7 @@ export async function loadRoadmap() {
   for (const file of files) {
     const text = await readFile(join(ISSUES_DIR, file), "utf8");
 
-    // The phase header: "# Phase 05 — Auth: Sessions & Tokens (Issues 081–100)"
+    // The phase header: "# Phase 05 — Auth: Sessions & Tokens"
     // followed by a paragraph of context that is genuinely useful to a
     // contributor and would otherwise be thrown away.
     const headerMatch = /^#\s*Phase\s*(\d+)\s*[—-]\s*(.+?)\s*\(Issues[^)]*\)/m.exec(text);

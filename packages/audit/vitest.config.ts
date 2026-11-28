@@ -8,7 +8,7 @@ export default mergeConfig(
     test: {
       name: "@verixa/audit",
       coverage: {
-        // The same gate `packages/identity` runs under (Issue 037), with the
+        // The same gate `packages/identity` runs under, with the
         // same reason for each exclusion: the threshold should measure "is
         // this code tested", not "what kind of file is it".
         exclude: [

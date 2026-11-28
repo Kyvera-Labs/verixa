@@ -10,16 +10,9 @@ import {
 } from "../../application/ports/hash-anchor.js";
 
 /**
- * A `HashAnchor` backed by an in-memory `Map`, satisfying exactly the same
- * contract as {@link StellarHashAnchor}. Lets anything that anchors hashes
- * be tested without a network, a funded account, or a live ledger — and
- * lets a deployment that wants Verixa's audit log without any blockchain
- * dependency run with anchoring effectively disabled.
- *
- * `failNextAnchor()` exists because the interesting behavior in anchoring
- * code is usually the failure path: a scheduler must keep running and retry
- * on the next tick rather than crash when the ledger is unreachable, and
- * that's hard to test against an implementation that always succeeds.
+ * Map-backed `HashAnchor` with the same contract as {@link StellarHashAnchor}, for tests without a
+ * network and for deployments that run without a blockchain. `failNextAnchor()` lets tests exercise
+ * the failure path, such as a scheduler retrying on the next run.
  */
 export class InMemoryHashAnchor implements HashAnchor {
   private readonly anchorsByRef = new Map<string, string>();

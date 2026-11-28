@@ -5,21 +5,13 @@ import { Redis } from "ioredis";
 import { GenericContainer, type StartedTestContainer } from "testcontainers";
 
 /**
- * Provides a real Redis for integration tests, by whichever route is available,
- * and reports honestly when neither is — the same shape and rationale as the
- * Postgres `database-harness.ts` (Issue 047).
+ * Provides a real Redis for integration tests:
  *
- * Two strategies, in priority order:
+ * 1. The instance named by `TEST_REDIS_URL` (CI's service container or a local `docker compose up
+ *    redis`).
+ * 2. Otherwise an ephemeral Testcontainers `redis:7-alpine`, if Docker is available.
  *
- * 1. **An already-running Redis** named by `TEST_REDIS_URL` — CI's service
- *    container, or a local `docker compose up redis`. Fastest: nothing starts.
- * 2. **A Testcontainers-managed ephemeral `redis:7-alpine`**, started on demand
- *    and destroyed after. Requires a working Docker daemon.
- *
- * Neither available means Redis-backed tests skip, so a fresh clone with no
- * Docker still gets a green `pnpm test`. `REQUIRE_REDIS_TESTS=1` converts that
- * skip into a failure, so CI cannot quietly lose the coverage — mirroring
- * `REQUIRE_DATABASE_TESTS`.
+ * With neither, Redis tests skip, unless `REQUIRE_REDIS_TESTS=1` makes that a failure.
  */
 
 const CONNECT_TIMEOUT_MS = 2000;

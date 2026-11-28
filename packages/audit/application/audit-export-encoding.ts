@@ -5,31 +5,19 @@ import {
 } from "../domain/value-objects/audit-metadata.js";
 
 /**
- * Renders an audit export.
- *
- * Separated from `ExportAuditEvents` because that use case deliberately does
- * not serialize: it authorizes the disclosure, records that it happened, and
- * yields entries, leaving the encoding to whatever writes the response. A merge
- * had concatenated the two into one file, each with its own `ExportAuditEvents`
- * class. Keeping them apart is what both were documented to want, and it lets
- * the encoder be tested without a reader, a repository or a permission.
+ * Renders an audit export. Kept separate from `ExportAuditEvents`, which authorizes, records and
+ * yields entries but never serializes, so the encoder can be tested on its own.
  */
 
 /**
- * What an export is written as.
+ * Export format.
  *
- * `jsonl` is the faithful one: one JSON document per line, values exactly as
- * they were recorded. It is what a program should read, what a re-verification
- * should be run against, and what an archive should contain. It is safe by
- * construction because JSON escapes the control characters that would otherwise
- * end a line early.
+ * `jsonl` is the faithful format: one JSON document per line, values as recorded. Use it for
+ * programs, re-verification and archives.
  *
- * `csv` is the hostile one. It has no escaping rules for anything but quotes,
- * no types, and it is opened in software that executes cell contents. So the
- * CSV writer here is defensive at three separate boundaries — control
- * characters are escaped so one entry is one line, cells containing the
- * delimiters are quoted, and cells that would be read as a formula are
- * neutralized. Every one of the three is needed; each alone is not.
+ * `csv` is opened in spreadsheets that execute cell contents, so the writer escapes control
+ * characters, quotes cells containing delimiters, and neutralizes formula prefixes. All three are
+ * required.
  */
 export type AuditExportFormat = "csv" | "jsonl";
 
@@ -107,18 +95,8 @@ export async function encodeAuditExport(
 }
 
 /**
- * Records that an export happened.
- *
- * The context values are attacker-adjacent -- they come from whoever asked for
- * the export -- and a log line is exactly the sink where a newline is worth
- * something to an attacker. So the record carries them as one JSON document in
- * a *field*, with the line terminators JSON leaves raw escaped, and never in
- * the message.
- *
- * The rejected alternative was interpolating the count and context into the
- * message. It reads more naturally, and it is the bug: pino escapes its fields,
- * but a message is a message, so a newline inside a value would land in the
- * output verbatim and start a line the application never logged.
+ * Logs that an export happened. The caller-supplied context goes in a JSON field with line
+ * terminators escaped, never in the message, so a newline in a value cannot forge a log line.
  */
 function logExport(
   logger: AuditExportLogger | undefined,
@@ -155,19 +133,8 @@ function csvRow(entry: AuditLogEntry): string {
 }
 
 /**
- * Encodes one cell.
- *
- * Quoting is per RFC 4180: wrap in double quotes when the value contains a
- * quote, a comma, or a line break, and double the quotes inside. The line
- * breaks cannot be there by the time this runs — `toLogFields` escaped them —
- * and checking anyway keeps the function honest if a caller ever hands it a
- * raw value.
- *
- * Formula neutralization runs on the already-escaped text, which is the order
- * that leaves nothing to miss: a payload hiding its formula character behind a
- * tab has that tab turned into the two characters `\t`, so the cell starts with
- * text a spreadsheet will not evaluate, and one that arrives with `=` first is
- * caught by the prefix check.
+ * Encodes one CSV cell: RFC 4180 quoting, then formula neutralization. Neutralizing after escaping
+ * means a formula character hidden behind a tab is already rendered as the text `\t`.
  */
 function csvCell(value: string): string {
   const neutralized = neutralizeFormulaPrefix(value);

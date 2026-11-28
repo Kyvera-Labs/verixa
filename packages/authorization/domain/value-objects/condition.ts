@@ -1,21 +1,7 @@
 /**
- * A composable boolean expression a {@link Rule} evaluates against an
- * attribute context.
- *
- * Modeled as a tree — leaf comparisons combined with `AND`/`OR`/`NOT`
- * nodes — rather than a flat list of comparisons, because real authorization
- * conditions nest ("(owner OR admin) AND NOT locked"), and a flat list can
- * only express a conjunction. See `docs/guides/domain-modeling.md` for why
- * this shape was chosen ahead of the DSL that will produce it (Issue 143)
- * and the engine that will evaluate it (Issue 146).
- *
- * `Condition` is immutable, plain data (a discriminated union of frozen
- * object literals) rather than a class hierarchy. A tree of behavior-free
- * nodes has nothing a class would add — no invariant beyond "well-formed",
- * which the type system already enforces via the discriminated union — and
- * plain data keeps structural equality (see {@link conditionsEqual})
- * straightforward instead of requiring an `equals` method on every node kind
- * kept in sync with its fields.
+ * A boolean expression a {@link Rule} evaluates: leaf comparisons combined with `AND`/`OR`/`NOT`,
+ * since real conditions nest ("(owner OR admin) AND NOT locked"). Immutable plain data (a
+ * discriminated union), which keeps structural equality simple (see {@link conditionsEqual}).
  */
 export type Condition =
   AlwaysCondition | ComparisonCondition | AndCondition | OrCondition | NotCondition;
@@ -34,8 +20,8 @@ export interface AlwaysCondition {
  *
  * Deliberately minimal for now: this is the shape a comparison takes, not
  * its evaluation semantics (type coercion rules, regex matching, time
- * windows) — those belong to the operator library (Issue 147) and the
- * evaluation engine (Issue 146), which the domain layer must not depend on.
+ * windows) — those belong to the operator library and the
+ * evaluation engine, which the domain layer must not depend on.
  */
 export type ComparisonOperator = "eq" | "neq" | "lt" | "lte" | "gt" | "gte" | "in" | "contains";
 
@@ -43,20 +29,14 @@ export type ComparisonOperator = "eq" | "neq" | "lt" | "lte" | "gt" | "gte" | "i
  * A literal a comparison's right-hand side may hold. Restricted to
  * JSON-serializable primitives and arrays of them, since a `Policy` must
  * remain serialization-agnostic (storable as JSON/DSL text without a custom
- * codec) — see Issue 141's objective.
+ * codec).
  */
 export type ComparisonLiteral = string | number | boolean | readonly (string | number)[];
 
 /**
- * A leaf: compares a named attribute (e.g. `"resource.ownerId"`, dotted-path
- * addressing into the four attribute bags Issue 144 will define) against a
- * literal value using `operator`.
- *
- * The attribute is referenced by path string, not by a typed reference into
- * `AttributeContext` — that type doesn't exist yet at this layer, and even
- * once it does, a `Condition` must stay serialization-agnostic (storable as
- * DSL text or JSON) rather than holding a live reference to another
- * package's value object.
+ * A leaf comparison of a named attribute (a dotted path such as `"resource.ownerId"`) against a
+ * literal using `operator`. The attribute is a path string so conditions stay serializable as DSL
+ * text or JSON.
  */
 export interface ComparisonCondition {
   readonly kind: "comparison";

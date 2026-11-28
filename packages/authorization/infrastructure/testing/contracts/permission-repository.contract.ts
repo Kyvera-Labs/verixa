@@ -6,7 +6,7 @@ import { Permission } from "../../../domain/value-objects/permission.js";
 
 /**
  * Behavioral contract every `PermissionRepository` implementation must satisfy.
- * Follows the Issue 031 contract-testing pattern.
+ * Follows the shared contract-testing pattern.
  */
 export function permissionRepositoryContract(createRepository: () => PermissionRepository): void {
   describe("PermissionRepository contract", () => {
@@ -50,7 +50,6 @@ export function permissionRepositoryContract(createRepository: () => PermissionR
 
       await expect(repository.save(perm2)).rejects.toThrow(ConflictError);
 
-      // Verify catalog remains consistent with exactly 1 entry
       const all = await repository.findAll();
       expect(all).toHaveLength(1);
       expect(all[0]?.value).toBe("audit:export");

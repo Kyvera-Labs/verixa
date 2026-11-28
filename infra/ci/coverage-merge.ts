@@ -1,16 +1,9 @@
 /**
- * Workspace-wide coverage aggregation (Issue 412).
+ * Merges every package's coverage (`lcov.info`) into one workspace report with aggregate and
+ * per-package metrics, writing `coverage/lcov.info`, `coverage/coverage-summary.json`,
+ * `coverage/index.html` and a Markdown summary for PR comments and CI step summaries.
  *
- * Scans all packages and apps for per-package coverage artifacts (coverage-final.json,
- * lcov.info), merges them into a single monorepo-wide coverage report, calculates
- * both aggregate metrics and a per-package breakdown, and outputs:
- * - Merged LCOV file (`coverage/lcov.info`)
- * - Unified JSON summary (`coverage/coverage-summary.json`)
- * - Standalone HTML dashboard (`coverage/index.html`)
- * - Formatted Markdown summary table for PR comments and CI step summaries.
- *
- * Usage:
- *   tsx infra/ci/coverage-merge.ts [--output-dir <path>] [--summary-markdown <path>]
+ * Usage: `tsx infra/ci/coverage-merge.ts [--output-dir <path>] [--summary-markdown <path>]`
  */
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
@@ -218,7 +211,7 @@ export function findPackageCoverageDirs(repoRoot: string): Array<{ name: string;
       if (existsSync(covDir)) {
         dirs.push({ name: "tests/integration", dir: covDir });
       }
-      // The CI-tooling specs run under their own config (Issue 415, #611)
+      // The CI-tooling specs run under their own config
       // and write to coverage/ci. Before that split they ran in the same
       // coverage run as everything else here, so they count toward the same
       // target; skipping their report dropped tests/integration by ~7%.
@@ -319,13 +312,13 @@ export function generateMarkdownSummary(report: WorkspaceCoverageReport): string
   const { aggregate, packages } = report;
 
   const statusBadge = (pct: number) => {
-    if (pct >= 85) return "🟢";
-    if (pct >= 70) return "🟡";
-    return "🔴";
+    if (pct >= 85) return "good";
+    if (pct >= 70) return "fair";
+    return "low";
   };
 
   const lines = [
-    "## 📊 Workspace Coverage Aggregate Report",
+    "## Workspace Coverage Aggregate Report",
     "",
     `**Generated:** ${report.timestamp}`,
     "",
@@ -460,11 +453,9 @@ export function runCoverageMerge(
 
   const report = aggregateCoverage(packageEntries);
 
-  // Write merged LCOV
   const mergedLcovPath = path.join(outputDir, "lcov.info");
   writeFileSync(mergedLcovPath, mergedLcovParts.join("\n"), "utf-8");
 
-  // Write summary JSON
   const summaryJsonPath = options.jsonSummaryPath ?? path.join(outputDir, "coverage-summary.json");
   writeFileSync(
     summaryJsonPath,
@@ -472,11 +463,9 @@ export function runCoverageMerge(
     "utf-8",
   );
 
-  // Write HTML dashboard
   const htmlPath = path.join(outputDir, "index.html");
   writeFileSync(htmlPath, generateHtmlDashboard(report), "utf-8");
 
-  // Generate markdown summary
   const markdown = generateMarkdownSummary(report);
   if (options.markdownSummaryPath) {
     writeFileSync(options.markdownSummaryPath, markdown, "utf-8");

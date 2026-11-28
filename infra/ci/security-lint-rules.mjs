@@ -1,5 +1,5 @@
 /**
- * The security lint ruleset (issue 208), shared by the repository config and by
+ * The security lint ruleset, shared by the repository config and by
  * the fixture config the lint tests run against.
  *
  * ## Why this is one module rather than an inline block in `eslint.config.mjs`
@@ -85,7 +85,7 @@ export const securityRules = {
   /**
    * Flags Mustache template escaping. Verixa renders no Mustache templates —
    * the API answers JSON and, in a later phase, server-rendered review pages
-   * with their own escaping policy (Issue 212). A rule that can only fire on
+   * with their own escaping policy. A rule that can only fire on
    * code this repository does not contain is a rule somebody eventually spends
    * an afternoon understanding for nothing.
    */
@@ -93,7 +93,7 @@ export const securityRules = {
 
   /**
    * Flags Express's body-parser method-override CSRF gap. The API is Fastify
-   * and does not use that middleware; Issue 205 is the CSRF control that
+   * and does not use that middleware; the CSRF middleware is the control that
    * matters here, and it is not a lint rule.
    */
   "security/detect-no-csrf-before-method-override": "off",

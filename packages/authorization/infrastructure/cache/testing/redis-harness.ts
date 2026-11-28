@@ -7,23 +7,9 @@ export interface TestRedis {
 }
 
 /**
- * Connects to the Redis the environment points at, or reports that there is
- * none.
- *
- * `TEST_REDIS_URL` is the same variable the sessions deny-list suite uses
- * (Issue 088), and the CI `ci` job exports it alongside a Redis service
- * container — so this suite runs for real on every pull request rather than
- * skipping there. Locally, without the variable, the suite skips instead of
- * failing, which is what makes `pnpm test` work on a fresh clone.
- *
- * `REQUIRE_REDIS_TESTS=1` turns "no Redis" into a hard failure, so a
- * misconfigured CI service container can never be mistaken for a green run of a
- * suite that silently tested nothing.
- *
- * The Testcontainers fallback that `packages/identity`'s Postgres harness
- * (Issue 047) offers is deliberately **not** duplicated here: it would add a
- * Docker-lifecycle dependency to this package for a case CI already covers by
- * starting the container for the job.
+ * Connects to the Redis named by `TEST_REDIS_URL`, or returns `undefined` so the suite skips
+ * locally. CI sets the variable and `REQUIRE_REDIS_TESTS=1`, which turns a missing Redis into a
+ * failure.
  */
 export async function startTestRedis(): Promise<TestRedis | undefined> {
   const url = process.env.TEST_REDIS_URL;

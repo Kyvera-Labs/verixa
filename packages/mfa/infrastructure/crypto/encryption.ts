@@ -8,17 +8,9 @@ const IV_BYTES = 12;
 const AUTH_TAG_BYTES = 16;
 
 /**
- * The key used to encrypt MFA secrets at rest, read from `MFA_ENCRYPTION_KEY`
- * as base64.
- *
- * There is deliberately no fallback. An earlier version returned
- * `Buffer.alloc(32, 1)` when the variable was unset, as a test convenience —
- * which meant a deployment that forgot to set it would encrypt every TOTP
- * secret under a constant, publicly-known key and report no error at all. The
- * database would look encrypted while offering no protection, and nothing would
- * surface the problem until someone read this file.
- *
- * Tests that need a key set one explicitly; see `encryption.spec.ts`.
+ * Key for encrypting MFA secrets at rest, read from `MFA_ENCRYPTION_KEY` as base64. There is no
+ * fallback: a default key would silently encrypt every secret under a public constant. Tests set a
+ * key explicitly (see `encryption.spec.ts`).
  */
 function getEncryptionKey(): Buffer {
   const keyBase64 = process.env.MFA_ENCRYPTION_KEY;

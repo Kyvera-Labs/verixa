@@ -130,7 +130,7 @@ function publishedPorts(service) {
 
 /**
  * Behavioral assertions on a resolved compose config. Each check answers an
- * acceptance criterion from Issues 385/386/387 rather than checking that a
+ * acceptance criterion rather than checking that a
  * particular line of YAML exists.
  *
  * @param {Record<string, any>} config

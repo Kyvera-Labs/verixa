@@ -208,9 +208,9 @@ describe("flaky-test-tracker (Issue 414)", () => {
       const md = formatFlakyReportMarkdown(classifications, quarantines);
 
       expect(md).toContain("## Flaky Test & Quarantine Report (Issue 414)");
-      expect(md).toContain("### ⚠️ Flaky Tests (1)");
+      expect(md).toContain("### Flaky Tests (1)");
       expect(md).toContain("tests/integration/auth.spec.ts");
-      expect(md).toContain("### 🔒 Quarantined Tests (1)");
+      expect(md).toContain("### Quarantined Tests (1)");
       expect(md).toContain("tests/integration/redis.spec.ts");
     });
 
@@ -229,7 +229,7 @@ describe("flaky-test-tracker (Issue 414)", () => {
 
       const md = formatFlakyReportMarkdown([], quarantines);
 
-      expect(md).toContain("### 🚨 Expired Quarantines Alert");
+      expect(md).toContain("### Expired Quarantines Alert");
       expect(md).toContain("tests/integration/old.spec.ts");
       expect(md).toContain("Action Required");
     });

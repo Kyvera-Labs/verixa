@@ -18,7 +18,7 @@ function makeUser(email: string): User {
 /**
  * Behavioral contract every `UserRepository` implementation must satisfy —
  * run against `InMemoryUserRepository` today and, once it exists, the
- * Prisma-backed adapter from Phase 03, via the same test bodies. This is
+ * Prisma-backed adapter, via the same test bodies. This is
  * **contract testing**: one shared suite, multiple implementations, each
  * proven to behave identically rather than merely "compile against the same
  * interface." See `docs/guides/testing.md`.

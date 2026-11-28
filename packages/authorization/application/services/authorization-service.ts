@@ -13,35 +13,21 @@ import type { PolicyDecisionPoint } from "../ports/policy-decision-point.js";
 import type { RoleDecision, RolePermissionGate } from "../ports/role-permission-gate.js";
 
 /**
- * Composes Phase 07's RBAC floor with the Phase 08 policy engine: the
- * `AuthorizationService` of Issue 152 (roadmap 152).
- *
- * ## Order and why
- *
- * A role check is one indexed lookup and answers the common case; a policy
- * evaluation parses an AST, resolves attributes, and applies a combining
- * algorithm. So RBAC runs first — and, because the policy layer must stay able
- * to withhold what a role grants, a role *grant* does not short-circuit it.
- *
- * The order, as resolved:
+ * Combines the RBAC check with the ABAC policy engine. RBAC runs first because it is one indexed
+ * lookup, but a role grant does not skip policy evaluation, so a policy can still deny.
  *
  * | RBAC | ABAC | Result |
  * | --- | --- | --- |
- * | `deny` | not consulted | `DENY` — role denials are final |
- * | `grant` | `deny` | `DENY` — an explicit policy denial overrides the grant |
+ * | `deny` | not consulted | `DENY` |
+ * | `grant` | `deny` | `DENY` |
  * | `grant` | `permit` / `NOT_APPLICABLE` | `PERMIT` |
  * | `no-match` | `permit` | `PERMIT` |
  * | `no-match` | `deny` | `DENY` |
- * | `no-match` | `NOT_APPLICABLE` | `DENY` — default deny by absence of authority |
+ * | `no-match` | `NOT_APPLICABLE` | `DENY` (default deny) |
  *
- * ## Failure stance
- *
- * Every failure path returns a `DENY`: an unreachable role store, an unreachable
- * policy repository, or a malformed request. No path returns `PERMIT` because
- * something was unavailable, and no path throws for an expected authorization
- * outcome — callers get a decision they can log and act on. The one thing that
- * does throw is an unsafe precedence configuration, at construction time, so a
- * misconfiguration stops the process rather than granting access wrongly.
+ * Every failure, including an unreachable store or a malformed request, returns `DENY`; nothing
+ * permits because something was unavailable. An unsafe precedence configuration throws at
+ * construction.
  */
 export class AuthorizationService {
   private readonly precedence: AuthorizationPrecedence;
@@ -105,7 +91,7 @@ export class AuthorizationService {
     }
 
     // A policy that produced an effect is what makes this a composed decision;
-    // an RBAC-only outcome keeps Phase 07's behaviour and its `rbac` source.
+    // an RBAC-only outcome keeps the RBAC behaviour and its `rbac` source.
     const source: AuthorizationDecisionSource = grantedByRole ? "composition" : "abac";
 
     if (evaluation.effect === "DENY") {

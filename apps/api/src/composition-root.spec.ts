@@ -24,12 +24,12 @@ describe("Composition Root boot smoke test", () => {
     expect(container.audit).toBeDefined();
     expect(container.audit.recordEvent).toBeDefined();
 
-    // MFA context (Issue 119)
+    // MFA context
     expect(container.mfa).toBeDefined();
     expect(container.mfa.registerWebAuthnCredential).toBeDefined();
     expect(container.mfa.verifyWebAuthnAssertion).toBeDefined();
 
-    // Rate limiter context (Phase 15, Issue 297)
+    // Rate limiter context
     expect(container.rateLimiter).toBeDefined();
 
     await container.dispose();

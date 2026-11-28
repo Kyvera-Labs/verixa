@@ -3,34 +3,15 @@ import { randomUUID } from "node:crypto";
 import { createPrismaClient } from "../index.js";
 
 /**
- * Seeds the audit log at scale and reports the plan each query path gets
- * (Issue 188).
+ * Seeds the audit log at scale and prints the `EXPLAIN (ANALYZE, BUFFERS)` plan for every filter
+ * path: `BENCH_ROWS=100000 pnpm --filter @verixa/database run benchmark:audit`.
  *
- *   BENCH_ROWS=100000 pnpm --filter @verixa/database run benchmark:audit
+ * The manual, large-scale counterpart to `tests/integration/audit-query-index-usage.spec.ts`;
+ * planners can switch strategies at scale, so a path that uses an index at thousands of rows may
+ * not at hundreds of thousands. Not run in CI because it is slow and machine-dependent.
  *
- * ## What this is for
- *
- * The index-usage test (`tests/integration/audit-query-index-usage.spec.ts`)
- * asserts that each path uses an index at a few thousand rows. This script is
- * the larger, manual counterpart: it seeds six figures, runs `EXPLAIN
- * (ANALYZE, BUFFERS)` for every filter path, and prints the real plans and
- * row estimates. That is the evidence the issue asks for, and it is the step
- * that catches a plan regression the smaller test is too small to trigger —
- * the planner switches strategies at scale, and a path that indexes at 5k
- * rows can flip to a scan at 500k.
- *
- * ## Why it is not part of the CI gate
- *
- * Seeding and analyzing six figures is minutes of work, not seconds, and the
- * result depends on the machine. A benchmark in CI would either be a flaky
- * gate or a number nobody trusts. The integration test stays in the gate; this
- * stays a tool you run when you change a query or an index.
- *
- * ## Reproducing the documented numbers
- *
- * See `docs/performance/audit-query-benchmarks.md`. Bring up Postgres
- * (`docker compose up -d postgres`), apply migrations, then run the command
- * above. The script cleans up the rows it seeded on exit.
+ * To reproduce the documented numbers, see docs/performance/audit-query-benchmarks.md. Seeded rows
+ * are removed on exit.
  */
 const ROWS = Number(process.env["BENCH_ROWS"] ?? 100_000);
 const MARKER = "issue-188-benchmark";

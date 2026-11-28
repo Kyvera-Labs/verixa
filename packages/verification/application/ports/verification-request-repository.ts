@@ -18,28 +18,12 @@ import type { VerificationTypeValue } from "../../domain/value-objects/verificat
 export type QueueAssignmentFilter = "any" | "assigned" | "unassigned";
 
 /**
- * Filters for the reviewer queue listing (Issues 163 and 177). Applied by the
- * store, not by the caller — see `findQueueCandidates`.
+ * Filters for the reviewer queue, applied by the store.
  *
- * ## Why `statuses` is a set and not a single status
- *
- * The queue's default view spans two statuses: a `submitted` request is
- * waiting for its automated check (Issue 172) and an `in_review` one is
- * waiting for a reviewer. Asking the store twice — once per status — and
- * merging the two pages in the caller cannot produce a stable global order:
- * each page is ordered `createdAt ASC` independently, so the caller ends up
- * re-sorting a partial view and `offset` stops meaning "rows 26–50 of the
- * queue". One query over one `(status, created_at)` index is both correct and
- * cheaper.
- *
- * ## Why `assignment` needs `now`
- *
- * A claim is a lease, not a lock (see `ReviewAssignment`), so a request whose
- * `claim_expires_at` has passed is back in the unassigned queue even though
- * its `assigned_reviewer_id` column is still populated. Evaluating that needs
- * the current instant, which the caller supplies rather than each adapter
- * reading its own clock — the same convention `findActiveClaimByReviewer`
- * already uses.
+ * `statuses` is a set because the default view spans `submitted` and `in_review`; one indexed query
+ * keeps a stable global order, where merging two pages would not. `assignment` needs `now` because
+ * claims are leases: a request whose claim expired is unassigned again even though its reviewer
+ * column is still set.
  */
 export interface QueueCandidateOptions {
   /** Statuses to include. Omitted means every status; a queue listing should pass only the statuses it considers reviewable. */
@@ -77,26 +61,15 @@ export interface ClaimNextInReviewParams {
 }
 
 /**
- * The persistence contract for `VerificationRequest` — the port half of
- * ports & adapters. No Prisma, SQL, or locking primitive appears in this
- * interface; the adapter is free to use `SELECT ... FOR UPDATE SKIP LOCKED`
- * (and the Prisma adapter does) without any of it leaking upward. See
- * `docs/guides/domain-modeling.md`.
+ * Persistence port for `VerificationRequest`.
  *
- * Method contracts:
- * - `findById`/`findBySubject`/`findQueueCandidates` return an empty result
- *   for "nothing matched" — an absent request is an expected outcome, not a
- *   `Result` error.
- * - `save` is an idempotent upsert on the request id, exactly like every
- *   other repository in this codebase.
- * - `claimNextInReview` **must be atomic**. Two concurrent calls with
- *   different reviewers must never return the same request, and a reviewer
- *   must never end up holding two cases when `oneAtATime` is set. The port
- *   states the guarantee, not the mechanism; an in-memory fake can satisfy it
- *   by running to completion synchronously, and a SQL adapter by locking the
- *   candidate row(s) it selects. See `docs/guides/use-cases.md`.
- * - `findActiveClaimByReviewer` reports a request only when the claim is
- *   still live at the supplied `now`; an expired claim is not a claim.
+ * - `findById`, `findBySubject` and `findQueueCandidates` return empty results when nothing
+ *   matches.
+ * - `save` is an idempotent upsert.
+ * - `claimNextInReview` must be atomic: two concurrent calls never return the same request, and
+ *   with `oneAtATime` a reviewer never holds two cases. The SQL adapter uses `SELECT ... FOR UPDATE
+ *   SKIP LOCKED` (see docs/guides/use-cases.md).
+ * - `findActiveClaimByReviewer` reports only claims still live at `now`.
  */
 export interface VerificationRequestRepository {
   save(request: VerificationRequest): Promise<void>;

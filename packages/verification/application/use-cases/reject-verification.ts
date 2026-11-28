@@ -22,21 +22,9 @@ export type RejectVerificationError =
   ValidationError | NotFoundError | InvalidStatusTransitionError | ReviewDecisionNotPermittedError;
 
 /**
- * Records a reviewer's decision to reject a verification request.
- *
- * Structurally identical to {@link ApproveVerification} — the transition, the
- * claim check and the event all differ only in the `decision` value the
- * aggregate records — and that repetition is deliberate. The two decisions
- * are the same shape today and *may not stay that way*: rejection is the
- * direction a "cooling-off period before re-application" rule would attach to,
- * and approval is the one a "reason required by policy, not by law" flag
- * would. Merging them behind a boolean now would make that divergence a
- * rewrite of a shared method rather than a change to one file.
- *
- * The rationale requirement is sharper here than on approval: a *denial* is
- * the decision most likely to be challenged, by the subject directly and by a
- * regulator, and it is the one where "the system said no and nobody recorded
- * why" is least acceptable. See Issue 175.
+ * Records a reviewer's rejection, with a mandatory rationale, since a denial is the decision most
+ * likely to be challenged. Kept separate from {@link ApproveVerification} despite the similarity,
+ * so the two can evolve independently.
  */
 export class RejectVerification {
   constructor(private readonly requests: VerificationRequestRepository) {}

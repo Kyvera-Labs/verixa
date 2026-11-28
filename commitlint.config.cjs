@@ -1,7 +1,7 @@
 // Commitlint configuration enforcing the Conventional Commits specification
-// documented in docs/guides/conventional-commits.md (Issue 010).
+// documented in docs/guides/conventional-commits.md.
 //
-// Why this matters: semantic-release (Issue 368 / .releaserc.json) derives
+// Why this matters: semantic-release (.releaserc.json) derives
 // major/minor/patch version bumps and CHANGELOG entries directly from commit
 // headers on `main`. Both local git hooks (.husky/commit-msg) and CI
 // (.github/workflows/commitlint.yml) share this exact config so PR titles
@@ -22,7 +22,7 @@ const EXEMPT_HEADERS = new Set([
 module.exports = {
   extends: ["@commitlint/config-conventional"],
   rules: {
-    // Explicit allow-list matching Issue 010 and @commitlint/config-conventional
+    // Explicit allow-list matching @commitlint/config-conventional
     // so semantic-release only ever sees machine-parseable commit types.
     "type-enum": [
       2,

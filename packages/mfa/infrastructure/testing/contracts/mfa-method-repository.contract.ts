@@ -5,14 +5,9 @@ import type { MfaMethodRepository } from "../../../application/ports/mfa-method-
 import { MfaMethod, type UserId } from "../../../domain/entities/mfa-method.js";
 
 /**
- * The shared behavioural contract every `MfaMethodRepository` implementation
- * must satisfy — asserted against both the in-memory fake and the Prisma
- * adapter, so "the fake behaves like the real thing" is proven rather than
- * assumed.
- *
- * `setupUser` must return a persisted `UserId` when the implementation enforces
- * foreign keys (Postgres); the in-memory fake, which has no referential
- * integrity, gets a random id by default.
+ * Behavioural contract for every `MfaMethodRepository`, run against the in-memory fake and the
+ * Prisma adapter. `setupUser` must return a persisted `UserId` where foreign keys are enforced; the
+ * fake uses a random ID by default.
  */
 export function mfaMethodRepositoryContract(
   createRepository: () => MfaMethodRepository,

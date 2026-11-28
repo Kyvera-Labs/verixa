@@ -8,14 +8,8 @@ import type {
 } from "fastify";
 
 /**
- * The `Strict-Transport-Security` directive and the HTTP-to-HTTPS redirect
- * (roadmap Issue 213).
- *
- * This module owns the *transport-security* slice of the response headers
- * only. `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` and the
- * baseline CSP belong to Issue 203 and will be added here (or beside it) when
- * that issue lands — deliberately not folded in now, so this change stays
- * reviewable as one threat class: credentials and tokens moving in cleartext.
+ * `Strict-Transport-Security` and the HTTP-to-HTTPS redirect: the transport-security headers.
+ * Content headers live in `./baseline-response-headers.ts`.
  */
 
 /** The header name, lower-cased the way Node stores received headers. */
@@ -59,15 +53,9 @@ export interface SecurityHeadersOptions {
 }
 
 /**
- * The shape `buildApp` uses when the caller supplies no policy at all.
- *
- * Both features off. That sounds like the wrong default for a security
- * control, and it is only safe because of who the caller is: `server.ts`
- * always passes `securityHeadersFromConfig(loadConfig())`, so a process that
- * actually serves traffic always has a policy derived from a validated
- * environment. The bare default exists for in-process tests and for
- * `buildApp()` calls that never bind a port, where an HSTS pin or a redirect
- * would be noise at best and a hang at worst.
+ * Policy used when `buildApp` is given none: both features off. Safe because `server.ts` always
+ * passes `securityHeadersFromConfig(loadConfig())`; the default only serves in-process tests that
+ * never bind a port.
  */
 export const NO_TRANSPORT_SECURITY: SecurityHeadersOptions = {
   hsts: null,
@@ -123,22 +111,12 @@ export type TransportSecurityConfig = Pick<
 >;
 
 /**
- * Turn validated config into a policy.
+ * Turns validated config into a transport-security policy.
  *
- * Two rules do the interesting work:
- *
- * 1. **HSTS is off outside production.** A pinned `localhost` is a real
- *    hazard: a developer who tests the HTTPS listener once with a self-signed
- *    certificate gets a browser-enforced "never speak plaintext to this
- *    origin" promise for the whole `max-age`, and the only way out is the
- *    browser's own HSTS-removal UI (or, once preloaded, an OS-level reset).
- *    The header costs nothing in production and can cost an afternoon in
- *    development, so the environment decides.
- * 2. **`preload` requires `includeSubDomains`.** The preload list rejects a
- *    submission whose field omits it, so a configuration that sets the flag
- *    without the subdomain scope is one that silently never takes effect.
- *    Rather than emit a directive that cannot work, this throws at startup —
- *    same fail-fast posture as `loadConfig` itself.
+ * 1. HSTS is off outside production, because a browser that pins `localhost` keeps refusing
+ *    plaintext for the whole `max-age`.
+ * 2. `preload` requires `includeSubDomains`, since the preload list rejects entries without it.
+ *    That combination throws at startup instead of emitting a directive that cannot work.
  */
 export function securityHeadersFromConfig(config: TransportSecurityConfig): SecurityHeadersOptions {
   if (config.NODE_ENV !== "production") {
@@ -219,18 +197,11 @@ function isIpv6Literal(authority: string): boolean {
 }
 
 /**
- * `hostname[:port]` or `[ipv6]:port`, nothing else.
- *
- * Checked by splitting on `.` and `:` rather than with one pattern, and that is
- * not a style preference. The single-regex form needs a quantified group that
- * can match a hyphen run, which is either exponential on a hostile value or
- * flagged as unsafe by the linter, and this function runs on a header the client
- * picks. Splitting is linear and reads as rules: labels, then an optional port.
- *
- * So `example.com`, `upstream-42.example.com`, `localhost:3000` and
- * `[::1]:3000` pass, while `example.com@evil`, `example.com/evil`,
- * `-example.com`, `example.com-`, a trailing dot, `:3000` and any second colon
- * outside brackets all fail.
+ * Whether a `Host` value is `hostname[:port]` or `[ipv6]:port`. Checked by splitting on `.` and
+ * `:`, which is linear on client-controlled input, where a single regex would risk catastrophic
+ * backtracking. Accepts `example.com`, `localhost:3000` and `[::1]:3000`; rejects
+ * `example.com@evil`, `example.com/evil`, leading or trailing hyphens, a trailing dot, a bare port
+ * and extra colons.
  */
 function isRedirectableAuthority(host: string): boolean {
   if (host.startsWith("[")) {
@@ -291,31 +262,16 @@ export function httpsRedirectTarget(host: string | undefined, rawUrl: string): s
 }
 
 /**
- * Register the transport-security controls on `app`.
+ * Registers the transport-security controls as an `onRequest` hook in `buildApp`'s own context,
+ * because a registered plugin would only cover routes inside its encapsulation scope. Generic over
+ * the logger because `buildApp`'s pino `Logger` is not structurally a `FastifyBaseLogger`.
  *
- * Generic over the logger type for the same reason `registerAuthRoutes` is:
- * the instance `buildApp` produces carries a concrete pino `Logger`, which
- * Fastify's default `FastifyBaseLogger` generic is not structurally
- * compatible with, and pinning the default here would reject that very
- * instance.
+ * Both controls apply to every response, including errors and the redirect:
  *
- * An `onRequest` hook, not a plugin: Fastify encapsulates hooks inside a
- * registered plugin to the routes registered in that same context, so a
- * `register()`-style wiring would silently skip every route added afterwards
- * on the parent instance. `buildApp` adds the routes, so `buildApp` adds the
- * hook, in the same encapsulation context.
- *
- * Both controls are unconditional per response, including on errors and on
- * the redirect itself:
- *
- * - A browser ignores `Strict-Transport-Security` received over plaintext
- *   (RFC 6797 §7.2), so sending it on an HTTP response costs a header and
- *   pins nobody. Sending it *only* on HTTPS responses would work too, but it
- *   makes "is this route covered?" a question about the transport rather than
- *   about the code, and that is the kind of thing that quietly regresses.
- * - The redirect must not be cacheable. `no-store` on the 308 keeps a shared
- *   cache from storing a `Location` derived from a `Host` header some other
- *   client sent.
+ * - HSTS is sent even over HTTP, where browsers ignore it (RFC 6797 §7.2), so coverage does not
+ *   depend on the transport.
+ * - The 308 redirect is `no-store`, so a shared cache never stores a `Location` built from another
+ *   client's `Host` header.
  */
 export function registerSecurityHeaders<TLogger extends FastifyBaseLogger>(
   app: FastifyInstance<

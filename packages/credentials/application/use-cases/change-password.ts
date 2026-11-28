@@ -18,21 +18,9 @@ export interface ChangePasswordResult {
 }
 
 /**
- * Changes the authenticated user's password, requiring re-entry of the current one.
- *
- * Distinct from `ConfirmPasswordReset` (Issue 070) — that is for account
- * recovery when the current password is forgotten. This is for a logged-in
- * user rotating their own password, as a convenience and as part of regular
- * security hygiene.
- *
- * Re-authentication (current password re-entry) is deliberate. A user in an
- * unlocked browser at a coffee shop wants to know that a password change will
- * not go through while they grab a napkin. The complexity is real and the
- * property is also real. Phase 06 will extend this to MFA step-up as another
- * example of re-authentication.
- *
- * Password reuse is rejected (Issue 072): one of the last N passwords cannot
- * be used. This prevents trivial "change and change back" bypasses.
+ * Changes a logged-in user's password, requiring the current password (unlike
+ * `ConfirmPasswordReset`, which is for recovery). Re-authentication stops someone at an unattended
+ * browser from changing it. Reusing one of the last N passwords is rejected.
  */
 export class ChangePassword {
   constructor(
@@ -75,7 +63,6 @@ export class ChangePassword {
         return { kind: "wrong_current_password" as const };
       }
 
-      // Check for password reuse (Issue 072)
       const isReused = await credential.isPasswordReused(command.newPassword, (plain, hash) =>
         this.passwordHasher.verify(plain, hash),
       );

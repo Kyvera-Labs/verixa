@@ -25,18 +25,9 @@ export interface AuditEventPage {
 }
 
 /**
- * The read side of the audit log, as the query and export use cases need it.
- *
- * Separate from `AuditLogRepository` because the two serve different masters:
- * that port exists to append and to walk the whole chain for verification,
- * and must stay unscoped to do so; this one exists to answer an
- * organization's questions about its own history, and must never be unscoped.
- * Putting both on one interface would give every caller of the second a
- * method that silently ignores tenancy.
- *
- * Deliberately minimal. Filter semantics, index-backed keyset pagination and
- * a memory-bounded streaming adapter are Issues 187–189's to build; this is
- * the seam their adapters plug into, and they are free to widen it.
+ * Read side of the audit log for the query and export use cases. Separate from
+ * `AuditLogRepository`, which must stay unscoped to append and verify the whole chain; this port is
+ * always scoped to one organization.
  */
 export interface AuditEventReader {
   /** Matching entries in ascending `sequence` order, at most `page.limit`. */

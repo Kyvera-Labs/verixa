@@ -1,51 +1,18 @@
 /**
- * How long an audit trail is kept before its contents become candidates for
- * archival or erasure — and the deliberate limit of what this seam does.
+ * Decides how long audit entries are kept before they become candidates for archival or erasure.
  *
- * ## Why the seam exists now
- *
- * Retention shapes the schema and the query path: what gets indexed, whether
- * old rows stay in the primary table or move, and how a compliance request
- * addresses a record that is no longer where it was written. Those are
- * expensive to retrofit, so the contract is defined here while the log is
- * small.
- *
- * What is *not* defined here is deletion. Deciding that a record may be erased
- * is a legal judgement — it depends on jurisdiction, contractual retention
- * obligations, and legal holds that override both — and Phase 24 (compliance
- * and privacy) owns that judgement. This phase's job is to identify candidates
- * and to make the act of removing one a decision someone takes deliberately.
- *
- * ## The tension this seam sits on
- *
- * Append-only tamper evidence and legally-compelled deletion pull in opposite
- * directions. A hash chain's value is that nothing has been removed; GDPR
- * erasure requires that something be removed. There is no implementation that
- * satisfies both silently, which is why `AuditLogRepository` has no `delete`
- * method at all: the first erasure has to arrive as a new, reviewed port with
- * its own guarantees, not as a method that was quietly always available.
- *
- * The expected shape of that resolution, for continuity with Phase 24: erasure
- * removes *content* while leaving an anchored digest of the removed record in
- * place, and the chain is extended with an explicit erasure entry rather than
- * rewritten. Whether that satisfies a given regulator's erasure request is
- * Phase 24's question, not this one.
+ * This port only nominates candidates; it never deletes. Erasure is a legal decision and conflicts
+ * with append-only tamper evidence, so it will arrive as a separate reviewed operation, expected to
+ * remove content while keeping an anchored digest and appending an explicit erasure entry.
  */
 export interface RetentionPolicy {
   /** Identifies the policy in a review's output. Name it as a rule, not a number: `eu-account-activity-7y`. */
   readonly name: string;
 
   /**
-   * The instant at or before which an entry is past retention.
-   *
-   * `now` is a parameter rather than a clock read: a policy that consults the
-   * wall clock internally cannot be tested against a pinned date, and the
-   * boundary behaviour that matters — an entry exactly at the window edge — is
-   * exactly what a test has to be able to fix in place.
-   *
-   * A policy that must nominate nothing (a legal hold, for instance) returns
-   * the earliest possible date. Phase 24 will give that a name and a record of
-   * its own; here it is what the shape already permits.
+   * Returns the instant at or before which an entry is past retention. `now` is a parameter so
+   * tests can pin the boundary. A policy that must nominate nothing, such as a legal hold, returns
+   * the earliest possible date.
    */
   cutoffDate(now: Date): Date;
 }

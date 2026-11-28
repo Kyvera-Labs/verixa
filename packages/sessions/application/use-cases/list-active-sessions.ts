@@ -32,31 +32,14 @@ export interface SessionSummary {
 export type ListActiveSessionsError = ValidationError | AuthorizationError;
 
 /**
- * Returns a user's active sessions, so a self-service "manage your devices"
- * experience (Phase 12) can be built on top without inventing its own
- * scoping or redaction rules.
+ * Returns a user's active sessions for a "manage your devices" view.
  *
- * Two rules the acceptance criteria call out explicitly, both enforced here
- * rather than left to callers:
+ * 1. Callers see only their own sessions unless `asAdmin` is set. The interface layer must set it
+ *    only for callers with an admin role; this use case trusts the flag.
+ * 2. {@link SessionSummary} has no field that can carry token material, so tokens can never be
+ *    serialized into a response (see docs/guides/use-cases.md).
  *
- * 1. **Scoping.** A caller only sees their own sessions unless they are
- *    explicitly acting with admin scope (`asAdmin: true`) — the interface
- *    layer (Phase 12) is responsible for setting that flag only when the
- *    caller's authenticated identity actually carries an admin role; this
- *    use case trusts the flag it's given, the same division of
- *    responsibility `SuspendUser`/`ReactivateUser` draw around *why* an
- *    action is allowed vs. *what* is structurally possible.
- * 2. **Redaction at the boundary.** The read model ({@link SessionSummary})
- *    has no field capable of carrying token material, so there is no way
- *    for a future caller to accidentally serialize a hash into an API
- *    response — the shape itself enforces the rule rather than relying on
- *    every consumer remembering to leave a field out. See
- *    `docs/guides/use-cases.md`.
- *
- * Only *active* sessions are returned — see `Session.isActive` — since a
- * revoked or expired session is not a device the user can still do anything
- * with, and showing it as if it were "logged in" would be misleading rather
- * than merely stale.
+ * Revoked and expired sessions are excluded.
  */
 export class ListActiveSessions {
   constructor(

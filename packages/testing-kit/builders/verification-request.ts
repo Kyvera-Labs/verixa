@@ -13,16 +13,10 @@ type VerificationRequestStep = (request: VerificationRequest, now: Date) => Veri
 const DEFAULT_DECISION_NOTE = "Decided by testing-kit builder.";
 
 /**
- * Fluent, immutable builder for the `VerificationRequest` aggregate (Issue 419).
- *
- * Starts from {@link makeVerificationRequest} (`VerificationRequest.request`,
- * always `pending_evidence`) and replays each chained call as the aggregate's
- * own transition — `submit()`, `startReview()`, `claimBy()`, `approve()` — in
- * chain order. Nothing is ever `reconstitute`d into a status the state machine
- * did not walk to, so the result passes the aggregate's consistency checks by
- * construction, and an out-of-order chain (approving without a claim, deciding
- * twice) throws the domain's `InvalidStatusTransitionError` /
- * `ReviewDecisionNotPermittedError` at `build()`.
+ * Fluent, immutable builder for `VerificationRequest`. Starts from {@link makeVerificationRequest}
+ * (`pending_evidence`) and replays each call as a real transition (`submit()`, `startReview()`,
+ * `claimBy()`, `approve()`), so results are always valid and an out-of-order chain throws
+ * `InvalidStatusTransitionError` or `ReviewDecisionNotPermittedError` at `build()`.
  */
 export class VerificationRequestBuilder {
   private constructor(

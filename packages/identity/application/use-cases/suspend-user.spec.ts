@@ -76,7 +76,7 @@ describe("SuspendUser", () => {
 });
 
 /**
- * Added in Issue 417: kills suspend-user.ts:31 (the field-error object or its
+ * Kills suspend-user.ts:31 (the field-error object or its
  * array emptied), which the mutation-testing spike found surviving because
  * the existing test checked only the error code.
  */

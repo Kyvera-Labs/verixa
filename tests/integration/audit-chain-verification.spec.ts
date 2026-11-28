@@ -23,28 +23,13 @@ import {
 } from "./helpers/database.js";
 
 /**
- * Chain verification against a real Postgres (Issue 132).
+ * Chain verification against a real Postgres. Proves a hash re-derived from columns read back from
+ * the database matches the original digest; timestamp rounding, JSON key changes or `null` versus
+ * `undefined` would make an honest log look tampered. Tampering is simulated with raw `UPDATE` and
+ * `DELETE`.
  *
- * The use case's own spec runs against an in-memory fake, which proves the
- * walk is correct but proves nothing about the thing this check exists for:
- * that a hash re-derived from *columns read out of a database* matches the
- * digest computed from the values that went in. That round trip is where the
- * design could actually fail — a `timestamptz` that rounds, a JSON `metadata`
- * map that comes back with keys in a different shape, a nullable column
- * reading as `null` instead of `undefined` — and every one of those would make
- * an honest log report itself as tampered. A verification routine that cries
- * wolf is not a control; it is noise an operator learns to ignore.
- *
- * Tampering is simulated the way an attacker with database access would do
- * it: raw `UPDATE` and `DELETE`, bypassing every layer of the application.
- *
- * ## What is not covered here
- *
- * The `--check-anchors` path is exercised against a stand-in ledger, not
- * against Stellar. Reaching a real testnet from CI would make the suite depend
- * on a public network and on funded accounts, and the assertion that matters
- * — that the ledger and the database are compared rather than trusted — holds
- * either way. The live check is what an operator runs by hand.
+ * The `--check-anchors` path uses a stand-in ledger rather than the Stellar testnet, so CI does not
+ * depend on a public network.
  */
 
 const available = await databaseAvailability();
@@ -55,14 +40,8 @@ describe.skipIf(!available)("audit chain verification", () => {
   const prisma: PrismaClient = createTestPrismaClient();
 
   /**
-   * emptied before each test rather than after.
-   *
-   * Verification walks the *global* chain, so unlike every other suite here
-   * this one cannot tolerate a row it did not write: an entry left behind by
-   * another file's login would sit at sequence 1 and change what "the whole
-   * chain" means. The integration suite runs spec files serially for exactly
-   * this reason (see tests/vitest.config.ts), which makes owning the table for
-   * the duration of a test sound rather than merely convenient.
+   * Empties the log before each test. Verification walks the global chain, so a row left by another
+   * file would change the result; integration spec files run serially (see tests/vitest.config.ts).
    */
   async function emptyLog(): Promise<void> {
     await prisma.anchorRecord.deleteMany({});

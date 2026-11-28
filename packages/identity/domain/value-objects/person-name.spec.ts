@@ -60,7 +60,7 @@ describe("PersonName", () => {
   });
 });
 
-/** Added in Issue 417: kills mutants the mutation-testing spike found surviving in person-name.ts. */
+/** Kills mutants the mutation-testing spike found surviving in person-name.ts. */
 describe("PersonName: limits at the edges, and which part they name", () => {
   it("accepts a given and a family name of exactly the maximum length", () => {
     // Kills :35 and :39 (`>` -> `>=`).

@@ -17,42 +17,15 @@ export interface AnchorAuditLogResult {
 export type AnchorAuditLogError = ValidationError | AnchorFailure;
 
 /**
- * Commits the audit log's current head hash to an external ledger.
+ * Commits the audit log's current head hash to an external public ledger.
  *
- * ## What this buys that hash chaining does not
+ * The hash chain alone is only tamper-evident to someone holding an earlier hash: an attacker with
+ * database access could rewrite the log and re-derive every hash. Once the head is on a public
+ * ledger the operator does not control, anyone can verify the log independently.
  *
- * The chain makes the log tamper-evident *to someone who already holds an
- * earlier hash*. On its own that is a weaker guarantee than it sounds,
- * because the operator holds the only copy: an attacker with database access
- * can rewrite the log from any point and re-derive every subsequent hash, and
- * the result is internally consistent and indistinguishable from the truth.
- *
- * Anchoring removes the "only copy" part. Once the head hash is in a Stellar
- * transaction, rewriting history also requires altering a record on a public
- * ledger the operator does not control — which is not a thing they can do.
- * Anyone can then check the operator's log against the chain themselves, with
- * no access to the operator's systems and no need to trust them.
- *
- * That last property is the whole point, and it is why the anchor is a public
- * ledger rather than, say, a second database or a signed file. An auditor, a
- * regulator, or a suspicious user can verify independently.
- *
- * ## Only the hash
- *
- * A hash and nothing else. The log's *contents* stay in the operator's
- * database, and must — putting audit content on a public ledger would be an
- * irreversible data leak, and audit records are exactly the records most
- * likely to contain something sensitive. A digest proves the records existed
- * unchanged while revealing nothing about them.
- *
- * ## Why this is a scheduled operation, not a per-entry one
- *
- * Anchoring every entry would mean a Stellar transaction per login. That
- * costs a fee and several seconds each time, and buys almost nothing: the
- * chain already links entries to one another, so anchoring the head commits
- * to *every* entry beneath it at once. Anchoring periodically bounds the
- * window in which undetected tampering is possible to the time since the last
- * anchor, which is a knob an operator can turn.
+ * Only the digest is anchored, never content. Anchoring runs periodically rather than per entry,
+ * because anchoring the head commits to every entry beneath it; the interval bounds the window for
+ * undetected tampering.
  */
 export class AnchorAuditLog {
   constructor(

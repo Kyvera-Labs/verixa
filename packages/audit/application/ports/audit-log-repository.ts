@@ -18,19 +18,9 @@ export interface FindWithFiltersParams {
 }
 
 /**
- * The append protocol's failure mode: someone else extended the chain first.
- *
- * Returned rather than thrown because it is *expected* under load — the whole
- * point of a compare-and-set is that losing the race is a normal outcome with
- * a defined response (re-read the head, relink, try again). A caller that has
- * to wrap every audit write in a `try` to discover this either swallows it or
- * crashes, and neither is what you want from the security-relevant log.
- *
- * Carries both hashes, because the difference between them is the diagnosis:
- * `expected` is what the writer thought it was appending to, `actual` is what
- * the chain head really is. If they differ, a concurrent writer won; if
- * `actual` is a hash the caller has never seen, something else is wrong and
- * worth a look.
+ * Returned when another writer extended the chain first. Losing this compare-and-set race is
+ * expected under load: re-read the head, relink and retry. `expected` is the head the writer
+ * assumed and `actual` is the real head.
  */
 export class ChainConflictError extends DomainError {
   readonly code = "AUDIT_CHAIN_CONFLICT";
@@ -49,27 +39,13 @@ export class ChainConflictError extends DomainError {
 }
 
 /**
- * Persistence for the audit log.
+ * Persistence for the audit log. Append-only: there is no update or delete, because a mutation
+ * method would make the hash chain meaningless. Erasure will arrive as its own reviewed, auditable
+ * operation.
  *
- * Deliberately has no `update` and no `delete`. Append-only is the guarantee
- * the whole design rests on, and a port offering a way to break it would make
- * the hash chain decorative — the first person in a hurry would reach for it.
- * Retention and erasure (Phase 24) are a different problem with different
- * rules, and will arrive as an explicit, auditable operation rather than as a
- * method that was quietly always there.
- *
- * ## Why every append carries `expectedPreviousHash`
- *
- * A new entry commits to its predecessor's hash, so writing one is only safe
- * if you know what the predecessor is. The naive sequence — read the head,
- * build an entry, insert it — has a window between the read and the insert in
- * which another writer can extend the chain, producing two entries that claim
- * the same predecessor and a forked chain in which one branch is silently
- * unreachable.
- *
- * So the read is not trusted: the insert re-checks it and reports
- * {@link ChainConflictError} when the head has moved. Callers react by
- * re-reading and retrying, and the chain can only ever extend linearly.
+ * Every append carries `expectedPreviousHash` and the insert re-checks it, returning {@link
+ * ChainConflictError} if the head moved. This prevents two entries claiming the same predecessor
+ * and forking the chain.
  */
 export interface AuditLogRepository {
   /**
@@ -95,15 +71,9 @@ export interface AuditLogRepository {
   ): Promise<Result<void, ChainConflictError>>;
 
   /**
-   * Appends `entries` as one atomic unit, iff the chain ends at
-   * `expectedPreviousHash`.
-   *
-   * All-or-nothing by contract: a partial batch would leave the chain ending
-   * at an entry whose successors were rejected, which is a gap — the one thing
-   * verification is supposed to be able to detect. Callers hold each entry's
-   * `previousHash` link to its predecessor in this batch; validating that the
-   * batch is internally consistent before inserting is the adapter's job, not
-   * the caller's reward.
+   * Appends `entries` atomically if the chain ends at `expectedPreviousHash`. A partial batch would
+   * leave a gap in the chain, so it is all or nothing; checking the batch is internally linked is
+   * the adapter's job.
    */
   appendMany(
     entries: readonly AuditLogEntry[],
@@ -137,17 +107,9 @@ export interface AnchorRecordRepository {
 }
 
 /**
- * The anchoring capability this package needs, declared locally.
- *
- * Structurally identical to `HashAnchor` in `@verixa/stellar-anchor`, and
- * deliberately not imported from it. The audit log's requirement is "something
- * can commit a hash somewhere append-only"; naming a specific ledger package
- * in its dependency graph would invert that — the whole reason `HashAnchor`
- * exists is so nothing above the adapter mentions Stellar.
- *
- * The composition root supplies the concrete implementation, exactly as it
- * does for every repository here. Any `HashAnchor` satisfies this by shape, so
- * the two stay compatible without a dependency edge.
+ * Anchoring capability this package needs. Structurally identical to `HashAnchor` in
+ * `@verixa/stellar-anchor` but declared locally, so the audit package does not depend on a specific
+ * ledger.
  */
 export interface HashAnchorPort {
   anchor(
@@ -159,18 +121,9 @@ export interface HashAnchorPort {
 }
 
 /**
- * The read half of an anchoring ledger: confirming that a commitment really
- * exists somewhere the operator does not control.
- *
- * Declared separately from {@link HashAnchorPort} because verification needs
- * *no credentials at all* — it reads public ledger data. Coupling the two into
- * one port would mean a deployment that wants nothing more than to check its
- * own anchors against the ledger has to hold a funded account's secret key to
- * do it, which is precisely the trust boundary anchoring exists to remove.
- *
- * Structurally the second half of `HashAnchor` in `@verixa/stellar-anchor`,
- * and — as with that port — deliberately not imported from it, so nothing above
- * the adapter mentions a specific ledger.
+ * Read half of an anchoring ledger: confirms a commitment exists outside the operator's control.
+ * Separate from {@link HashAnchorPort} because verification needs no credentials, only public
+ * ledger data.
  */
 export interface AnchorVerifierPort {
   verify(

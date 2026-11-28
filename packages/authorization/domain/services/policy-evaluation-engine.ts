@@ -11,15 +11,8 @@ function orderableValueOf(value: number | Date): number {
 }
 
 /**
- * Evaluates one leaf comparison against a resolved attribute value.
- *
- * Type-mismatch behavior is deliberately explicit rather than coercive, per
- * Issue 147's rationale (which this minimal implementation anticipates
- * without yet building the full standalone operator library): comparing a
- * number to a string never silently succeeds via implicit coercion, it
- * simply evaluates to `false`. This keeps a policy author's mistake (or a
- * resolver returning the wrong shape) a visible "this rule didn't match"
- * rather than a surprising type-juggled result.
+ * Evaluates one leaf comparison. Types are never coerced: comparing a number to a string evaluates
+ * to `false`, so a type mistake shows up as a non-matching rule.
  */
 function evaluateComparison(condition: ComparisonCondition, context: AttributeContext): boolean {
   const actual = context.resolve(condition.attribute);
@@ -76,16 +69,8 @@ function evaluateComparison(condition: ComparisonCondition, context: AttributeCo
 }
 
 /**
- * Pure function walking a {@link Condition} tree against an
- * {@link AttributeContext}. No I/O, no repository calls, no side effects —
- * which is what makes exhaustive branch-coverage testing of authorization
- * logic tractable (see Issue 146's educational note).
- *
- * `AND`/`OR` short-circuit via `Array.prototype.every`/`.some`: a `false`
- * branch inside an `AND` (or a `true` one inside an `OR`) stops evaluation
- * of the remaining operands rather than evaluating every one regardless.
- * Evaluating against a missing attribute resolves to `false` rather than
- * throwing, matching {@link AttributeContext.resolve}'s own contract.
+ * Evaluates a {@link Condition} tree against an {@link AttributeContext}. Pure, with no I/O.
+ * `AND`/`OR` short-circuit, and a missing attribute evaluates to `false` rather than throwing.
  */
 export function evaluateCondition(condition: Condition, context: AttributeContext): boolean {
   switch (condition.kind) {
@@ -105,7 +90,7 @@ export function evaluateCondition(condition: Condition, context: AttributeContex
 /**
  * Evaluates whether `rule`'s condition matches `context`. Does not consult
  * `rule.effect` — deriving a `PERMIT`/`DENY`/`NOT_APPLICABLE` outcome from a
- * match/no-match result is `combining-algorithms.ts`'s job (Issue 148), kept
+ * match/no-match result is `combining-algorithms.ts`'s job, kept
  * separate so this evaluator stays a pure boolean predicate.
  */
 export function evaluateRule(rule: Rule, context: AttributeContext): boolean {

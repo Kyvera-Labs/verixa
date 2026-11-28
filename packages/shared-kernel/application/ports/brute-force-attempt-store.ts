@@ -1,14 +1,7 @@
 /**
- * The attempt counter a {@link BruteForcePolicy} reads and writes (Issue 209).
- *
- * A port, not an implementation: the shared kernel must not know whether
- * counters live in Redis, Postgres, or a `Map` in a test. Phase 15 supplies the
- * durable one; the in-memory adapter beside this file is what makes the policy
- * usable and testable today.
- *
- * Keyed by an opaque `key` string the policy derives (scope + identifier), so
- * nothing here knows what an account is, and no adapter has to agree on how a
- * tenant or an identifier is spelled.
+ * Attempt counter a {@link BruteForcePolicy} reads and writes. A port so the policy does not depend
+ * on Redis, Postgres or a test `Map`. Keyed by an opaque string the policy derives from scope and
+ * identifier.
  */
 
 /** What a store holds for one key. */

@@ -1,15 +1,11 @@
 import type { Invitation, InvitationId } from "../../domain/entities/invitation.js";
 
 /**
- * The persistence contract for `Invitation`. See `user-repository.ts` for
- * the general port/adapter contract conventions this mirrors.
+ * Persistence port for `Invitation`.
  *
- * - `findById`/`findByToken` return `undefined` when nothing matches.
- * - `findByToken` takes the **raw** token, as the recipient presents it from
- *   their invitation email — not a hash. Hashing is the adapter's job, since
- *   only the adapter knows that the stored form is a hash at all. Callers
- *   never see or construct a hash, which is what keeps it impossible to
- *   accidentally query with the wrong one.
+ * - `findById` and `findByToken` return `undefined` when nothing matches.
+ * - `findByToken` takes the raw token as presented by the recipient; hashing is the adapter's job,
+ *   so callers never handle hashes.
  * - `save` is an idempotent upsert.
  */
 export interface InvitationRepository {

@@ -14,7 +14,7 @@ import type {
 } from "fastify";
 
 /**
- * Who may call this API from a browser on another origin (Issue 204).
+ * Who may call this API from a browser on another origin.
  *
  * CORS is the browser's escape hatch from the same-origin policy: the policy
  * stops a page at `evil.example` reading a response from this API, and a CORS
@@ -50,15 +50,8 @@ export const NO_CORS: CorsPolicy = {
 export type CorsConfig = Pick<Config, "CORS_ALLOWED_ORIGINS" | "CORS_ALLOW_CREDENTIALS">;
 
 /**
- * Turn validated config into a policy, re-checking the one combination the
- * environment schema already refuses.
- *
- * The duplicate check is not defensive noise. `loadConfig` is not the only
- * caller: tests and future composition code construct a `CorsPolicy` directly,
- * and the wildcard-plus-credentials pairing is exactly the mistake someone
- * makes by hand. Failing here means it fails in one place, before a request is
- * ever answered, rather than as a browser silently refusing to store the
- * session cookie.
+ * Turns validated config into a CORS policy. Re-checks the wildcard-with-credentials combination
+ * because tests and composition code can build a policy without `loadConfig`.
  */
 export function corsPolicyFromConfig(config: CorsConfig): CorsPolicy {
   const conflict = corsConfigurationError(
@@ -77,14 +70,9 @@ export function corsPolicyFromConfig(config: CorsConfig): CorsPolicy {
 }
 
 /**
- * Whether an `Origin` header value may read responses from this API.
- *
- * Exact string comparison, deliberately: the `Origin` header a browser sends
- * is a serialized origin (`scheme://host[:port]`, lower-cased, no path), and
- * anything looser — a suffix match, a case-insensitive compare, a regex a
- * contributor writes once — is how `evil-app.example.com` ends up matching
- * `app.example.com`. `http` and `https` are distinct origins under the
- * same-origin policy, and this function keeps them distinct.
+ * Whether an `Origin` may read responses from this API. Exact string comparison only: suffix,
+ * case-insensitive or regex matching is how `evil-app.example.com` ends up matching
+ * `app.example.com`. `http` and `https` stay distinct.
  */
 export function isOriginAllowed(origin: string, policy: CorsPolicy): boolean {
   return (
@@ -93,32 +81,16 @@ export function isOriginAllowed(origin: string, policy: CorsPolicy): boolean {
 }
 
 /**
- * Register the CORS policy on `app`.
+ * Registers the CORS policy before any route.
  *
- * Registered before any route, like the security headers, so coverage is a
- * property of the instance rather than something each route opts into.
+ * 1. `@fastify/cors` answers preflights and adds `Access-Control-*` headers for allowed origins.
+ * 2. An `onRequest` hook rejects any request carrying a disallowed `Origin`, so the request is
+ *    never processed. Browsers would hide the response, but the server would otherwise still run
+ *    it.
  *
- * Two layers, and the second is the one that satisfies "requests from
- * non-allowlisted origins are rejected":
- *
- * 1. `@fastify/cors` answers preflight requests and decorates responses with
- *    the `Access-Control-*` headers for origins the policy allows. This is
- *    what the browser consults, and it is invisible to a non-browser client.
- * 2. An `onRequest` hook refuses any request that carries an `Origin` this
- *    policy does not allow. Without it, a disallowed origin would still get
- *    the full response body — the browser would refuse to show it, but the
- *    request would have been processed, which is not the same as rejected. A
- *    server-side caller can set any `Origin` it likes, so the second layer is
- *    also what stops the header being treated as an access-control decision.
- *
- * A request with no `Origin` at all (server-side clients, curl, same-origin
- * navigations that some browsers omit it from) is not a cross-origin request
- * and is left alone; refusing it would break every non-browser client for a
- * browser-only policy.
- *
- * Generic over the logger for the same reason `registerAuthRoutes` is: the
- * instance `buildApp` produces carries a concrete pino `Logger`, which is not
- * structurally identical to Fastify's `FastifyBaseLogger`.
+ * Requests with no `Origin` (server-side clients, curl) are not cross-origin and pass through.
+ * Generic over the logger because `buildApp`'s pino `Logger` is not structurally a
+ * `FastifyBaseLogger`.
  */
 export function registerCors<TLogger extends FastifyBaseLogger>(
   app: FastifyInstance<
@@ -161,15 +133,9 @@ export function registerCors<TLogger extends FastifyBaseLogger>(
 
   app.register(cors, {
     /**
-     * The literal `*` when the policy says wildcard, and a function that
-     * performs the explicit {@link isOriginAllowed} comparison otherwise.
-     *
-     * The distinction is not cosmetic: `@fastify/cors` reflects the request's
-     * origin whenever `origin` is a function, so a wildcard policy expressed
-     * as a callback would send a specific origin rather than `*`. That is a
-     * different header to a shared cache and to any reviewer who reads the
-     * config, and it hides the wildcard from the one check that is supposed
-     * to refuse it next to credentials.
+     * The literal `*` for a wildcard policy, otherwise a function using {@link isOriginAllowed}.
+     * `@fastify/cors` reflects the request origin for a function, so a wildcard expressed that way
+     * would send a specific origin instead of `*`.
      */
     origin: policy.allowedOrigins.includes(CORS_WILDCARD_ORIGIN)
       ? CORS_WILDCARD_ORIGIN

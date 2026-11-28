@@ -11,14 +11,12 @@ export interface ShutdownOptions {
 }
 
 /**
- * Creates an idempotent graceful shutdown coordinator for the API server.
+ * Creates an idempotent graceful shutdown handler for SIGTERM and SIGINT:
  *
- * Handles SIGTERM and SIGINT by:
- * 1. Setting up a bounded fallback timer to force process exit if draining hangs.
- * 2. Calling Fastify's `app.close()`, which stops accepting new connections and
- *    waits for active HTTP requests to complete.
- * 3. Invoking `container.dispose()` to flush batched audit writes and cleanly disconnect Prisma/Postgres pools.
- * 4. Exiting cleanly with code 0 once all resources are freed.
+ * 1. Start a fallback timer that forces exit if draining hangs.
+ * 2. `app.close()`: stop accepting connections and wait for in-flight requests.
+ * 3. `container.dispose()`: flush batched audit writes and close database pools.
+ * 4. Exit with code 0.
  */
 export function createShutdownHandler(
   app: {

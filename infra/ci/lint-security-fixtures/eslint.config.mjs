@@ -1,14 +1,7 @@
-// Fixture-only ESLint config (Issue 208).
-//
-// The repository's own config deliberately ignores this directory: these files
-// are vulnerable on purpose and must never fail `pnpm lint`. This config is what
-// the lint-rule fixture test points ESLint at, and it imports the *same* ruleset
-// `eslint.config.mjs` uses — so an assertion that a rule fires here is an
-// assertion about the gate that runs in CI, not about a copy of it.
-//
-// It is a separate config rather than `eslint --no-ignore` against the main one
-// because the fixtures are plain JavaScript outside every tsconfig project, and
-// the repository config runs type-aware linting that needs a project.
+// ESLint config for the deliberately vulnerable security-rule fixtures, which the main config
+// ignores. It imports the same ruleset as `eslint.config.mjs`, so fixture tests check the real CI
+// rules. A separate config because the fixtures are plain JavaScript outside every tsconfig
+// project, and the main config lints with type information.
 
 import { securityPlugin, securityRules } from "../security-lint-rules.mjs";
 

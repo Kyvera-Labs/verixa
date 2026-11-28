@@ -1,15 +1,9 @@
-// Curated public API of @verixa/testing-kit (Issue 420). Nothing outside this
-// package should import a deep path (`@verixa/testing-kit/factories/...`) —
-// the same boundary every context package keeps (Issue 038; see
-// docs/guides/domain-modeling.md, "Package encapsulation"), enforced by the
-// `no-restricted-imports` rule in eslint.config.mjs.
-//
-// Every name is listed explicitly rather than `export *`-ed from a folder
-// barrel, so adding a helper inside the package never publishes it by
-// accident. Each one is documented in docs/guides/tutorials/testing-the-platform.md
-// or a guide under docs/guides/testing/ — add the docs when adding a name.
+// Public API of @verixa/testing-kit. Deep imports are forbidden by `no-restricted-imports` in
+// eslint.config.mjs (see docs/guides/domain-modeling.md). Names are listed explicitly so new
+// helpers are never published by accident; document each one in
+// docs/guides/tutorials/testing-the-platform.md or docs/guides/testing/.
 
-// Builders: fluent, domain-valid test data with a history (Issue 419)
+// Builders: fluent, domain-valid test data with a history
 export { aCredential } from "./builders/credential.js";
 export type { CredentialBuilder } from "./builders/credential.js";
 export { aPendingInvitation } from "./builders/invitation.js";
@@ -19,7 +13,7 @@ export type { MfaMethodBuilder } from "./builders/mfa-method.js";
 export { aVerificationRequest } from "./builders/verification-request.js";
 export type { VerificationRequestBuilder } from "./builders/verification-request.js";
 
-// Factories: Object Mothers for every core aggregate (Issue 402)
+// Factories: Object Mothers for every core aggregate
 export { makeAuditEvent } from "./factories/audit-event.js";
 export type { AuditEventFactoryOptions } from "./factories/audit-event.js";
 export { makeCredential } from "./factories/credential.js";
@@ -41,7 +35,7 @@ export type { UserFactoryOptions } from "./factories/user.js";
 export { makeVerificationRequest } from "./factories/verification-request.js";
 export type { VerificationRequestFactoryOptions } from "./factories/verification-request.js";
 
-// Fakes: the in-memory adapter registry (Issue 403)
+// Fakes: the in-memory adapter registry
 export type { ResettableFake } from "./fakes/fake-contract.js";
 export { InMemoryRateLimiter } from "./fakes/rate-limiter.js";
 export { InMemoryCaptchaValidator, NoopCaptchaValidator } from "./fakes/captcha.js";
@@ -86,11 +80,11 @@ export {
   InMemoryHashAnchor,
 } from "./fakes/index.js";
 
-// Contract tests: one suite, every adapter of a port (Issue 409)
+// Contract tests: one suite, every adapter of a port
 export { defineContractTests } from "./contract-test.js";
 export type { ContractImplementation, ContractSpec } from "./contract-test.js";
 
-// Determinism: controllable time and randomness (Issue 404)
+// Determinism: controllable time and randomness
 export { FixedClock } from "./fixed-clock.js";
 export type { Clock } from "./fixed-clock.js";
 export { SeededRandom } from "./seeded-random.js";

@@ -11,21 +11,10 @@ export type ResourceAttributeValue = string | number | boolean | readonly (strin
 export type ResourceAttributes = Readonly<Record<string, ResourceAttributeValue>>;
 
 /**
- * The port a bounded context implements to let ABAC policies condition on
- * *its* resources — a `document`'s owner and sensitivity label, a
- * `verificationCase`'s status and org — without `packages/authorization`
- * depending on that context's schema.
- *
- * Per `ARCHITECTURE.md` §4's dependency rules, the relationship is
- * inverted from what you might expect: `packages/verification` (say) would
- * implement this port and register an instance of it with the
- * {@link import("../services/resource-attribute-resolver-registry.js").ResourceAttributeResolverRegistry},
- * rather than `packages/authorization` importing anything from
- * `packages/verification` to look attributes up itself.
- *
- * `resolve` takes only a bare `resourceId` — not a typed reference into the
- * owning context's entities — for the same decoupling reason: this port
- * must not mention any type that lives outside `packages/authorization`.
+ * Implemented by a bounded context so ABAC policies can condition on its resources' attributes. The
+ * owning context registers an instance with the `ResourceAttributeResolverRegistry`, so this
+ * package never depends on other contexts' schemas; `resolve` takes a bare `resourceId` for the
+ * same reason.
  */
 export interface ResourceAttributeResolver {
   resolve(resourceId: string): Promise<ResourceAttributes>;

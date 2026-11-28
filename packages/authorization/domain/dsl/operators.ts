@@ -46,8 +46,8 @@ export function evaluateOperator(
     case "matches":
       if (typeof left !== "string" || typeof right !== "string") return mismatch();
       try {
-        // `security/detect-non-literal-regexp` flags this as regex injection
-        // (Issue 208). The pattern is not caller input: it is `right`, the
+        // `security/detect-non-literal-regexp` flags this as regex injection.
+        // The pattern is not caller input: it is `right`, the
         // pattern operand of an admin-authored policy, and compiling it is the
         // entire meaning of the `matches` operator. A malformed pattern is a
         // policy error, caught and mapped to `invalid_pattern` below rather

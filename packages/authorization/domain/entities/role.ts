@@ -4,17 +4,8 @@ import { SystemRoleImmutableError } from "../errors/system-role-immutable-error.
 import { Permission } from "../value-objects/permission.js";
 
 /**
- * An organization id.
- *
- * Exported from here because `UserRoleAssignment` is org-scoped and takes one.
- * A `Role` deliberately is not: roles and permissions are global, because the
- * set of roles a deployment supports is an administrative concern rather than a
- * tenant one, and what varies per organization is *who holds* a role. That is
- * stated in `packages/database/prisma/schema.prisma` above `model Role`, and
- * the `roles` table has no `organization_id` column as a result. An earlier
- * version of this entity carried an `orgId` with `createScoped`/`isGlobal`,
- * which the database was never going to support -- it is why this package's
- * Prisma adapters stopped compiling. Tenancy lives on the assignment.
+ * An organization ID, used by organization-scoped `UserRoleAssignment`s. Roles themselves are
+ * global; tenancy lives on the assignment.
  */
 export type OrgId = Id<"OrganizationId">;
 export type RoleId = Id<"RoleId">;
@@ -40,18 +31,12 @@ export interface CreateRoleParams {
 }
 
 /**
- * Role aggregate root.
+ * Role aggregate root: a named, reusable set of permissions. The permission set changes only
+ * through `grant` and `revoke`.
  *
- * Represents a named, reusable bundle of permissions that can be assigned to users.
- * Owns the invariant that a role's permission set can only change through its own methods
- * (`grant`, `revoke`), never by external mutation.
- *
- * ## System-Role Invariants (Issue 123)
- * Roles flagged with `isSystemRole: true` represent protected, built-in roles (e.g. `super-admin`)
- * essential for system recoverability. They enforce strict domain-level immutability:
- * - Revoking any permission throws {@link SystemRoleImmutableError}.
- * - Renaming the role throws {@link SystemRoleImmutableError}.
- * - Granting additional permissions is still permitted.
+ * System roles (`isSystemRole: true`, such as `super-admin`) are protected: revoking a permission
+ * or renaming the role throws {@link SystemRoleImmutableError}. Granting permissions is still
+ * allowed.
  */
 export class Role {
   readonly id: RoleId;

@@ -3,14 +3,8 @@ import { describe, expect, it } from "vitest";
 import { Argon2PasswordHasher, DEFAULT_ARGON2_PARAMETERS } from "./argon2-password-hasher.js";
 
 /**
- * Most tests here use deliberately weak parameters. Hashing at OWASP defaults
- * takes ~50–100ms by design, and a suite doing it dozens of times would take
- * long enough that people start skipping it — which costs more safety than
- * the stronger test parameters buy.
- *
- * The properties under test (round-trip, rejection, salting, upgrade
- * detection) are independent of cost. The one test that genuinely needs real
- * parameters — that the KDF is actually slow — uses them explicitly.
+ * Most tests use weak parameters so the suite stays fast; the properties tested do not depend on
+ * cost. The one test of real cost uses the production defaults explicitly.
  */
 const FAST = { memoryCost: 64, timeCost: 1, parallelism: 1 };
 
@@ -143,21 +137,8 @@ describe("Argon2PasswordHasher", () => {
       const digest = await production.hash("correct horse battery staple");
       const elapsed = performance.now() - started;
 
-      // Slowness *is* the security property, so it deserves an assertion: a
-      // configuration change that accidentally made hashing cheap would break
-      // nothing visible and weaken everything, and this is the only test that
-      // would notice.
-      //
-      // Asserted against the PHC string rather than the clock. Argon2 records
-      // the cost it was produced with directly in its output, so this reads
-      // the parameters actually used instead of inferring them from how long
-      // the machine took — which is the same claim, made deterministically.
-      //
-      // The previous version asserted `elapsed > 10`, calibrated as a loose
-      // bound against a ~50-100ms design target. A CI runner did it in 9.04ms
-      // and the suite went red over a machine being fast. That is the failure
-      // mode every wall-clock assertion eventually has, and the reason the
-      // real check should not be one.
+      // Slowness is the security property, so assert it by reading the cost parameters recorded in
+      // the PHC string. A wall-clock bound failed on a fast CI runner.
       const { memoryCost, timeCost, parallelism } = DEFAULT_ARGON2_PARAMETERS;
       expect(digest).toContain(
         `$argon2id$v=19$m=${String(memoryCost)},t=${String(timeCost)},p=${String(parallelism)}$`,

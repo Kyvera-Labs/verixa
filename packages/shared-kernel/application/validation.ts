@@ -2,15 +2,8 @@ import { ValidationError } from "../domain/errors.js";
 import { Result } from "../domain/result.js";
 
 /**
- * Collects field-level validation errors across several independent checks
- * into one `ValidationError` with a merged field-error map, instead of
- * stopping at the first failure. Introduced after `UpdateUserProfile`
- * (Issue 032) needed exactly this and merged field errors by hand — this is
- * that logic, extracted so every future multi-field use case does it the
- * same way instead of reimplementing the merge. See
- * `docs/guides/error-handling.md`.
- *
- * Typical use inside a use case:
+ * Collects field errors from several independent checks into one `ValidationError` instead of
+ * stopping at the first failure (see docs/guides/error-handling.md).
  *
  * ```ts
  * const errors = new ValidationErrorAggregator();
@@ -20,7 +13,7 @@ import { Result } from "../domain/result.js";
  * if (errors.hasErrors()) {
  *   return errors.toResult();
  * }
- * // email and displayName are narrowed to their non-undefined value objects here
+ * // email and displayName are narrowed to their value objects here
  * ```
  */
 export class ValidationErrorAggregator {

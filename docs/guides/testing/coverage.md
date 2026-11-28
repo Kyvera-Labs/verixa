@@ -123,7 +123,7 @@ COVERAGE_RATCHET_OVERRIDE="Refactoring session storage adapters (see issue #420)
 pnpm coverage:ratchet --allow-drop --override-reason "Deprecating legacy token format"
 ```
 
-> **Policy:** Any ratchet override must be accompanied by an explicit reason linking to a tracked GitHub issue. CI highlights overrides with a `⚠️ Coverage ratchet override applied` banner in the PR step summary.
+> **Policy:** Any ratchet override must be accompanied by an explicit reason linking to a tracked GitHub issue. CI highlights overrides with a `Coverage ratchet override applied` banner in the PR step summary.
 
 ---
 

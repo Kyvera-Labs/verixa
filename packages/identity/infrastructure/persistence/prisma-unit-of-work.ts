@@ -10,23 +10,10 @@ import {
 import { PrismaUserRepository } from "./prisma-user-repository.js";
 
 /**
- * `UnitOfWork` over Prisma's interactive transactions.
- *
- * `prisma.$transaction(fn)` opens a transaction, hands back a client scoped
- * to it, and commits when `fn` resolves or rolls back if it rejects. The
- * repositories constructed inside therefore all issue their statements on the
- * same connection and the same transaction — which is the entire reason every
- * Prisma repository in this package takes its client as a constructor
- * argument instead of creating one. A repository that owned its connection
- * could not be enlisted in someone else's transaction, and this pattern would
- * be impossible.
- *
- * The transaction client is structurally a `PrismaClient` minus the methods
- * that make no sense inside a transaction (`$connect`, `$transaction`, and
- * friends), so it doesn't satisfy the full `PrismaClient` type. The
- * repositories only ever use model delegates, which are present and correctly
- * typed on both — hence the narrow cast here, in the one file that knows it's
- * talking to Prisma at all.
+ * `UnitOfWork` over Prisma interactive transactions. Repositories are constructed with the
+ * transaction client, so all their statements share one transaction; this is why repositories take
+ * a client instead of creating one. The cast is needed because a transaction client lacks methods
+ * such as `$connect` and `$transaction`, which the repositories never use.
  */
 export class PrismaUnitOfWork implements UnitOfWork {
   constructor(private readonly prisma: PrismaClient) {}

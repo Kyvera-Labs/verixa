@@ -90,51 +90,15 @@ const DEFAULT_MAX_FLUSH_ATTEMPTS = 3;
 /**
  * Batches audit writes behind a bounded in-memory queue.
  *
- * ## Why batching is available at all
+ * It queues unhashed commands and builds the chain at flush time from a freshly read head, so
+ * hashing stays serial while inserts are batched into one statement.
  *
- * Every other context publishes events through this path, so the audit
- * subscriber sits downstream of all traffic the system generates. A per-event
- * write is a round trip and a transaction; at any meaningful request rate, those
- * costs are what make auditing the bottleneck — and a bottleneck here is
- * invisible to users, which is the kind of problem that goes unfixed until the
- * log is needed.
+ * Trade-off: queued entries are not durable until flushed. `flushIntervalMs` bounds the loss
+ * window; lower it if you raise `maxBatchSize`.
  *
- * Inserting a batch of N in one statement rather than N statements is the
- * obvious fix. The less obvious part is that a hash chain is *not* naturally
- * batch-shaped: each entry's hash depends on its predecessor, so a chain cannot
- * be computed in parallel and flushed afterwards. This writer therefore queues
- * pending **commands** — unhashed intents — and builds the chain at flush time,
- * link by link from a head read immediately beforehand. The chain stays strictly
- * serial where it has to be, and the writes batch together where batching is
- * what actually costs.
- *
- * ## The trade being paid for
- *
- * A queued entry is not yet durable. A process that dies with 10,000 entries
- * pending loses all of them, whereas a per-event writer loses at most the one in
- * flight. That is a genuine regression in durability, and the interval flush is
- * what bounds it: with `flushIntervalMs` at 250 the worst case is a quarter
- * second of audit trail rather than the whole queue. Anyone raising
- * `maxBatchSize` for throughput should lower the interval to match, because
- * otherwise the batch window silently becomes the data-loss window.
- *
- * ## Why the queue is bounded, and why overflow refuses the *newest* entry
- *
- * An unbounded queue under sustained overload is not backpressure — it is a
- * memory leak with a delay before the crash, and the crash then takes the whole
- * queue's contents with it. So `maxQueueSize` is a hard ceiling, and it is the
- * *incoming* entry that gets refused rather than the oldest queued one.
- *
- * Evicting oldest was the alternative considered and rejected. A caller whose
- * `record()` returned success has been told that entry will be written; evicting
- * it later makes that promise false and turns log reliability into a function of
- * load, which is precisely when auditing matters most. Refusing newest keeps
- * `record()`'s answer honest: it reports at the moment of the call whether the
- * entry was accepted, and everything accepted will be written.
- *
- * Refused entries are never silently discarded. Every one is reported through
- * `onOverflow` with a running total, which is what makes the gap visible in
- * metrics rather than discovered during an incident review.
+ * `maxQueueSize` is a hard limit. On overflow the newest entry is refused rather than evicting an
+ * accepted one, so `record()` never reports success for an entry that is later dropped. Every
+ * refusal is reported through `onOverflow` with a running total.
  */
 export class BatchedAuditWriter implements AuditRecorder {
   private readonly queue: RecordAuditEventCommand[] = [];
@@ -191,14 +155,8 @@ export class BatchedAuditWriter implements AuditRecorder {
   }
 
   /**
-   * The `AuditRecorder` face of this writer, so a route or event handler can be
-   * wired to either strategy without knowing which.
-   *
-   * Always resolves `undefined`: the entry does not exist yet -- it is linked and
-   * hashed at flush time -- so there is no entry to hand back. A refused entry is
-   * reported through `onOverflow` with a metric rather than through the return
-   * value, which is why the port documents `undefined` as "not written" rather
-   * than as "failed".
+   * `AuditRecorder` implementation. Always resolves `undefined` because the entry is only linked
+   * and hashed at flush time; refused entries are reported through `onOverflow`.
    */
   execute(command: RecordAuditEventCommand): Promise<AuditLogEntry | undefined> {
     this.record(command);

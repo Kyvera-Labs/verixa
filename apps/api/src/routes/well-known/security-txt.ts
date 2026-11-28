@@ -7,7 +7,7 @@ import type {
 } from "fastify";
 
 /**
- * `/.well-known/security.txt` (Issue 211, RFC 9116).
+ * `/.well-known/security.txt` (RFC 9116).
  *
  * A machine-readable pointer to the disclosure policy, at the path an
  * automated scanner or a security researcher tries first. The prose lives in
@@ -22,19 +22,10 @@ const CONTACT_URL = "https://github.com/Kyvera-Labs/verixa/security/advisories/n
 const POLICY_URL = "https://github.com/Kyvera-Labs/verixa/blob/master/SECURITY.md";
 
 /**
- * Whether a `Host` header value is a host: labels, and an optional port.
- *
- * `Canonical` is echoed into the response body, so it is the one field this
- * document builds from client-supplied data. Anything outside this pattern —
- * a space, a newline, a slash followed by a path — means the header is not a
- * host, and is dropped rather than rendered. Injecting a forged line into a
- * machine-readable security contact would be a small but real way to make this
- * document lie about where to send a report.
- *
- * The bounds are RFC 1035's: 253 characters for a name, 5 for a port. Host and
- * port are matched separately rather than as one pattern with an optional
- * group, which keeps each check a single pass over its own slice with nothing
- * to backtrack, on an input this server does not control.
+ * Whether a `Host` value is a hostname with an optional port. `Canonical` is built from this
+ * header, so anything else is dropped rather than rendered, preventing injected lines. Bounds
+ * follow RFC 1035 (253 characters, 5-digit port); host and port are checked separately so neither
+ * check can backtrack.
  */
 const HOST_NAME = /^[A-Za-z0-9._-]{1,253}$/;
 const PORT_NUMBER = /^[0-9]{1,5}$/;
@@ -64,17 +55,8 @@ function rfc9116Timestamp(date: Date): string {
 }
 
 /**
- * The next 1 January at least `MINIMUM_HORIZON_DAYS` out.
- *
- * An expiry is a liveness signal: a researcher who finds this file in two
- * years needs to know whether the contact details in it are still watched.
- * The obvious implementation is a date hardcoded next to the text, which is
- * correct exactly once and then silently wrong — the file keeps serving, and
- * the `Expires` it advertises passed months ago. The alternative rejected is
- * "now plus a year" computed per request, which never expires and so stops
- * meaning anything. Rolling to the next New Year keeps both properties: the
- * value is always in the future, and it still names a real date by which a
- * human is expected to have re-read this file.
+ * The next 1 January at least `MINIMUM_HORIZON_DAYS` away, so `Expires` is always in the future yet
+ * still a real date by which someone should re-check this file.
  */
 const MINIMUM_HORIZON_DAYS = 60;
 
@@ -120,14 +102,8 @@ export function buildSecurityTxt(host: string | undefined, now: Date = new Date(
 }
 
 /**
- * Register the route.
- *
- * Takes no container: this answers a question about the *software*, not about
- * a tenant's data, so it must work on a process that has no database. That is
- * the same reasoning that keeps `/health` container-free, and it matters here
- * for a sharper reason — a researcher's scanner should reach the disclosure
- * channel whether or not the deployment's database is up, and a 503 from the
- * one endpoint whose job is to be found is worse than no endpoint.
+ * Registers the route. Needs no container, so the disclosure contact is reachable even when the
+ * database is down.
  */
 export function registerSecurityTxtRoute<TLogger extends FastifyBaseLogger>(
   app: FastifyInstance<

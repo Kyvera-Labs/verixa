@@ -112,9 +112,9 @@ jobs:
             const valid = detected + n("Survived") + n("NoCoverage");
             const score = valid === 0 ? 0 : (100 * detected) / valid;
             const breakAt = JSON.parse(fs.readFileSync("stryker.conf.json", "utf8")).thresholds.break;
-            const mark = score >= breakAt ? "✅" : "❌";
+            const verdict = score >= breakAt ? "Pass" : "Fail";
             const lines = [
-              `### ${mark} Mutation score — @verixa/${process.env.PACKAGE}: ${score.toFixed(2)}%`,
+              `### ${verdict}: mutation score for @verixa/${process.env.PACKAGE}: ${score.toFixed(2)}%`,
               "",
               `Threshold (break): ${breakAt}% · killed ${n("Killed")} · timeout ${n("Timeout")} · survived ${n("Survived")} · no coverage ${n("NoCoverage")}`,
               "",

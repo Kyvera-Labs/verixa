@@ -1,17 +1,7 @@
 /**
- * Cookie attributes for the sessions context (roadmap Issue 214).
- *
- * One place decides what a Verixa cookie looks like on the wire, so the
- * question "is this cookie HttpOnly?" has exactly one answer to go and read.
- * Route handlers ask for a cookie by purpose — `refreshTokenCookie`,
- * `csrfTokenCookie` — and never spell out attributes themselves, which is the
- * only arrangement in which a future change to the policy is a one-line change
- * rather than an audit of every call site.
- *
- * Nothing here imports a web framework, and that is deliberate: `@verixa/sessions`
- * has no Fastify dependency and a cookie is, at the boundary that matters, just
- * a `Set-Cookie` string. The HTTP layer's job is to put the returned value in a
- * header; it gets no vote on the attributes.
+ * Cookie attributes for the sessions context. Route handlers request cookies by purpose
+ * (`refreshTokenCookie`, `csrfTokenCookie`) and never set attributes themselves, so the policy
+ * lives in one place. Framework-free: it returns `Set-Cookie` strings.
  */
 
 /** The `SameSite` modes, in the casing `Set-Cookie` is conventionally written in. */
@@ -50,14 +40,8 @@ export const REFRESH_COOKIE_NAME = "verixa_refresh";
 export const CSRF_COOKIE_NAME = "verixa_csrf";
 
 /**
- * Path the refresh cookie is scoped to.
- *
- * A cookie's `Path` is not a security boundary against XSS (a script on any
- * page of the origin can still make the request that carries it), but it does
- * decide *when the value leaves the browser at all*. Scoped to one endpoint,
- * the refresh token is absent from every other request — including requests to
- * paths served by something else on the same host, and including anything a
- * permissive `Path=/` arrangement would have leaked into logs upstream.
+ * Path the refresh cookie is scoped to, so the token is sent only to the refresh endpoint and never
+ * to other paths on the same host. This limits exposure; it is not an XSS boundary.
  */
 export const REFRESH_COOKIE_PATH = "/auth/refresh";
 
@@ -65,50 +49,22 @@ export const REFRESH_COOKIE_PATH = "/auth/refresh";
 export const CSRF_COOKIE_PATH = "/";
 
 /**
- * Cookie names are matched against this before serialization.
- *
- * RFC 6265 §4.1.1 builds a cookie out of RFC 2616 `token`s, and a token is the
- * printable ASCII set minus the separators — which is what the class below
- * spells out. So no name can contain `;`, `=`, `,`, whitespace or a control
- * character.
- *
- * Rejecting those is not pedantry. A `;` ends the attribute list early, so
- * `token=abc; HttpOnly` arriving from somewhere the application did not
- * generate becomes two cookies, the second one named `HttpOnly`; a `;` in a
- * name ends the name before its own `=`. Both are cookie injection, and a
- * newline in either is response splitting one layer up.
- *
- * Base64url, JWTs (`.`-separated base64url) and hex all satisfy this, so no
- * token Verixa actually issues is affected — the checks exist for the value
- * some future caller passes in.
+ * Valid cookie names: RFC 6265 §4.1.1 tokens (printable ASCII without separators). Rejecting `;`,
+ * `=`, `,`, whitespace and control characters prevents cookie injection and response splitting.
+ * Every token Verixa issues already matches.
  */
 const COOKIE_NAME = /^[A-Za-z0-9!#$%&'*+\-.^_`|~]+$/;
 
 /**
- * RFC 6265 §4.1.2 cookie-value, as the five ranges the RFC lists: printable
- * ASCII except `"`, `,`, `;` and `\`.
- *
- * Written as allowed ranges rather than a negated class for two reasons. The
- * four forbidden characters then read as the gaps between the ranges, which is
- * easier to check than four entries inside a `^` set that are easy to typo out.
- * And `=` (0x3D) sits inside `%x3C-5B`, so it stays permitted — base64 padding
- * needs it, and a class built by hand around the separators is exactly how an
- * `=` gets lost.
- *
- * The empty value is allowed: clearing a cookie sends `name=`, so a pattern
- * requiring at least one character would make every logout path throw.
+ * RFC 6265 §4.1.2 cookie-value: printable ASCII except `"`, `,`, `;` and `\`, written as the RFC's
+ * ranges. `=` stays allowed for base64 padding, and an empty value is allowed so a cookie can be
+ * cleared.
  */
 const COOKIE_VALUE = /^[\x21\x23-\x2b\x2d-\x3a\x3c-\x5b\x5d-\x7e]*$/;
 
 /**
- * RFC 6265 §4.1.2.4 path-value: the cookie-value character set, non-empty, and
- * anchored at `/`.
- *
- * `Path` is validated on the same terms as the value even though this package
- * only ever passes a constant, because the attribute is assembled by string
- * concatenation like every other one — a caller that interpolated a request
- * path into it would get the same injection out of `Path` that a `;` in a value
- * gives.
+ * RFC 6265 §4.1.2.4 path-value: the cookie-value characters, non-empty and starting with `/`.
+ * Validated because attributes are built by string concatenation.
  */
 const COOKIE_PATH = /^\/[\x21\x23-\x2b\x2d-\x3a\x3c-\x5b\x5d-\x7e]*$/;
 
@@ -137,16 +93,9 @@ function assertCookieField(
 }
 
 /**
- * The `Set-Cookie` field value for a cookie.
- *
- * Attribute order is not cosmetic. A `Partitioned` cookie must already be
- * `Secure`, and browsers stop parsing at the first attribute they do not
- * recognise in some legacy paths; the sequence below is what RFC 6265-bis
- * examples use and what every current engine accepts.
- *
- * `HttpOnly` and `Secure` are emitted only when set, because their *absence* is
- * the meaningful statement for the CSRF cookie — a reader of the header should
- * be able to see that JS access was allowed on purpose.
+ * The `Set-Cookie` header value. Attributes follow the RFC 6265bis order that every current engine
+ * accepts. `HttpOnly` and `Secure` are omitted when unset, so their absence on the CSRF cookie is
+ * visibly deliberate.
  */
 export function serializeCookie(attributes: CookieAttributes): string {
   // Order matters: the name is the only field quoted in the messages below, so
@@ -219,17 +168,9 @@ export function serializeCookie(attributes: CookieAttributes): string {
 const EPOCH = new Date(0);
 
 /**
- * The cookie attributes that delete a cookie.
- *
- * Deletion is a match on name, `Domain` and `Path` — an `Expires` in the past
- * sent with `Path=/` does not remove a cookie that was set with
- * `Path=/auth/refresh`. So clearing is derived from the original attributes
- * rather than written again, which is the failure mode that turns a logout into
- * "logged out until the refresh token comes back on the next request".
- *
- * Both `Max-Age=0` and the epoch `Expires` are sent: `Max-Age` is what modern
- * engines honour, and the absolute date is what a client implementing the older
- * behaviour needs.
+ * Attributes that delete a cookie. Derived from the original attributes, because a browser only
+ * deletes a cookie whose name, `Domain` and `Path` match. Sends both `Max-Age=0` and an epoch
+ * `Expires` for older clients.
  */
 export function expireCookie(attributes: CookieAttributes): CookieAttributes {
   return {
@@ -250,29 +191,11 @@ export function expireCookie(attributes: CookieAttributes): CookieAttributes {
 /**
  * The refresh-token cookie.
  *
- * `HttpOnly` because the refresh token is a long-lived bearer credential whose
- * theft is not a page-load problem but an account-takeover problem; readable by
- * script, it is exfiltrated by any XSS on the origin, and unlike an access
- * token it can be replayed for weeks and survives rotation of the access token.
- *
- * `Secure` in every environment, including development — see
- * `docs/security/tls-enforcement.md` for why the *transport* is allowed to be
- * plaintext locally while a cookie flag is not. `Secure` is not a switch this
- * package exposes, because the difference between "development" and
- * "production" is a deployment's claim about itself, and a cookie that is
- * readable over plaintext wherever a flag happens to be unset is the exact
- * credential this file exists to protect. The consequence is deliberate: if the
- * browser refuses to store this cookie, the origin is not one it treats as
- * trustworthy, and the fix is to reach the API over `localhost` or a locally
- * trusted certificate — not to relax the attribute.
- *
- * `SameSite=Lax` rather than `Strict`: `Strict` would also drop the cookie from
- * a top-level navigation *into* the app (a link clicked from an email or an
- * IdP redirect), and the refresh that follows is the one thing that flow needs.
- * `Lax` still refuses the cross-site *sub-requests* that carry a CSRF attack —
- * the cookie is never sent with a cross-site `POST`. The alternative, `Strict`,
- * was rejected on usability rather than safety grounds; a deployment that never
- * does server-side renders can tighten it, and this is the file to do it in.
+ * - `HttpOnly`: it is a long-lived bearer credential, and script access would let any XSS steal it.
+ * - `Secure` in every environment. If the browser refuses to store it locally, use `localhost` or a
+ *   trusted local certificate rather than relaxing the flag (see docs/security/tls-enforcement.md).
+ * - `SameSite=Lax`: still blocks cross-site POSTs, while `Strict` would drop the cookie on
+ *   top-level navigation into the app, such as an email link or IdP redirect.
  */
 export function refreshTokenCookie(input: {
   readonly token: string;
@@ -290,19 +213,9 @@ export function refreshTokenCookie(input: {
 }
 
 /**
- * The CSRF token cookie — the one cookie that is deliberately readable by
- * JavaScript.
- *
- * A double-submit CSRF token is not a secret from the page it was issued to:
- * its whole job is to be read back by script and echoed into a header, so the
- * server can check that whoever sent the request could also read this origin's
- * cookies. `HttpOnly` would defeat the mechanism.
- *
- * That exception is tolerable because the value grants nothing on its own. The
- * refresh cookie above is the credential, and it stays `HttpOnly`; an attacker
- * who steals this one still has to cause a request the browser will not make
- * cross-site. `docs/security/secure-cookies.md` keeps the reasoning where a
- * reviewer of the CSRF implementation (Issue 205) will find it.
+ * The CSRF token cookie, deliberately readable by JavaScript: double-submit CSRF requires the page
+ * to read it and echo it in a header. It grants nothing on its own; the refresh cookie stays
+ * `HttpOnly` (see docs/security/secure-cookies.md).
  */
 export function csrfTokenCookie(input: {
   readonly token: string;

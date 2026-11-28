@@ -23,17 +23,8 @@ export interface RegisterUserWithPasswordResult {
 export type RegisterUserWithPasswordError = ValidationError | ConflictError | NotFoundError;
 
 /**
- * Registers a user and their password together, atomically.
- *
- * The first use case spanning two bounded contexts, and a worked example of
- * doing that without either context knowing the other's internals: everything
- * from identity arrives through `@verixa/identity`'s public API, and identity
- * has no idea this package exists.
- *
- * Rate limiting is consulted at the start via the {@link RateLimiter} port,
- * and reset on successful registration to prevent registration abuse.
- *
- * See `docs/guides/use-cases.md`.
+ * Registers a user and their password atomically, using only identity's public API. The rate
+ * limiter is checked first and reset on success (see docs/guides/use-cases.md).
  */
 export class RegisterUserWithPassword {
   constructor(
@@ -125,7 +116,6 @@ export class RegisterUserWithPassword {
       return Result.ok({ user, credential });
     });
 
-    // Reset rate limit counter on successful registration
     if (Result.isOk(result)) {
       await this.rateLimiter.reset(rateLimitKey);
     }

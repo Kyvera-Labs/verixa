@@ -1,19 +1,9 @@
 /**
- * End-to-end demonstration: record audit events, chain them, anchor the chain
- * head to Stellar, then verify the commitment from the public ledger.
+ * End-to-end demo: record audit events, chain them, anchor the head to the Stellar testnet and
+ * verify it from the public ledger. Run with `pnpm --filter @verixa/audit demo`.
  *
- * Runnable with no database and no configuration:
- *
- *     pnpm --filter @verixa/audit demo
- *
- * It funds a throwaway testnet account from friendbot, so a reviewer needs
- * nothing but network access. The transaction hash it prints can be pasted
- * into any Stellar explorer, and the memo there will be the audit log's head
- * hash — checkable by anyone, without trusting or accessing this system.
- *
- * That independent checkability is the entire point of anchoring, so the demo
- * ends by doing exactly what a third party would do: read the hash back off
- * the ledger and compare.
+ * Needs only network access; it funds a throwaway account from friendbot. The printed transaction
+ * hash can be checked in any Stellar explorer.
  */
 import { Keypair } from "@stellar/stellar-sdk";
 import { Result } from "@verixa/shared-kernel";

@@ -8,23 +8,9 @@ import {
 } from "./helpers/database.js";
 
 /**
- * Proves Row-Level Security actually isolates tenants (Issue 052).
- *
- * ## Why this test needs its own database role
- *
- * A Postgres **superuser bypasses RLS unconditionally** — `FORCE ROW LEVEL
- * SECURITY` constrains the table owner but not a superuser, and there is no
- * way to make one subject to it. The `verixa` role every other test uses is
- * created as a superuser by the official Postgres image, so running these
- * assertions as `verixa` would return every row and the test would pass
- * while proving nothing at all.
- *
- * So this suite creates a dedicated unprivileged role and connects as it.
- * That is not test scaffolding around an inconvenience — it mirrors the
- * actual production requirement: **the application must not connect to
- * Postgres as a superuser**, or the entire RLS layer is silently inert.
- * Testing through a restricted role is the only way to verify the
- * configuration a real deployment has to use.
+ * Proves Row-Level Security isolates tenants. Superusers bypass RLS, and the default `verixa` test
+ * role is a superuser, so this suite connects as a dedicated unprivileged role. Production must
+ * likewise never connect as a superuser.
  */
 
 const available = await databaseAvailability();
@@ -53,22 +39,10 @@ describe.skipIf(!available)("row-level security", () => {
   let app: PrismaClient;
 
   beforeAll(async () => {
-    // Idempotent role creation — roles are cluster-scoped and survive
-    // database resets, so a plain CREATE ROLE fails on the second run.
-    //
-    // These three statements are the one place in the repository where SQL is
-    // built by interpolation rather than bound, and the lint rule is right to
-    // ask about it. DDL genuinely cannot be parameterized: `GRANT` and
-    // `CREATE ROLE` take identifiers, not values, Postgres refuses a placeholder
-    // there, and a `DO` block's body is a string literal — so `$1` inside one
-    // would be the text `$1`. What makes this safe is not the shape of the
-    // statement but the origin of the pieces: `APP_ROLE` and `APP_PASSWORD` are
-    // constants declared above, fixed for the whole of this file, and nothing
-    // from a request or a database row can reach them. They are also plain
-    // lowercase identifiers needing no quoting. Changing either to a runtime
-    // value would make this disable wrong, which is why it is written out here
-    // and in docs/security/injection-hardening.md rather than left as a bare
-    // suppression.
+    // Idempotent role creation, since roles survive database resets. These statements interpolate
+    // rather than bind because DDL takes identifiers, not values. It is safe only because
+    // `APP_ROLE` and `APP_PASSWORD` are constants in this file; making either a runtime value would
+    // make this unsafe (see docs/security/injection-hardening.md).
     /* eslint-disable no-restricted-syntax -- DDL identifiers cannot be bound; see the comment above */
     await admin.$executeRawUnsafe(`
       DO $$

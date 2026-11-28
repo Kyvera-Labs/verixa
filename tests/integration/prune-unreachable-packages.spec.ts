@@ -10,14 +10,10 @@ import { afterEach, describe, expect, it } from "vitest";
 import { classifyStore, pruneUnreachable } from "../../scripts/prune-unreachable-packages.mjs";
 
 /**
- * The step the API image build runs after `pnpm deploy` to drop the Prisma
- * CLI's dependency tree (and other optional peers) from the bundle.
- *
- * Each test builds a miniature pnpm layout: store entries under
- * `node_modules/.pnpm/<key>/node_modules/<name>`, dependency links as siblings,
- * top-level links for the app's direct dependencies and pnpm's hoisted links.
- * Links are directory junctions so the suite also runs on Windows without
- * symlink privileges. The real image is covered by the `docker` CI job.
+ * Tests the image build step that prunes the Prisma CLI's dependency tree and other optional peers
+ * after `pnpm deploy`. Each test builds a miniature pnpm layout using directory junctions, so it
+ * also runs on Windows without symlink privileges. The real image is covered by the `docker` CI
+ * job.
  */
 
 const run = promisify(execFile);

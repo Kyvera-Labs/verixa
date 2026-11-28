@@ -4,17 +4,9 @@ import supertest from "supertest";
 import { afterEach, describe, expect, it } from "vitest";
 
 /**
- * `POST /csp-report` (Issue 212).
- *
- * The reporting half of a CSP is the half that makes a policy changeable:
- * without it, tightening `script-src` breaks a page quietly and nobody finds
- * out. So the test worth writing is not "does it answer 204" but "does a
- * violation actually arrive, in a form an operator can read" — which is why
- * these tests capture the log stream rather than only the response.
- *
- * The app is built here instead of through `helpers/http-client.js` because
- * that helper takes a container and this suite takes a logger: the assertion
- * is about what the server records.
+ * `POST /csp-report`. Captures the log stream to confirm a violation report arrives in a readable
+ * form, not just that the endpoint answers 204. Builds the app with a logger instead of using
+ * `helpers/http-client.js`, which takes a container.
  */
 
 interface CapturedLine {

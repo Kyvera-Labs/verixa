@@ -21,7 +21,7 @@ export function deriveRuleOutcomes(
 /**
  * A named strategy for reducing several rules' outcomes to one final
  * decision — lifted directly from XACML's combining-algorithm vocabulary
- * (Issue 148's educational note), so contributors can bring prior ABAC
+ * so contributors can bring prior ABAC
  * knowledge to these names rather than Verixa inventing its own.
  */
 export type CombiningAlgorithm = (outcomes: readonly RuleOutcome[]) => RuleOutcome;

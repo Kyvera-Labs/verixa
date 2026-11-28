@@ -11,14 +11,9 @@ export const RETENTION_ACTIONS = ["delete", "anonymize", "archive"] as const;
 export type RetentionAction = (typeof RETENTION_ACTIONS)[number];
 
 /**
- * Which actions each resource type may ever be given. This is the structural
- * guard behind "audit records are never deleted": `audit_export` permits
- * archival only, so no rule can request deletion of it, and the enforcement job
- * checks the same table again before touching a target.
- *
- * Alternative rejected: a runtime `if (type === "audit") refuse` inside the job.
- * A table is one place to review and cannot be bypassed by adding a new code
- * path that forgets the check.
+ * Actions each resource type may ever be given. This table is what guarantees audit records are
+ * never deleted: `audit_export` permits archival only, and the enforcement job checks the table
+ * again before acting.
  */
 export const PERMITTED_RETENTION_ACTIONS: Readonly<
   Record<RetentionResourceType, readonly RetentionAction[]>
@@ -50,7 +45,7 @@ export interface RetentionRuleProps {
  * The declared lifetime of one category of data for one organization.
  *
  * This is the minimum the enforcement job needs. Rule versioning and
- * overlapping-rule rejection belong to the retention-rule model issue (#369)
+ * overlapping-rule rejection belong to the retention-rule model issue
  * and are not duplicated here.
  */
 export class RetentionRule {

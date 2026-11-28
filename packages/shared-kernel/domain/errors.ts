@@ -54,17 +54,10 @@ export class ConflictError extends DomainError {
 }
 
 /**
- * The caller is authenticated but is not allowed to perform the requested
- * action on the requested resource.
- *
- * Distinct from {@link AuthenticationError} (401, "I don't know who you
- * are") and from {@link NotFoundError} (which some flows use instead of this
- * one, deliberately, to avoid confirming a resource exists to a caller who
- * shouldn't see it — see the id-vs-existence note on each port that makes
- * that choice). Use `AuthorizationError` when the resource's existence is
- * not itself sensitive and the caller already knows what they asked for,
- * e.g. "these are not your sessions" — the caller supplied their own user
- * id and just isn't allowed to read someone else's list.
+ * The caller is authenticated but not allowed to perform the action. Distinct from {@link
+ * AuthenticationError} (401) and from {@link NotFoundError}, which some flows use instead to avoid
+ * confirming that a resource exists. Use this when existence is not sensitive, for example reading
+ * another user's session list.
  */
 export class AuthorizationError extends DomainError {
   readonly code = "AUTHORIZATION_FAILED";
@@ -72,22 +65,10 @@ export class AuthorizationError extends DomainError {
 }
 
 /**
- * Authentication failed, and the response deliberately does not say why.
- *
- * The one domain error whose *message* is part of its security contract. A
- * caller that can tell "no such user" from "wrong password" can enumerate
- * accounts: post an email, read the error, learn whether it is registered.
- * That turns a password-guessing problem into a much cheaper two-step one,
- * and leaks membership of whatever the service is — which for a verification
- * or compliance product is often the more sensitive fact.
- *
- * So there is no `UserNotFoundError` for a login path to reach for, and no
- * field errors. One error, one message, every failing reason.
- *
- * 401 rather than 403: the credentials presented were not accepted. 403 would
- * say they were understood and refused, which is a different conversation.
- *
- * See `docs/security/authentication-flows.md`.
+ * Authentication failed, without saying why. The message is part of the security contract:
+ * distinguishing "no such user" from "wrong password" would let callers enumerate accounts. One
+ * error and one message for every failure reason, with no field errors. Maps to 401 (see
+ * docs/security/authentication-flows.md).
  */
 export class AuthenticationError extends DomainError {
   readonly code = "AUTHENTICATION_FAILED";
@@ -99,23 +80,10 @@ export class AuthenticationError extends DomainError {
 }
 
 /**
- * Authentication was refused because the credential is temporarily locked
- * after repeated failures.
- *
- * Distinct from {@link AuthenticationError} so the application layer, audit
- * log and metrics can tell a lockout from an ordinary bad password — those
- * are very different operational signals, and collapsing them would make a
- * credential-stuffing campaign look like ordinary user error.
- *
- * **The HTTP layer deliberately renders it identically to
- * {@link AuthenticationError}**: same 401, same body, same message. That is
- * not an oversight in the mapping. Lockout state exists only for accounts
- * that exist, so any observable difference — a 423, a `Retry-After`, a
- * different code — turns "fail five times and watch what changes" into an
- * account enumeration oracle, undoing what `AuthenticationError` is for.
- *
- * The distinction is therefore internal by design: visible in logs, invisible
- * on the wire. See `docs/security/authentication-flows.md`.
+ * Authentication refused because the credential is temporarily locked after repeated failures.
+ * Separate from {@link AuthenticationError} so logs and metrics can tell lockouts from bad
+ * passwords, but rendered identically over HTTP (same 401, body and message), because only existing
+ * accounts can be locked (see docs/security/authentication-flows.md).
  */
 export class AccountLockedError extends DomainError {
   readonly code = "AUTHENTICATION_FAILED";

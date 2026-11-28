@@ -73,7 +73,7 @@ describe.skipIf(!available)("E2E Journey: Login -> Forgot Password -> Reset -> L
     expect(registerRes.status).toBe(201);
     const userId = (registerRes.body as { id: string }).id;
 
-    // Set user to active for login
+    // Login requires an active user.
     await prisma.user.update({
       where: { id: userId },
       data: { status: "active" },

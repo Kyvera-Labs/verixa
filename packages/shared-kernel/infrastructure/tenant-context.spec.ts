@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { assertValidTenantId, TENANT_CONTEXT_SETTING } from "./tenant-context.js";
 
 /**
- * Added in Issue 417: the mutation-testing spike found this module with no
+ * The mutation-testing spike found this module with no
  * direct tests (every mutant "no coverage"), although it is the guard that
  * keeps an empty tenant id from silently matching zero rows under RLS.
  */

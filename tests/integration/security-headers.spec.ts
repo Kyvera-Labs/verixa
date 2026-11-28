@@ -3,7 +3,7 @@ import supertest from "supertest";
 import { afterEach, describe, expect, it } from "vitest";
 
 /**
- * Transport security over a real socket (Issue 213).
+ * Transport security over a real socket.
  *
  * The unit spec for this plugin (`apps/api/src/plugins/security-headers.spec.ts`)
  * covers the pure pieces — directive formatting, config mapping, `Host`

@@ -10,20 +10,10 @@ import { hashAnchorContract } from "../testing/contracts/hash-anchor.contract.js
 import { StellarHashAnchor } from "./stellar-hash-anchor.js";
 
 /**
- * Exercises the real Stellar testnet: generates a throwaway account, funds it
- * from friendbot, and submits actual transactions to a real ledger.
- *
- * Excluded from the default `pnpm test` run (see `vitest.config.ts`) because
- * it needs network access and takes tens of seconds — run it deliberately
- * with `pnpm stellar:testnet`. It is not a unit test and shouldn't pretend to
- * be one; what it buys is the one thing the in-memory fake structurally
- * cannot prove, which is that the Stellar mechanics themselves are correct:
- * that a 32-byte MEMO_HASH really does round-trip through submission and
- * Horizon retrieval unchanged.
- *
- * Testnet only. Nothing here should ever be pointed at the public network —
- * these accounts are disposable and their secret keys are generated fresh
- * per run, in memory, and never persisted.
+ * Exercises the real Stellar testnet: creates and funds a throwaway account, then submits real
+ * transactions, proving a 32-byte `MEMO_HASH` round-trips through submission and Horizon unchanged.
+ * Needs network access, so it is excluded from `pnpm test`; run it with `pnpm stellar:testnet`.
+ * Testnet only; keys are generated per run and never persisted.
  */
 
 const FRIENDBOT_URL = "https://friendbot.stellar.org";
@@ -41,14 +31,9 @@ const delay = (ms: number): Promise<void> =>
   });
 
 /**
- * `fetch` with retries and an explicit timeout.
- *
- * Node's global fetch applies a 10-second *connect* timeout that isn't
- * configurable per call, and public infrastructure — friendbot and Horizon
- * are free, shared, and unthrottled — intermittently exceeds it. Retrying a
- * transient connection failure is the correct behavior for a test that
- * talks to a public testnet, not a workaround: a single dropped TCP
- * handshake says nothing about whether the code under test is right.
+ * `fetch` with retries and an explicit timeout. The free public friendbot and Horizon services
+ * intermittently exceed Node's fixed connect timeout, and a dropped connection says nothing about
+ * the code under test.
  */
 async function fetchWithRetry(url: string): Promise<Response> {
   let lastError: unknown;
@@ -74,14 +59,8 @@ async function fetchWithRetry(url: string): Promise<Response> {
 }
 
 /**
- * Funds a fresh testnet account and waits until Horizon can actually see it.
- *
- * The wait is not optional. Friendbot returns HTTP 200 as soon as it has
- * *submitted* the funding transaction, which is a moment or two before the
- * new account is queryable — so building a transaction immediately after a
- * 200 intermittently fails with "account not found." That's a genuine race,
- * not flakiness to paper over with a blanket sleep: polling until the
- * account resolves waits exactly as long as it needs to and no longer.
+ * Funds a fresh testnet account and polls until Horizon can see it. Friendbot returns 200 once the
+ * funding transaction is submitted, slightly before the account is queryable.
  */
 async function createFundedTestnetAccount(): Promise<Keypair> {
   const keypair = Keypair.random();

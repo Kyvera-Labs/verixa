@@ -60,32 +60,17 @@ export { createGraphQLApp } from "./graphql/server.js";
 export interface BuildAppOptions {
   readonly logger?: Logger | undefined;
   /**
-   * The object graph the routes call into.
-   *
-   * Optional so `/health` can be exercised without a database — a health
-   * check that required Postgres to be reachable would be reporting on the
-   * database rather than on the process, and would fail during exactly the
-   * startup window an orchestrator uses it to survive.
-   *
-   * When absent, the authenticated routes are simply not registered. That is
-   * better than registering routes that throw on first use: a 404 says "this
-   * server was not built with that capability", where a 500 says "it is
-   * broken", and only one of those is true.
+   * The object graph the routes call into. Optional so `/health` works without a database. Without
+   * it, authenticated routes are not registered, so they return 404 rather than failing with 500.
    */
   readonly container?: Container | undefined;
   /**
-   * Transport-security response controls (Issue 213).
-   *
-   * Defaults to `NO_TRANSPORT_SECURITY` — no `Strict-Transport-Security`, no
-   * plaintext redirect — for the same reason `container` is optional: the
-   * callers that pass nothing are in-process tests, and `server.ts`, the only
-   * caller that binds a port, always derives this from validated config.
-   * Reading the environment here would put a second, unvalidated config path
-   * next to `@verixa/config`, which is the thing this package exists to avoid.
+   * Transport-security response controls. Defaults to `NO_TRANSPORT_SECURITY` (no HSTS, no HTTPS
+   * redirect) for in-process tests; `server.ts` always derives it from validated config.
    */
   readonly securityHeaders?: SecurityHeadersOptions | undefined;
   /**
-   * The cross-origin browser policy (Issue 204).
+   * The cross-origin browser policy.
    *
    * Defaults to `NO_CORS` — an empty allowlist — for the same reason
    * `securityHeaders` defaults to the nothing-on shape: the callers that pass
@@ -103,14 +88,14 @@ export interface BuildAppOptions {
    */
   readonly trustProxy?: boolean;
   /**
-   * Rate-limiting response controls (Phase 15, Issue 297).
+   * Rate-limiting response controls.
    *
    * Defaults to active in non-test environments (`process.env["NODE_ENV"] !== "test"`).
    * Pass `false` to disable or pass a configuration object to tune limits.
    */
   readonly rateLimit?: boolean | RateLimitPluginOptions;
   /**
-   * Operational metrics recorder (Phase 18 Observability, Issue 349 / #461).
+   * Operational metrics recorder.
    * When provided, registers HTTP golden signal metrics hooks across all routes.
    */
   readonly metricsRecorder?: MetricsRecorder | undefined;
@@ -149,17 +134,8 @@ export function buildApp(options: BuildAppOptions = {}) {
     ajv: {
       customOptions: {
         /**
-         * Reject unknown properties instead of silently stripping them.
-         *
-         * Fastify's default is `removeAdditional: true`, which deletes
-         * anything not in the schema and continues — so a request setting a
-         * field the API does not accept succeeds, and the client believes it
-         * took effect. Posting `status: "active"` to registration and getting
-         * a 201 back is exactly that failure: nothing went wrong visibly, and
-         * the client's assumption is now wrong.
-         *
-         * Rejecting turns a silent misunderstanding into a 400 the caller can
-         * act on. CI caught this: a test asserting rejection got a 201.
+         * Reject unknown properties instead of silently stripping them, so a client sending a field
+         * the API ignores gets a 400 rather than a misleading success.
          */
         removeAdditional: false,
       },
@@ -182,19 +158,19 @@ export function buildApp(options: BuildAppOptions = {}) {
   app.addSchema(errorResponseSchema);
   app.addHook("onRoute", (route) => assertRouteValidationSchemas(route));
 
-  // Baseline response headers (Issue 203), registered before any route exists
+  // Baseline response headers, registered before any route exists
   // so "all routes return the configured header set" is true by construction
   // rather than by every route remembering to ask. `/health` below is the proof:
   // it is the one endpoint a deployment is most likely to expose without
   // thinking about it. The `Strict-Transport-Security` pin is a separate,
-  // config-driven concern (`./plugins/security-headers.js`, Issue 213) and is
+  // config-driven concern (`./plugins/security-headers.js`) and is
   // deliberately not set here.
   registerBaselineResponseHeaders(app);
 
-  // Request context and correlation ID linkage (Issue 341, 342, 355)
+  // Request context and correlation ID linkage
   registerRequestContext(app);
 
-  // Operational metrics recorder (Phase 18 Observability, Issue 349 / #461)
+  // Operational metrics recorder
   const metricsRecorder =
     options.metricsRecorder ??
     options.container?.observability?.metricsRecorder ??
@@ -208,7 +184,7 @@ export function buildApp(options: BuildAppOptions = {}) {
     new HealthCheckRegistry();
   registerHealthRoutes(app, { healthCheckRegistry });
 
-  // Prometheus scrape endpoint (Phase 18 Observability, Issue 351)
+  // Prometheus scrape endpoint
   if (options.metricsEndpoint === true) {
     app.get("/metrics", async (_request, reply) => {
       const registry = getSharedRegistry();
@@ -268,16 +244,9 @@ export function buildApp(options: BuildAppOptions = {}) {
   registerSecurityHeaders(app, options.securityHeaders ?? NO_TRANSPORT_SECURITY);
 
   if (options.container !== undefined) {
-    // One registration path, not two. `registerContextRoutes` already mounts
-    // every module at its public prefix — auth at `/auth`, admin at `/admin`,
-    // verification at `/verification`. Mounting them here as well, unprefixed,
-    // duplicated each route set and made the second attempt to register the
-    // same OpenAPI component (`RegisterBody`) throw during boot. It also put
-    // routes at URLs no client calls (`POST /:requestId/evidence`).
-    //
-    // The REST modules share one unprefixed scope so the registered-schema
-    // guard covers them and nothing else. Applied to the root it also caught
-    // Mercurius's own `/graphql` querystring schema and refused to boot.
+    // Routes are registered once, by `registerContextRoutes`, which mounts each module at its
+    // public prefix. The REST modules share one unprefixed scope so the registered-schema guard
+    // covers them but not Mercurius's `/graphql` route.
     const container = options.container;
     app.register((rest) => {
       enforceRegisteredRouteSchemas(rest);

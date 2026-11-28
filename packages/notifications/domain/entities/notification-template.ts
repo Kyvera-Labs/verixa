@@ -3,8 +3,8 @@ import { Result, ValidationError } from "@verixa/shared-kernel";
 /**
  * The delivery channels a template can target.
  *
- * Issue 261 owns the `NotificationChannel` value object; until it lands this
- * is the minimal shape a template needs, and Issue 261's type should replace
+ * Minimal channel type until a `NotificationChannel` value object exists; this
+ * is the shape a template needs, and that type should replace
  * it rather than sit alongside it.
  */
 export type NotificationChannel = "email" | "sms" | "webhook";
@@ -52,15 +52,9 @@ export type NotificationTemplateDefinition =
     };
 
 /**
- * The content side of a notification: what it says, on which channel, and
- * which payload fields it needs to say it.
- *
- * A value object — two templates with the same fields are interchangeable,
- * and it has no lifecycle, so there is no `reconstitute`. The trigger side
- * (which domain event causes which notification) refers to a template only
- * by `key`, which is what lets content change without touching use-case
- * code. Rendering `subjectTemplate`/`bodyTemplate` against a payload is
- * Issue 265's job; this type only guarantees the definition is complete.
+ * The content of a notification: its channel, wording and required payload fields. A value object
+ * with no lifecycle. Triggers refer to a template only by `key`, so content can change without
+ * touching use cases; this type guarantees the definition is complete, not how it renders.
  */
 export class NotificationTemplate {
   readonly key: string;

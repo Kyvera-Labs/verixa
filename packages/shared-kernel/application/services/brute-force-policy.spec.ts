@@ -275,7 +275,7 @@ describe("composition with a rate limiter", () => {
 });
 
 /**
- * Added in Issue 417. Each test below kills a mutant that survived the
+ * Each test below kills a mutant that survived the
  * mutation-testing spike (docs/guides/testing/mutation-testing-spike.md):
  * the existing composition tests exercised these lines without pinning what
  * they decide.

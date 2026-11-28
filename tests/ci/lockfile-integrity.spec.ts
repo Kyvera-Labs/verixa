@@ -1,17 +1,8 @@
 /**
- * Lockfile integrity gate (Issue 215).
- *
- * The acceptance criterion is "CI fails if the lockfile is out of sync with the
- * manifests", and out of sync has several shapes: a dependency added, one
- * removed, a range changed, a resolution missing from the lockfile, a package
- * dropped from the workspace, a range that never pinned anything, and — the one
- * with the widest blast radius — a lockfile that is not in git at all, so CI
- * installs something nobody reviewed.
- *
- * Each case asserts on the message as well as the exit code. A gate whose
- * failure nobody can interpret gets bypassed, and the whole argument for this
- * one over `pnpm install --frozen-lockfile` is that it says which manifest,
- * which dependency, and what to run.
+ * Lockfile integrity gate. Covers every way the lockfile can drift from the manifests: an added,
+ * removed or changed dependency, a missing resolution, a package dropped from the workspace, a
+ * floating range, and an uncommitted lockfile. Each case checks that the message names the
+ * manifest, the dependency and what to run.
  */
 
 import { afterAll, describe, expect, it } from "vitest";

@@ -1,22 +1,9 @@
 /**
- * Security lint ruleset (Issue 208).
- *
- * The acceptance criterion is that every *enabled* rule is caught on a
- * deliberately vulnerable fixture — not that a config file mentions the rule.
- * So this test asks ESLint two questions, both through the same fixture config
- * the repository's `eslint.config.mjs` derives its ruleset from:
- *
- * 1. `--print-config` — which security rules are actually on, and at what
- *    severity, for a fixture file;
- * 2. `--format json` — which rules fired on the fixtures.
- *
- * Then it checks set containment: every enabled rule fired somewhere. A rule
- * added to the shared ruleset without a fixture fails here, which is the whole
- * point of the exercise — a lint rule nobody can demonstrate firing is a rule
- * that may already be broken by a plugin upgrade.
- *
- * The fixtures are also asserted to be *ignored* by the repository config, so a
- * vulnerable-on-purpose snippet can never fail `pnpm lint`.
+ * Security lint ruleset. Asks ESLint, through the fixture config that shares the repository's
+ * ruleset, which security rules are enabled (`--print-config`) and which fired on the deliberately
+ * vulnerable fixtures (`--format json`), then checks every enabled rule fired. A rule added without
+ * a fixture fails here. The fixtures are also checked to be ignored by the repository config, so
+ * they never fail `pnpm lint`.
  */
 
 import { readFileSync } from "node:fs";

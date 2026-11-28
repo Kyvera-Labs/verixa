@@ -5,18 +5,10 @@ import { makeMfaMethod, type MfaMethodFactoryOptions } from "../factories/mfa-me
 type MfaMethodStep = (method: MfaMethod, now: Date) => MfaMethod;
 
 /**
- * Fluent, immutable builder for the `MfaMethod` aggregate (Issue 419).
- *
- * Construction goes through {@link makeMfaMethod} (and so through
- * `MfaMethod.create` / `MfaMethod.createActive`), then every `.with*()`-style
- * call appends a *domain transition* — `disable()`, `recordFailedAttempt()`,
- * `recordTotpUse()` — that `build()` replays in chain order. The chain is the
- * method's history, so an impossible history (using a disabled method) fails
- * at `build()` with the aggregate's own error rather than producing a state
- * the domain could never reach.
- *
- * `MfaMethod` mutates itself in place, which is exactly why `build()` starts
- * from a fresh factory call every time: two builds never share an instance.
+ * Fluent, immutable builder for `MfaMethod`. Each chained call is a domain transition (`disable()`,
+ * `recordFailedAttempt()`, `recordTotpUse()`) that `build()` replays in order, so an impossible
+ * history fails with the aggregate's own error. `build()` starts from a fresh factory call each
+ * time because `MfaMethod` mutates in place.
  */
 export class MfaMethodBuilder {
   private constructor(

@@ -8,40 +8,16 @@ import type {
 } from "fastify";
 
 /**
- * The baseline response-header policy every route serves under (Issue 203).
- *
- * This is the *content* half of the header story. The *transport* half —
- * `Strict-Transport-Security` and the plaintext-to-HTTPS redirect — is a
- * separate, config-driven module in `./security-headers.ts` (Issue 213), because
- * it depends on where TLS terminates and has a different failure mode. The two
- * compose: helmet is told not to emit an HSTS pin here so that module owns the
- * header outright.
- *
- * Each value mitigates a named attack class. The table in
- * `docs/security/http-security-headers.md` is the reference; the notes here are
- * the reminders. Keep the two in step when a value changes — a header whose
- * value nobody can explain is a header someone deletes to "fix" a browser
- * problem.
+ * Baseline response-header policy for every route. HSTS and the HTTPS redirect are owned by
+ * `./security-headers.ts`, so helmet does not emit HSTS here.
+ * docs/security/http-security-headers.md explains each value; keep it in step when a value changes.
  */
 export const BASELINE_RESPONSE_HEADERS: FastifyHelmetOptions = {
   /**
-   * Baseline CSP for a JSON-over-HTTP API.
-   *
-   * `default-src 'none'` allows no subresource of any kind. That is safe because
-   * a JSON response is a document a browser fetches but never *renders*, so
-   * there is nothing for the policy to break — and it is the cheapest position
-   * to start from: relaxing a CSP is a decision made later with a specific need
-   * in front of you, while tightening one that shipped at `unsafe-inline` is a
-   * migration across every client that came to depend on it.
-   *
-   * The one exception is the Swagger UI at `/docs`, which really is an HTML page.
-   * It gets {@link DOCS_CONTENT_SECURITY_POLICY}, applied through that plugin's
-   * own `staticCSP` option where it is registered rather than by weakening this
-   * policy for everything else.
-   *
-   * `useDefaults: false` drops helmet's own baseline, which allows
-   * `script-src 'self'` and `style-src 'unsafe-inline'` on behalf of
-   * server-rendered pages this API does not have.
+   * CSP for a JSON API: `default-src 'none'`, since a JSON response is never rendered, and it is
+   * easier to relax a strict policy later than to tighten a loose one. `useDefaults: false` drops
+   * helmet's page-oriented defaults. The Swagger UI at `/docs` uses {@link
+   * DOCS_CONTENT_SECURITY_POLICY} instead.
    */
   contentSecurityPolicy: {
     useDefaults: false,
@@ -75,19 +51,13 @@ export const BASELINE_RESPONSE_HEADERS: FastifyHelmetOptions = {
   noSniff: true,
 
   /**
-   * Referrer leakage: a URL carrying a verification request id or a reset token
-   * is handed to every third party the page then loads, through the `Referer`
-   * header. `no-referrer` sends none at all.
-   *
-   * The weaker, more common `strict-origin-when-cross-origin` leaks the full
-   * path on same-origin navigations and the origin cross-origin — reasonable for
-   * a site that wants analytics, pointless for an API whose requests should not
-   * be attributable anywhere.
+   * `no-referrer` so URLs carrying request IDs or reset tokens are never sent to third parties in
+   * the `Referer` header.
    */
   referrerPolicy: { policy: "no-referrer" },
 
   /**
-   * `Strict-Transport-Security` is owned by `./security-headers.ts` (Issue 213):
+   * `Strict-Transport-Security` is owned by `./security-headers.ts`:
    * its `max-age`, scope and `preload` flag come from validated configuration,
    * and it is sent by an `onRequest` hook that also performs the HTTPS redirect.
    * Emitting a second pin from here would make the header's value depend on hook
@@ -111,14 +81,8 @@ export const BASELINE_RESPONSE_HEADERS: FastifyHelmetOptions = {
   permittedCrossDomainPolicies: { permittedPolicies: "none" },
 
   /**
-   * The legacy XSS auditor, switched off.
-   *
-   * IE and old Chrome re-wrote pages to highlight matched strings in order to
-   * "protect" users, which was itself exploitable — the filter could be provoked
-   * into leaking data, and it weakened CSP enforcement. `0` is the modern value,
-   * and helmet already sends it. Listed here rather than left implicit because
-   * this object is meant to be the whole policy: a header that arrives only
-   * because a dependency defaults it is a header a reviewer cannot find.
+   * Turns the legacy XSS auditor off (`0`), since the auditor itself was exploitable. Helmet
+   * already sends this; it is listed so the whole policy is visible here.
    */
   xXssProtection: true,
 
@@ -139,18 +103,8 @@ export const BASELINE_RESPONSE_HEADERS: FastifyHelmetOptions = {
   originAgentCluster: true,
 
   /**
-   * Cross-origin isolation headers are **not** set here, and that is a
-   * deliberate exclusion rather than an oversight.
-   *
-   * `Cross-Origin-Resource-Policy`, `Cross-Origin-Opener-Policy` and
-   * `Cross-Origin-Embedder-Policy` decide which *other origins* may read or
-   * relate to these responses — exactly the question Issue 204 (CORS) answers
-   * with an environment-specific allowlist. Setting a blanket `same-origin` here
-   * would pre-empt it, and the failure mode is a confusingly blocked front end
-   * rather than a blocked attack.
-   *
-   * Revisit when 204 lands: if the allowlist ends up single-origin, these are
-   * worth enabling alongside it.
+   * Cross-origin isolation headers (CORP, COOP, COEP) are deliberately not set, because they would
+   * override the CORS allowlist. Revisit if the allowlist becomes single-origin.
    */
   crossOriginResourcePolicy: false,
   crossOriginOpenerPolicy: false,
@@ -158,63 +112,22 @@ export const BASELINE_RESPONSE_HEADERS: FastifyHelmetOptions = {
 };
 
 /**
- * The policy for the documentation UI — the one response this API produces that
- * a browser renders as a document, and therefore the one place
- * {@link BASELINE_RESPONSE_HEADERS}'s `default-src 'none'` cannot be used: under
- * it `/docs` is a blank page, because the UI is an HTML document that loads its
- * own bundle and stylesheet and fetches `/docs/openapi.json` to draw the spec.
+ * CSP for the Swagger UI at `/docs`, the only response a browser renders as a page. It tightens
+ * swagger-ui's own `staticCSP` policy to what the page actually uses:
  *
- * `@fastify/swagger-ui` ships a policy for this (`staticCSP: true`) and this
- * replaces it, directive by directive, with something tighter. Every value here
- * is what the served page actually uses: its `index.html` loads three external
- * `<script src>` tags with no inline script and no `style` attribute, and its
- * stylesheet embeds icons as `url("data:image/svg+xml…")`:
+ * - `script-src 'self'` without `'unsafe-inline'`. This works because `staticCSP` makes swagger-ui
+ *   serve its configuration as an external `swagger-initializer.js`.
+ * - `style-src 'self'`, so no remote stylesheet can restyle the page (UI redressing).
+ * - `img-src 'self' data:`, dropping `validator.swagger.io`, which would send the spec to a third
+ *   party. `data:` is needed for the stylesheet's inline SVG icons.
+ * - `base-uri 'none'` and `frame-ancestors 'none'`, matching the baseline.
+ * - No `font-src` (it inherits `default-src 'self'`); `connect-src 'self'` covers the spec fetch.
  *
- * - `script-src 'self'` with no `'unsafe-inline'`. That holds only because the
- *   UI is registered with `staticCSP`, which is what makes swagger-ui serve its
- *   configuration as an external `swagger-initializer.js` instead of an inline
- *   `<script>` block. Drop that option and this policy breaks the page — which
- *   is the trade being made deliberately: an external file we control is one
- *   less way for a payload in the spec to become code.
- * - `style-src 'self'`, where swagger-ui's own default also allows `https:`.
- *   A remote stylesheet is UI redressing: enough to move a "Try it out" button
- *   under the cursor of whoever is about to execute a request against a live
- *   environment. Nothing here needs one — the CSS is served from `/docs/static`
- *   and sets no webfont.
- * - `img-src 'self' data:`, dropping swagger-ui's `validator.swagger.io`. That
- *   origin is a validator the page can be pointed at, and loading an image from
- *   it sends this deployment's spec to a third party. `data:` stays because the
- *   bundle's icons are inlined as SVG data URIs in its stylesheet, and CSP checks
- *   a stylesheet's `url()` fetches against `img-src` — so they are this
- *   directive's to allow or not.
- * - `base-uri 'none'` and `frame-ancestors 'none'`, against swagger-ui's
- *   `'self'` for both, matching the baseline: no `<base>` tag and no frame
- *   appear anywhere in the served page, so nothing is lost.
- * - `font-src` omitted, so it inherits `default-src 'self'`. The stylesheet uses
- *   `font-family: sans-serif` and loads no `@font-face`, so a directive for it
- *   would be one more value nobody can point at a reason for.
- * - `connect-src 'self'` covers the spec fetch, and no directive here permits an
- *   `http:` origin, which is why swagger-ui's `upgrade-insecure-requests` is
- *   gone: it can only rewrite a request this policy already forbids.
+ * One inline style is blocked at first render, as it is under swagger-ui's own policy; the UI still
+ * works. Fix it with a nonce or hash, never `'unsafe-inline'`.
  *
- * Loading `/docs` in a real browser under this policy reports exactly one
- * violation: the bundle applies one inline style at first render, and CSP blocks
- * it. The page still fetches the spec, expands every operation, and opens the
- * Authorize modal — and the same violation, with the same `sha256` hash, appears
- * under swagger-ui's own `staticCSP: true`, which also has no `'unsafe-inline'`.
- * So `'unsafe-inline'` is not what makes this UI work and adding it would only
- * widen the policy: a stylesheet written in markup can restyle the page, which
- * is the same UI-redressing argument as the remote one above. If that one
- * blocked style ever becomes a broken control, the fix is a nonce or a hash for
- * the specific declaration, and Issue 212 is where nonce plumbing belongs.
- *
- * Applied as `@fastify/swagger-ui`'s `staticCSP` option in `app.ts` rather than
- * as a hook here, because the plugin sets its own policy from an `onSend` hook
- * registered inside the scope that owns the docs routes. A root-level hook runs
- * before a scope's own hooks, so an override written here is overwritten for
- * `/docs` itself and applies only to routes registered at the root — a hook that
- * looks like it works, does nothing, and fails silently. `staticCSP` is the
- * supported knob and the value lands on every docs response.
+ * Applied through swagger-ui's `staticCSP` option in `app.ts`, because a root-level hook runs
+ * before the docs scope's own hook and would be overwritten.
  */
 export const DOCS_CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
@@ -230,24 +143,11 @@ export const DOCS_CONTENT_SECURITY_POLICY = [
 ].join("; ");
 
 /**
- * Applies {@link BASELINE_RESPONSE_HEADERS} to every response this instance
- * produces.
- *
- * Registered on the root instance in `buildApp`, before any route:
- * `@fastify/helmet` is `fastify-plugin`-wrapped, so its hook is inherited by
- * child scopes rather than confined to a prefix, and every route — including
- * ones later phases add, and Fastify's own 404 — gets the headers without
- * opting in. Safe by default only holds if the default is applied at the root:
- * a plugin someone has to remember to register is a plugin someone will forget.
- *
- * The `/docs` exception is *not* applied here; see
- * {@link DOCS_CONTENT_SECURITY_POLICY} for why a hook written at this level
- * cannot set it.
- *
- * Generic over the logger for the same reason `registerSecurityHeaders` is (see
- * `./security-headers.ts`) — the instance `buildApp` produces carries a concrete
- * pino `Logger`, which is not structurally identical to Fastify's
- * `FastifyBaseLogger`.
+ * Applies {@link BASELINE_RESPONSE_HEADERS} to every response. Registered on the root instance
+ * before any route; `@fastify/helmet` is `fastify-plugin`-wrapped, so every route, including
+ * Fastify's 404, inherits it. The `/docs` exception is set elsewhere (see {@link
+ * DOCS_CONTENT_SECURITY_POLICY}). Generic over the logger because `buildApp`'s pino `Logger` is not
+ * structurally a `FastifyBaseLogger`.
  */
 export function registerBaselineResponseHeaders<
   TLogger extends FastifyBaseLogger = FastifyBaseLogger,

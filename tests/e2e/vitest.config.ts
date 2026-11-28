@@ -9,7 +9,7 @@ const packageSubpath = (name: string, entry: string): string =>
   fileURLToPath(new URL(`../../packages/${name}/${entry}.ts`, import.meta.url));
 
 /**
- * Vitest configuration for the process-level E2E suite (Issues 414 and 517).
+ * Vitest configuration for the process-level E2E suite.
  *
  * The suite boots disposable Postgres and Redis containers and a compiled API
  * process, so its timeouts are sized for container startup. Failing tests are

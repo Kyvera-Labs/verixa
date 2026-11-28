@@ -6,7 +6,7 @@ import type {
 
 /**
  * No-op RateLimiter adapter — always allows requests.
- * Used in tests and until Phase 15 implements the real limiter.
+ * Used in tests and where no real limiter is configured.
  * Wired as default adapter so use cases work before real limiter exists.
  */
 export class NoopRateLimiter implements RateLimiter {

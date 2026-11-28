@@ -2,31 +2,18 @@
 /**
  * Pushes rendered roadmap issues to GitHub.
  *
- *     node scripts/issues/push.mjs --dry-run           # see what would happen
- *     node scripts/issues/push.mjs --limit 200         # create the first 200 remaining
+ *     node scripts/issues/push.mjs --dry-run
+ *     node scripts/issues/push.mjs --limit 200
  *     node scripts/issues/push.mjs --from 081 --to 120
  *
- * ## Why this is more careful than a for-loop around `gh issue create`
+ * Bulk-created issues are hard to undo, so:
  *
- * Creating issues in bulk is easy to do and tedious to undo. There is no
- * "delete 200 issues" button — each one has to be closed by hand, and a
- * mistake in the template means 200 wrong issues, each of which notifies
- * every watcher. So:
- *
- * - **Dry run is the default.** Creating requires `--execute`, typed
- *   deliberately.
- * - **Idempotent.** Existing issues are matched by their `[NNN]` title
- *   prefix and skipped, so a re-run after a network failure resumes rather
- *   than duplicates.
- * - **Completed work is excluded.** `planning/ROADMAP.md` marks finished
- *   issues with `- [x]`; those are never created. An open issue for work
- *   that already shipped wastes a contributor's evening.
- * - **Rate limited.** GitHub applies secondary rate limits to content
- *   creation that are not documented as a specific number and are enforced
- *   by temporary blocks. A deliberate pause between creations keeps well
- *   under them; going fast risks the account, not just the script.
- * - **State is written as it goes**, so an interrupted run can be resumed
- *   and dependency cross-links can be filled in on later passes.
+ * - Dry run is the default; creating requires `--execute`.
+ * - Idempotent: existing issues are matched by their `[NNN]` title prefix and skipped.
+ * - Entries marked `- [x]` in planning/ROADMAP.md are never created.
+ * - A pause between creations stays under GitHub's secondary rate limits.
+ * - State is written as it goes, so an interrupted run resumes and cross-links are filled in on
+ *   later passes.
  */
 import { spawnSync } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";

@@ -20,15 +20,8 @@ export type AuditMetadataRejectionReason =
   | "unclassified";
 
 /**
- * The bound a rejection was about, recovered from a `ValidationError` returned
- * by {@link AuditMetadata.create}.
- *
- * The reasons live in `fieldErrors.metadata`, which is a `string[]` — so this
- * is the one place that turns that untyped code back into the closed set, and
- * `unclassified` is what a caller gets if the error came from somewhere else
- * entirely. Preferable to the alternative: letting a caller string-match on
- * `error.message`, which is written for humans and changes when the wording
- * does.
+ * Recovers the rejection reason from a `ValidationError` returned by {@link AuditMetadata.create},
+ * so callers never string-match the message. Errors from elsewhere map to `unclassified`.
  */
 export function rejectionReasonOf(error: ValidationError): AuditMetadataRejectionReason {
   const [reason] = error.fieldErrors.metadata ?? [];
@@ -59,52 +52,18 @@ export const MAX_METADATA_KEY_LENGTH = 64;
 export const MAX_METADATA_VALUE_LENGTH = 1024;
 
 /**
- * Metadata that has been checked for the properties the audit trail needs from
- * it: bounded, string-valued, and safe to hand to *any* textual sink.
+ * Audit metadata checked to be bounded and string-valued, with safe renderings for every textual
+ * sink.
  *
- * ## The attack this exists to stop
+ * Metadata is usually attacker-controlled. Unhandled, it enables log forgery (a newline starts a
+ * fake log line), CSV damage (commas, quotes or `\r\n` add cells or rows), spreadsheet formula
+ * execution (cells starting with `=`, `+`, `-` or `@`) and digest ambiguity (a separator inside a
+ * value makes two entries hash alike).
  *
- * Metadata is the only part of an audit entry that an outside party usually
- * controls. It arrives from request bodies, from failure reasons, from
- * third-party provider messages, and from whatever a caller decided to record —
- * and then it is written to a database, hashed into a chain, rendered as CSV
- * for a regulator, and echoed into the application log. Each of those is a
- * place where a crafted value can say more than the record does.
- *
- * Concretely, without handling:
- *
- * - **Log forgery.** A value containing `\n` ends a pino line early if the
- *   value is interpolated into a message, so the attacker's text starts a new
- *   one — `... failed\n[2026-10-02] INFO audit: admin login granted` — and
- *   anyone grepping the log later cannot tell the injected line from a real
- *   one.
- * - **CSV structural damage.** A comma or quote breaks one record into two
- *   cells; a `\r\n` inside a quoted field is a whole fabricated row in the
- *   compliance export somebody will hand to an auditor.
- * - **Spreadsheet execution.** A cell starting with `=`, `+`, `-` or `@` is not
- *   text when Excel opens it, it is a formula, and the classic payload is
- *   `=cmd|'/c calc'!A1`. The attacker does not need to reach the server; they
- *   need to reach whoever reads the export.
- * - **Digest ambiguity.** The chain hash is computed over a serialization of
- *   the entry. If a metadata value can contain the field separator, two
- *   different entries can produce the same pre-image and so the same hash,
- *   which lets one recorded fact be presented as another.
- *
- * ## The shape of the fix
- *
- * Never concatenate attacker-chosen text into a *syntax*. Storage is a JSON
- * document, export is a JSON document per line, CSV cells are quoted and
- * escaped, and the hash pre-image is length-prefixed. Values are preserved
- * verbatim where they are stored, and neutralized at each textual boundary
- * where they could be misread.
- *
- * The rejected alternative was to strip or escape control characters on the way
- * *in*. It looks simpler and it is worse in two ways: it silently rewrites the
- * evidence (the value that gets hashed and exported is no longer the value that
- * was supplied, which is exactly what an audit log must not do to facts), and
- * it teaches the next reader that safety is a property of the stored data
- * rather than of each encoder — so the next output path, added by someone who
- * did not read this file, forgets to sanitize and is unsafe.
+ * Values are stored verbatim and neutralized at each output boundary: JSON for storage and export,
+ * quoted and escaped CSV cells, and a length-prefixed hash pre-image. Sanitizing on input was
+ * rejected because it rewrites the evidence and makes safety depend on stored data rather than on
+ * each encoder.
  */
 export class AuditMetadata {
   readonly #values: Readonly<Record<string, string>>;
@@ -218,19 +177,9 @@ export class AuditMetadata {
   }
 
   /**
-   * The hash pre-image for this bag.
-   *
-   * Self-delimiting by construction: a field count, then each pair as
-   * `byteLength:key=byteLength:value`. Lengths make any character inside a key
-   * or value part of that field's *content* rather than of the framing, so a
-   * newline, a comma, or an `=` cannot move a boundary and cannot make two
-   * different bags serialize identically.
-   *
-   * Lengths are in UTF-8 bytes, not JavaScript characters, because the digest
-   * has to be re-derivable from the stored columns by somebody who is not
-   * running this code — see `AuditLogEntry.canonicalize`.
-   *
-   * Keys are sorted, so insertion order cannot change the hash.
+   * Hash pre-image for this bag: a field count, then each pair as `byteLength:key=byteLength:value`
+   * with sorted keys. Length prefixes stop any character inside a key or value from moving a
+   * boundary. Lengths are UTF-8 bytes so the digest can be re-derived outside this code.
    */
   get canonicalForm(): string {
     const keys = Object.keys(this.#values).sort();
@@ -245,18 +194,9 @@ export class AuditMetadata {
   }
 
   /**
-   * The bag shaped for a textual sink: one whose output cannot start, continue,
-   * or end a record in a log file, a CSV, or a terminal.
-   *
-   * Control characters — including the `\n` and `\r` that forge log lines and
-   * CSV rows, and the `\t` that spreadsheet tools treat as a cell separator —
-   * become visible escapes. `util.inspect` calls this what it is: the value is
-   * still readable in a log line, and a reader can tell an injected newline
-   * from the newline that ends a record.
-   *
-   * This is the representation for anything that embeds metadata in *text*.
-   * Structured output (JSON export, the stored column, pino fields) uses
-   * {@link values} directly, because those encoders escape what they encode.
+   * The bag rendered for textual sinks: control characters, including `\n`, `\r` and `\t`, become
+   * visible escapes so a value cannot start or end a record. Structured outputs use {@link values}
+   * directly, since their encoders escape what they encode.
    */
   toLogFields(): Readonly<Record<string, string>> {
     return Object.fromEntries(
@@ -292,17 +232,9 @@ function describeType(value: unknown): string {
 }
 
 /**
- * A rejected key's name, spelled for an error message.
- *
- * A key is attacker-chosen text like a value is, so naming it here is a
- * deliberate trade-off: the message is useless to the caller if it cannot say
- * *which* field was rejected, and a key is normally a short identifier. What
- * makes it safe to put one in a sentence is that it is truncated and escaped
- * first — otherwise a key containing a newline would let the input start a
- * fresh line in the very log record that reports the rejection.
- *
- * Truncation is by code point, not by UTF-16 unit, so cutting an emoji in half
- * cannot leave a lone surrogate that encodes differently depending on the sink.
+ * A rejected key's name for an error message, truncated and escaped first so a key containing a
+ * newline cannot start a new log line. Truncation is by code point so it never leaves a lone
+ * surrogate.
  */
 function describeKey(key: string): string {
   const codePoints = Array.from(key);
@@ -342,20 +274,9 @@ export function escapeForText(value: string): string {
 }
 
 /**
- * Line terminators a JSON encoder leaves raw.
- *
- * `JSON.stringify` escapes everything below U+0020, which covers `\n` and `\r`,
- * but it leaves NEL (U+0085) and the two Unicode line separators (U+2028,
- * U+2029) as they are. JavaScript's line splitting does not treat those as
- * breaks, so a Node process reading an export is untroubled — but Python's
- * `str.splitlines` treats all three as line endings, and an audit export gets
- * read by whatever tool the auditor brought with them.
- *
- * The replacement writes the six-character `\u00nn` form, which is *inside* the
- * JSON document, so a reader that parses the document still gets the original
- * character back. That is what makes this safe to apply to a JSON string at all
- * — unlike {@link escapeForText}, which would escape the backslashes JSON used
- * for its own escapes and leave behind something that is no longer JSON.
+ * Line terminators `JSON.stringify` leaves raw: NEL (U+0085), U+2028 and U+2029. Python's
+ * `str.splitlines` treats them as line breaks, so they are written as `\u00nn` escapes, which JSON
+ * parsers decode back to the original character.
  */
 const RAW_LINE_TERMINATORS = /[\u0085\u2028\u2029]/gu;
 

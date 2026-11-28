@@ -19,34 +19,17 @@ import { PrismaUnitOfWork } from "./prisma-unit-of-work.js";
 import { PrismaUserRepository } from "./prisma-user-repository.js";
 
 /**
- * Runs the *same* contract suites the in-memory fakes pass
- * (`repository-contract.spec.ts`) against the real Prisma adapters and a real
- * Postgres, plus the guarantees only a real database can make.
- *
- * This is the payoff of Issue 031 writing those contracts as reusable
- * functions rather than inline `it` blocks: two implementations, one set of
- * assertions, so "the fake behaves like the real thing" is proven rather than
- * assumed — which matters because every use-case unit test in this package
- * silently depends on that assumption.
- *
- * Skips when no database is reachable and Docker isn't available; see
- * `database-harness.ts`.
+ * Runs the same contract suites as the in-memory fakes against the Prisma adapters on a real
+ * Postgres, proving the fakes the use-case tests rely on behave like the real thing. Skips when no
+ * database or Docker is available (see `database-harness.ts`).
  */
 
 const database = await startTestDatabase();
 
 /**
- * Ids the shared contracts reference as fixtures. Against the in-memory fakes
- * these are arbitrary strings, because a `Map` has no notion of a foreign
- * key. Against Postgres they must actually exist, or every insert fails on a
- * foreign-key violation.
- *
- * That divergence is itself a finding worth stating plainly: the fakes do not
- * enforce referential integrity, so a use case that references a nonexistent
- * user passes against a fake and fails against a database. Seeding here keeps
- * the contracts implementation-agnostic — they assert behavior, not schema —
- * while acknowledging the real constraint honestly rather than weakening the
- * schema to match the fake.
+ * Fixture IDs the shared contracts reference. Postgres requires them to exist because of foreign
+ * keys, which the in-memory fakes do not enforce, so they are seeded here rather than weakening the
+ * schema.
  */
 const CONTRACT_USER_ID = "00000000-0000-0000-0000-000000000001";
 const CONTRACT_ORGANIZATION_ID = "00000000-0000-0000-0000-000000000002";
@@ -170,7 +153,7 @@ describe.skipIf(database === undefined)("Prisma repositories (real Postgres)", (
         data: { ...membership, id: "00000000-0000-0000-0000-0000000000aa" },
       });
 
-      // The partial unique index from Issue 044. `OrganizationMembership.create()`
+      // The partial unique index on active memberships. `OrganizationMembership.create()`
       // already rejects this on the normal path; the index is what holds when
       // two concurrent requests both read "no active membership" before either
       // writes — a race no amount of application-level checking can close.

@@ -1,13 +1,7 @@
 /**
- * Pure domain primitive representing a Token Bucket for rate limiting.
- *
- * The token bucket algorithm allows a burst of up to `capacity` requests,
- * while refilling tokens continuously at a steady rate of `refillRatePerSecond`.
- *
- * Key properties:
- * - Deterministic, pure domain logic decoupled from storage or transport.
- * - Refills proportionally to elapsed time down to millisecond precision.
- * - Supports an injectable Clock to allow deterministic time advancement in tests.
+ * Token bucket: allows bursts up to `capacity` and refills continuously at `refillRatePerSecond`,
+ * proportionally to elapsed milliseconds. Pure domain logic with an injectable clock for
+ * deterministic tests.
  */
 
 export interface Clock {

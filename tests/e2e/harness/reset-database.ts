@@ -1,14 +1,9 @@
 import type { PrismaClient } from "@verixa/database";
 
 /**
- * Cleanly truncates or deletes all data across all tables in reverse dependency order.
- *
- * Foreign-key constraints in Postgres mean deletion order is strictly enforced:
- * child rows (such as RefreshToken, Session, Credential, Tokens, Memberships) must
- * be removed before their parent entities (such as User, Organization, Role).
- *
- * This function provides deterministic database reset per test file or test case,
- * preventing cross-test pollution and ordering-dependent flakiness.
+ * Deletes all data from every table in reverse foreign-key order (children such as tokens,
+ * sessions, credentials and memberships before users, organizations and roles), giving each test a
+ * clean database.
  */
 export async function resetDatabase(prisma: PrismaClient): Promise<void> {
   // Clear tables in exact reverse foreign-key dependency order

@@ -20,35 +20,16 @@ export interface FindUserRoleAssignmentsOptions {
 }
 
 /**
- * The persistence contract for `UserRoleAssignment` — the **port** half
- * of ports & adapters (hexagonal architecture).
+ * Persistence port for `UserRoleAssignment`, modelled separately from users and roles to support
+ * organization scoping and temporary elevation.
  *
- * Models role assignments independently from `User` and `Role` aggregates,
- * enabling multi-tenant scoping and temporary access elevations.
- *
- * ## Method Contracts
- *
- * - `save(assignment: UserRoleAssignment)`:
- *   Idempotent upsert: persists whatever assignment state it is given.
- *
- * - `findById(id: UserRoleAssignmentId)`:
- *   Returns the matching assignment, or `undefined` when no assignment exists with the given id.
- *
- * - `findByUser(userId: UserId, options?: FindUserRoleAssignmentsOptions)`:
- *   Returns all role assignments for the specified user across all scopes (both organization-scoped
- *   and global assignments).
- *   - Excludes expired assignments by default. Callers must pass `{ includeExpired: true }`
- *     to include lapsed assignments (e.g. for audit or admin history views).
- *
- * - `findByUserAndOrg(userId: UserId, orgId: OrgId | null, options?: FindUserRoleAssignmentsOptions)`:
- *   Returns role assignments for a user within a specific scope:
- *   - When `orgId` is an `OrgId`: returns assignments scoped to that organization.
- *   - When `orgId` is `null`: returns global assignments applicable system-wide.
- *   - **Excludes expired assignments by default**. Pass `{ includeExpired: true }` to opt in.
- *
- * - `revoke(id: UserRoleAssignmentId)`:
- *   Revokes and removes the specified role assignment.
- *   - If the assignment does not exist: completes silently as an idempotent no-op.
+ * - `save` is an idempotent upsert.
+ * - `findById` returns the assignment, or `undefined`.
+ * - `findByUser` returns assignments across all scopes.
+ * - `findByUserAndOrg` returns assignments for one organization, or global ones when `orgId` is
+ *   `null`.
+ * - Both finders exclude expired assignments unless `{ includeExpired: true }` is passed.
+ * - `revoke` removes an assignment and is a no-op if it does not exist.
  */
 export interface UserRoleAssignmentRepository {
   findById(id: UserRoleAssignmentId): Promise<UserRoleAssignment | undefined>;

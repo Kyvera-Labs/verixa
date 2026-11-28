@@ -10,49 +10,22 @@ export interface PasswordPolicy {
 }
 
 /**
- * NIST SP 800-63B, and specifically *not* the rules most systems still use.
- *
- * **Length over complexity.** No "must contain an uppercase, a digit, and a
- * symbol" rule. Those requirements measurably reduce entropy in practice:
- * faced with them people produce `Password1!`, and attackers know the
- * patterns the rules force. 800-63B recommends dropping composition rules
- * entirely in favour of length plus a breach check.
- *
- * **No forced rotation.** Periodic expiry makes people pick weaker, more
- * predictable passwords (`Summer2026!` → `Autumn2026!`). Rotate on evidence
- * of compromise, not on a calendar.
- *
- * `minLength` is 12 rather than the 800-63B minimum of 8: 8 is the floor for
- * *permissible*, and 12 is a modest step up that costs users little.
+ * Password policy following NIST SP 800-63B: length over composition rules, a breach check, and no
+ * forced rotation (rotate on evidence of compromise). `minLength` is 12, above the 800-63B minimum
+ * of 8.
  */
 export const DEFAULT_PASSWORD_POLICY: PasswordPolicy = {
   minLength: 12,
   /**
-   * An upper bound exists for denial of service, not for security.
-   *
-   * Hashing is deliberately expensive, so an endpoint accepting unbounded
-   * input lets anyone hand the server a multi-megabyte "password" and make it
-   * pay. 256 is far above any real passphrase and comfortably above the 64
-   * characters 800-63B requires be accepted.
-   *
-   * Note what this is *not*: a truncation limit. bcrypt silently ignores
-   * everything past 72 bytes; this rejects, visibly, so nobody ends up with a
-   * password shorter than they believe.
+   * Upper bound to stop expensive hashing of huge inputs, well above the 64 characters 800-63B
+   * requires. Longer passwords are rejected, never silently truncated.
    */
   maxLength: 256,
 };
 
 /**
- * Checks a password against known-breached credentials.
- *
- * Interface only — no provider yet. The intended implementation is the
- * k-anonymity model (send the first 5 characters of the SHA-1 hash, receive
- * every matching suffix, compare locally), so the password never leaves the
- * server in any form.
- *
- * This is the single highest-value password check there is. A breached
- * password is *already* in an attacker's dictionary, which makes its length
- * and composition irrelevant — the guess costs one attempt.
+ * Checks a password against known breaches. Intended to use the k-anonymity range API (send the
+ * first 5 SHA-1 hex characters, compare suffixes locally) so the password never leaves the server.
  */
 export interface BreachedPasswordChecker {
   isBreached(plaintext: string): Promise<boolean>;
@@ -61,22 +34,9 @@ export interface BreachedPasswordChecker {
 const REDACTED = "[REDACTED]";
 
 /**
- * A plaintext password that has passed policy validation.
- *
- * Exists to make two separate mistakes hard:
- *
- * 1. **Using an unvalidated password.** A function taking `RawPassword`
- *    cannot be handed an arbitrary string.
- * 2. **Leaking it.** `toString`, `toJSON`, and Node's inspect hook are all
- *    overridden to return `[REDACTED]`, so the value survives neither
- *    `console.log`, a logger, `JSON.stringify`, nor an error serializer.
- *    Reaching the plaintext requires calling {@link reveal} — a name chosen
- *    to be conspicuous in review.
- *
- * The second is not paranoia. Passwords appearing in logs is one of the most
- * common credential disclosures there is, and it almost never happens on
- * purpose: an object gets logged for debugging, or included in an error
- * payload, and the secret rides along.
+ * A plaintext password that passed policy validation. Functions taking `RawPassword` cannot receive
+ * an unvalidated string, and `toString`, `toJSON` and Node's inspect hook return `[REDACTED]` so it
+ * cannot leak through logs or error payloads. Use {@link reveal} to read the plaintext.
  */
 export class RawPassword {
   readonly #value: string;

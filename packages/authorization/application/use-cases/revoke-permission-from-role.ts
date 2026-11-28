@@ -14,7 +14,7 @@ export type RevokePermissionFromRoleError =
   NotFoundError | ValidationError | SystemRoleImmutableError;
 
 /**
- * Orchestrates revoking a permission from a Role (Issue 132).
+ * Orchestrates revoking a permission from a Role.
  *
  * Enforces domain invariants:
  * - Rejects mutation on system roles (guaranteeing system recoverability).

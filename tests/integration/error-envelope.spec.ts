@@ -5,23 +5,10 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createHttpTestClient, type HttpTestClient } from "./helpers/http-client.js";
 
 /**
- * Snapshot of the shared error envelope (Issue 418), taken over real HTTP.
- *
- * The convention this file is the worked example of lives in
- * `docs/guides/testing/snapshot-testing.md`. In short: the *shape* of the
- * envelope is snapshotted, because an accidental rename or restructure is
- * exactly the drift a snapshot catches for free; the values a client branches
- * on (status, `error.code`) are asserted explicitly, because a snapshot diff
- * is far too easy to accept for a change that matters.
- *
- * Every case goes through `buildApp` and `handleApiError`/`sendApiError` — the
- * real error contract — rather than a hand-built Fastify instance, so the
- * snapshot describes what clients actually receive.
- *
- * No database is needed. Where a case has to reach a use case, the container
- * is a partial stub (the same approach as `graphql-identity.spec.ts`): the
- * envelope is produced by the HTTP layer, and the use case only has to fail
- * the right way.
+ * Snapshot of the shared error envelope over real HTTP (see
+ * docs/guides/testing/snapshot-testing.md). The envelope's shape is snapshotted; status and
+ * `error.code` are asserted explicitly. Every case goes through `buildApp` and the real error
+ * helpers. No database is needed: use cases are partially stubbed.
  */
 
 interface ErrorEnvelope {

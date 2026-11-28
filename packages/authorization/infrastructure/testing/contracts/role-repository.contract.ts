@@ -32,7 +32,7 @@ function makeSystemRole(name: string): Role {
 /**
  * Behavioral contract every `RoleRepository` implementation must satisfy.
  * Run against `InMemoryRoleRepository` and future database adapters.
- * Following the Issue 031 contract-test pattern.
+ * Follows the shared contract-testing pattern.
  */
 export function roleRepositoryContract(createRepository: () => RoleRepository): void {
   describe("RoleRepository contract", () => {

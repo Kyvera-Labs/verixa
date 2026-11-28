@@ -3,14 +3,9 @@ import { z } from "zod";
 import { ConfigError } from "./config-error.js";
 
 /**
- * Signing algorithms a key may declare.
- *
- * All asymmetric on purpose. A symmetric algorithm (HS256) signs and verifies
- * with the *same* secret, so every service that needs to verify a token would
- * also hold the power to mint one — fine for a single process, a liability the
- * moment a second service (or a public JWKS endpoint) verifies tokens it should
- * never be able to forge. Asymmetric signing keeps the private key in one place
- * and hands out only the public half. See `docs/security/token-design.md`.
+ * Signing algorithms a key may declare, all asymmetric: with a symmetric algorithm every verifier
+ * could also mint tokens. The private key stays in one place and only the public half is
+ * distributed (see docs/security/token-design.md).
  */
 export const SIGNING_KEY_ALGORITHMS = [
   "RS256",
@@ -101,23 +96,13 @@ const signingKeySetSchema = z.array(signingKeySchema).superRefine((keys, ctx) =>
 export const SIGNING_KEYS_ENV_VAR = "TOKEN_SIGNING_KEYS";
 
 /**
- * Loads and validates the JWT signing-key set from the environment.
+ * Loads and validates the JWT signing-key set from the environment. Separate from {@link
+ * import("./index.js").loadConfig}, which holds non-secret settings that may be logged.
  *
- * Deliberately *not* folded into {@link import("./index.js").loadConfig}. That
- * loader's job is scalar, non-secret runtime settings, and its return value is
- * snapshot-asserted field-by-field in tests; threading a list of PEM key
- * material through it would both widen that contract awkwardly and drag secrets
- * into a structure other code logs freely. Key material is its own concern with
- * its own loader.
+ * Returns an empty array when the variable is unset; the consumer that signs rejects an empty set.
  *
- * Returns an empty array when the variable is unset — a package that is not yet
- * wired into a running app (as of this issue, nothing mints tokens yet) is a
- * normal state, not a misconfiguration. The consumer that actually needs to
- * *sign* is the one positioned to reject an empty set, and it does.
- *
- * @throws {ConfigError} when the value is present but not valid JSON, or is
- * valid JSON that violates the key-set rules (duplicate kids, not exactly one
- * current key, a current key without a private key).
+ * @throws {ConfigError} when the value is not valid JSON, or violates the key-set rules (duplicate
+ * kids, not exactly one current key, a current key without a private key).
  */
 export function loadSigningKeys(
   env: Record<string, string | undefined> = process.env,

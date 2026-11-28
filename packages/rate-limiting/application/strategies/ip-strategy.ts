@@ -46,15 +46,13 @@ export interface IpRateLimitResult extends RateLimitResult {
 }
 
 /**
- * Extracts the real client IP address from request headers respecting trusted-proxy count.
+ * Extracts the client IP, trusting `X-Forwarded-For` only as far as `trustedProxyCount` allows.
  *
- * Algorithm:
- * - If trustedProxyCount <= 0: return request.remoteAddress (never trust XFF from direct connections).
- * - If trustedProxyCount > 0: inspect X-Forwarded-For.
- *   X-Forwarded-For contains hops: client, proxy1, proxy2, ...
- *   The rightmost N hops were appended by our N trusted proxies.
- *   The IP at index (ips.length - trustedProxyCount) is the untrusted client connecting to the outermost proxy.
- *   Any IPs preceding this index were supplied by the client and cannot be trusted (spoofed).
+ * - With `trustedProxyCount <= 0`, returns `request.remoteAddress`; `X-Forwarded-For` is never
+ *   trusted on a direct connection.
+ * - Otherwise the rightmost N hops were added by the N trusted proxies, so the client is the entry
+ *   at index `ips.length - trustedProxyCount`. Entries before it were supplied by the client and
+ *   may be spoofed.
  */
 export function extractClientIp(
   request: HttpRequestContext,

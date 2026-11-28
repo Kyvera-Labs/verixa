@@ -444,7 +444,7 @@ describe("Credential", () => {
         updatedAt: new Date(),
       });
 
-      // withPasswordHash is for transparent rehashing (Issue 073), not
+      // withPasswordHash is for transparent rehashing, not
       // password changes — history is NOT updated
       const rehashed = credential.withPasswordHash(hashB);
 

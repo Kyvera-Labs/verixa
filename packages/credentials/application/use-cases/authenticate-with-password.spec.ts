@@ -15,15 +15,8 @@ import {
 import { RegisterUserWithPassword } from "./register-user-with-password.js";
 
 /**
- * Narrows the success union to the plain (no-MFA-challenge) branch.
- *
- * `execute()`'s success type covers three shapes -- a plain login, an MFA
- * challenge, and an enrollment prompt -- so `.value.user`/`.value.rehashed`
- * do not exist on the type without first ruling out the other two. Every
- * caller here either passes no `mfaChecker` or configures one that reports no
- * active methods and an `optional`/`disabled` policy, so the plain branch is
- * the only one these tests can ever actually observe; this makes that
- * assumption explicit instead of asserting past it with a cast.
+ * Narrows the success union to the plain login branch. These tests configure no MFA requirement, so
+ * this makes the assumption explicit instead of casting.
  */
 function expectPlainLogin(
   value: AuthenticateWithPasswordSuccessResult,
@@ -158,7 +151,7 @@ describe("AuthenticateWithPassword", () => {
   });
 
   describe("does not reveal why it failed", () => {
-    // The acceptance criterion for Issue 066, and the reason this use case
+    // The core requirement, and the reason this use case
     // exists in the shape it does. Each of these is a different internal
     // cause; a caller must not be able to tell them apart.
 
@@ -243,16 +236,9 @@ describe("AuthenticateWithPassword", () => {
 
   describe("timing", () => {
     it("does a real hash verification when there is no user to check", async () => {
-      // The disclosure a matching error message does not close. If a missing
-      // user returns immediately while a wrong password costs a full argon2
-      // verification, the response *time* answers the question the message
-      // refuses to.
-      //
-      // Asserted by counting verifications rather than by measuring a clock.
-      // The property being protected is "the same work happens on both
-      // paths", and that is exactly what a counter observes — deterministic,
-      // and immune to the shared-runner flakiness that a wall-clock bound
-      // invites. A timing assertion here would be measuring the machine.
+      // A missing user must cost the same work as a wrong password, or response time reveals which
+      // accounts exist. Counted by hash verifications rather than wall-clock time, which would be
+      // flaky on shared runners.
       let verifications = 0;
       const counting: PasswordHasher = {
         hash: (plaintext) => hasher.hash(plaintext),

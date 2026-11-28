@@ -4,24 +4,10 @@ import type { CredentialUserId } from "../../domain/entities/credential.js";
 import type { CredentialsUnitOfWork } from "../ports/credentials-unit-of-work.js";
 
 /**
- * HandleUserDeleted
- *
- * Reacts to the UserStatusChanged domain event from the identity context,
- * specifically when a user transitions to `deleted` status.
- *
- * Invalidates all credentials and outstanding tokens for the deleted user so:
- * - The account cannot authenticate with a retained password
- * - Verification and reset tokens cannot be replayed
- * - Login attempts fail cleanly (credential invalid, not password mismatch)
- *
- * This is a cross-context event handler:
- *   Identity context emits UserStatusChanged (including deletions)
- *   Credentials context reacts by cleaning up its own data
- *
- * Neither context imports the other directly — they are decoupled through events.
- *
- * @see docs/guides/domain-events.md — cross-context event handling
- * @see Issue 075 — credential deletion on account deletion
+ * Handles a user's transition to `deleted` (from identity's `UserStatusChanged` event) by
+ * invalidating their credential and outstanding tokens, so the account cannot authenticate and
+ * links cannot be replayed. The two contexts communicate only through events (see
+ * docs/guides/domain-events.md).
  */
 export class HandleUserDeleted {
   constructor(private readonly unitOfWork: CredentialsUnitOfWork) {}

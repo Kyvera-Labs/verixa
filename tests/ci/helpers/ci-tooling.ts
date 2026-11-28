@@ -1,18 +1,9 @@
 /**
- * Runs the Issue 215 CI tools as subprocesses, over throwaway repository
- * fixtures.
- *
- * Spawning rather than importing is the point. The deliverable is a command a
- * workflow invokes, so the tests have to exercise that command — including its
- * exit code and its stderr, which is the only thing a maintainer sees when the
- * gate fails. The SBOM generator additionally runs its CLI at module load and
- * calls `process.exit(1)` on failure, which an in-process test could not
- * survive.
- *
- * The root `package.json` scripts are mostly not used here (one test per tool
- * does use them, to keep the wiring honest). Going through `pnpm` for every
- * case would add a few seconds of package-manager startup per assertion and
- * make a pnpm failure indistinguishable from a tool failure.
+ * Runs the CI tools as subprocesses over throwaway repository fixtures, so tests exercise the real
+ * command, exit code and stderr. The SBOM generator also exits the process on failure, which an
+ * in-process test could not survive. Tools are invoked directly rather than through `pnpm` to avoid
+ * package-manager startup and to keep pnpm failures distinct; one test per tool still covers the
+ * `pnpm` script wiring.
  */
 
 import { spawnSync } from "node:child_process";
@@ -45,7 +36,7 @@ const SECURITY_FIXTURE_CONFIG = join(
 );
 const SECURITY_FIXTURE_DIRECTORY = "infra/ci/lint-security-fixtures";
 
-/** Captured reports and manifests for the dependency-scan gate (Issue 207). */
+/** Captured reports and manifests for the dependency-scan gate. */
 export const DEPENDENCY_SCAN_FIXTURES = join(
   REPO_ROOT,
   "infra",
@@ -123,7 +114,7 @@ export function runLockfileGateViaPnpmScript(): ToolResult {
 
 /**
  * Runs ESLint against the deliberately vulnerable fixture snippets with the
- * fixture-only config (Issue 208).
+ * fixture-only config.
  *
  * Spawning the CLI rather than importing ESLint's Node API keeps this test
  * free of a typed import for `eslint-plugin-security`, which ships no types —
@@ -139,7 +130,7 @@ export function runSecurityLintFixtureConfig(args: readonly string[]): ToolResul
 
 export const SECURITY_LINT_FIXTURES = SECURITY_FIXTURE_DIRECTORY;
 
-/** `node infra/ci/dependency-scan.mjs <args>` — the Issue 207 gate step. */
+/** `node infra/ci/dependency-scan.mjs <args>` — the dependency-scan gate step. */
 export function runDependencyScan(args: readonly string[]): ToolResult {
   return run(process.execPath, [DEPENDENCY_SCAN_GATE, ...args], REPO_ROOT);
 }
@@ -149,17 +140,17 @@ export function runSbomGenerator(args: readonly string[]): ToolResult {
   return run(process.execPath, [TSX_CLI, SBOM_GENERATOR, ...args], REPO_ROOT);
 }
 
-/** `tsx infra/ci/perf-budget.ts <args>` — the Issue 415 suite-duration gate. */
+/** `tsx infra/ci/perf-budget.ts <args>` — the suite-duration gate. */
 export function runPerfBudget(args: readonly string[]): ToolResult {
   return run(process.execPath, [TSX_CLI, PERF_BUDGET, ...args], REPO_ROOT);
 }
 
-/** `tsx infra/ci/check-env-matrix.ts <args>` — the Issue 389 environment matrix check. */
+/** `tsx infra/ci/check-env-matrix.ts <args>` — the environment matrix check. */
 export function runCheckEnvMatrix(args: readonly string[] = []): ToolResult {
   return run(process.execPath, [TSX_CLI, CHECK_ENV_MATRIX_GATE, ...args], REPO_ROOT);
 }
 
-/** `tsx scripts/ci-dashboard/generate.ts <args>` — the Issue 379 CI dashboard generator. */
+/** `tsx scripts/ci-dashboard/generate.ts <args>` — the CI dashboard generator. */
 export function runCiDashboardGenerator(args: readonly string[] = []): ToolResult {
   return run(process.execPath, [TSX_CLI, CI_DASHBOARD_GENERATOR, ...args], REPO_ROOT);
 }
@@ -260,19 +251,12 @@ export function createOutputDirectory(): { readonly directory: string; dispose()
   };
 }
 
-/* ------------------------------------------------------------------ *
- * The fixture contents
- *
- * A minimal pnpm workspace in lockfileVersion 9.0: a root importing `left-pad`,
- * which pulls `tiny-lru` transitively, and one member package importing
- * `right-pad`. Each drift case below is one targeted string edit away from
- * this state, which is what makes the expected message obvious.
- *
- * The `integrity` values are genuine base64 SHA-512 digests rather than
- * placeholders: the SBOM generator turns them into CycloneDX `hashes`, whose
- * schema pins the hex length, so a fake digest would fail validation for a
- * reason that has nothing to do with the behaviour under test.
- * ------------------------------------------------------------------ */
+/*
+ * Fixture contents: a minimal lockfileVersion 9.0 workspace with a root importing `left-pad` (which
+ * pulls `tiny-lru`) and one member importing `right-pad`. Each drift case is one targeted edit away
+ * from this state. The `integrity` values are real SHA-512 digests because the SBOM schema
+ * validates their length.
+ */
 
 export const FIXTURE_ROOT_MANIFEST = JSON.stringify(
   {

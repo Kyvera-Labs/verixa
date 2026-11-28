@@ -5,28 +5,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestPrismaClient, databaseAvailability } from "./helpers/database.js";
 
 /**
- * Verifies the query patterns from Phases 02–03 use indexes rather than
- * sequential scans (Issue 055).
- *
- * ## Why this seeds thousands of rows
- *
- * On a small table, a sequential scan is genuinely *faster* than an index
- * scan, and Postgres will correctly choose one — reading 3 rows from a single
- * heap page beats descending a B-tree and then visiting the heap anyway. So
- * asserting "index scan" against the 3-row dev seed would fail, and the
- * obvious fix (forcing the planner with `enable_seqscan = off`) would only
- * prove Postgres obeys orders, not that the index is usable or that the
- * planner would ever pick it.
- *
- * Seeding past the point where a scan stops being cheap is what makes the
- * assertion mean something: the planner is choosing the index freely, the way
- * it would in production.
- *
- * The corollary is worth stating because it is where this kind of test
- * usually goes wrong: **a sequential scan is not a bug.** It is the right
- * plan on small tables, and on large ones when a query genuinely touches most
- * rows. What this test catches is the case where an index that *should*
- * exist doesn't — a lookup by a selective key falling back to a full scan.
+ * Verifies the main query patterns use indexes rather than sequential scans. Thousands of rows are
+ * seeded so the planner chooses indexes freely; on a tiny table a sequential scan is correctly
+ * cheaper. A sequential scan is not a bug in itself: this catches a selective lookup with no usable
+ * index.
  */
 
 const available = await databaseAvailability();
@@ -43,28 +25,12 @@ describe.skipIf(!available)("index usage (Issue 055)", () => {
   const prisma = createTestPrismaClient();
 
   /**
-   * Runs EXPLAIN (no ANALYZE) and returns the plan as one string.
+   * Runs EXPLAIN (without ANALYZE) and returns the plan as one string. Callers pass the whole
+   * statement, including `EXPLAIN`, so every query is a fixed literal with nothing concatenated.
    *
-   * Callers pass the *whole* statement, `EXPLAIN` included. This helper used to
-   * build it as `` `EXPLAIN ${sql}` ``, which is the exact shape Issue 210's
-   * lint rule exists to catch: a raw-query call fed a string assembled at
-   * runtime. Here the pieces were always literals inside this file, so it was
-   * safe — and safe-by-inspection is precisely what a reviewer cannot check on
-   * a diff. Moving the keyword into each call site makes every statement this
-   * suite runs a single fixed literal, with nothing concatenated.
-   *
-   * Every placeholder below carries an explicit `::type` cast, and that is
-   * load-bearing rather than decorative. `$queryRawUnsafe` binds parameters
-   * as `text`, so an uncast `WHERE email = $1` asks Postgres to compare
-   * `citext` against `text`. It resolves that by casting the *column*, and
-   * the plan comes back reading `Filter: ((email)::text = '...'::text)` — a
-   * sequential scan, because an index on `email` cannot answer a query about
-   * `email::text`. On a uuid column it does not even get that far: there is
-   * no `uuid = text` operator, so it fails outright with 42883.
-   *
-   * Both are artefacts of raw SQL in this file, not of the schema — Prisma's
-   * generated queries bind with the correct types. Casting the parameter
-   * instead of the column is what makes these assertions measure the schema.
+   * Every placeholder has an explicit `::type` cast. `$queryRawUnsafe` binds text, so an uncast
+   * `citext` comparison casts the column and seq-scans, and an uncast uuid comparison fails
+   * (42883). Prisma's own queries bind the correct types.
    */
   async function explain(statement: string, ...params: unknown[]): Promise<string> {
     const rows = await prisma.$queryRawUnsafe<PlanRow[]>(statement, ...params);
@@ -141,19 +107,9 @@ describe.skipIf(!available)("index usage (Issue 055)", () => {
     });
 
     /**
-     * How many child rows hang off ORG_ID, as opposed to one of the bulk
-     * organizations.
-     *
-     * This number is the point of the whole seed. Putting every membership
-     * and invitation on ORG_ID makes `WHERE organization_id = $1` match 100%
-     * of the table, and a sequential scan is then genuinely the faster plan —
-     * Postgres would be right to choose it, and an assertion demanding an
-     * index would be asserting the planner is broken. Spreading the rows so
-     * ORG_ID holds a small slice is what makes the predicate selective, and
-     * selectivity is the only reason an index is ever the better answer.
-     *
-     * Kept comfortably above `LIMIT 50` so the limit is not what makes the
-     * query cheap, and well under the ~5-10% where a scan takes over again.
+     * Child rows on `ORG_ID`, kept to a small slice of the table so `WHERE organization_id = $1` is
+     * selective and an index is genuinely the better plan. Above `LIMIT 50`, and well under the
+     * share where a scan wins again.
      */
     const ROWS_ON_TARGET_ORG = 60;
 

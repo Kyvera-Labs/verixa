@@ -1,7 +1,7 @@
 /**
  * Revokes a user's sessions across every device.
  *
- * Implemented by the sessions package (Phase 05, Issue 092). Declared here as a
+ * Implemented by the sessions package. Declared here as a
  * port so the recovery use case can demand "every session is gone" without
  * importing the sessions package — and so a test can assert the demand rather
  * than simulate a token store.

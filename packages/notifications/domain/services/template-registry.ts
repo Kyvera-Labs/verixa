@@ -6,17 +6,10 @@ import {
 } from "../entities/notification-template.js";
 
 /**
- * An in-process, read-only map from template key to {@link NotificationTemplate}.
- *
- * Built once, from the complete set of definitions, when the application
- * starts. There is deliberately no `register()` to call later: a registry
- * that can grow at runtime can also be half-built when the first
- * notification is sent, and "is the password-reset template registered
- * yet?" becomes an ordering question instead of a startup guarantee.
- *
- * Template content ships with the code, so a database-backed store would
- * add a migration, a repository and a cache in exchange for an editing
- * workflow nobody uses — see docs/guides/domain-modeling.md.
+ * Read-only map from template key to {@link NotificationTemplate}, built once at startup from the
+ * full set of definitions. There is no `register()`, so the registry can never be half-built when
+ * the first notification is sent. Templates ship with the code, so there is no database store (see
+ * docs/guides/domain-modeling.md).
  */
 export class TemplateRegistry {
   private readonly templates: ReadonlyMap<string, NotificationTemplate>;
@@ -28,14 +21,10 @@ export class TemplateRegistry {
   }
 
   /**
-   * Validates every definition and rejects the whole set if any is invalid
-   * or any key appears more than once.
-   *
-   * Errors are collected rather than short-circuited, keyed by template key
-   * (or `templates[i]` when the definition has no usable key), with each
-   * entry formatted `<field>:<code>` or `duplicate_key`. A duplicate is an
-   * error even when both definitions are identical: "last one wins" would
-   * let a copy-pasted template quietly replace the real one.
+   * Validates every definition and rejects the whole set if any is invalid or a key repeats. Errors
+   * are collected per template key (or `templates[i]` without a usable key) as `<field>:<code>` or
+   * `duplicate_key`. Duplicates are errors even when identical, so a copy cannot silently replace
+   * the real template.
    */
   static create(
     definitions: readonly NotificationTemplateDefinition[],
@@ -78,7 +67,7 @@ export class TemplateRegistry {
 
   /**
    * Looks a template up by exact key. An unknown key is a `NotFoundError`
-   * rather than `undefined` so the caller (Issue 264's `SendNotification`)
+   * rather than `undefined` so the caller (`SendNotification`)
    * fails fast before anything is rendered or dispatched.
    */
   resolve(key: string): Result<NotificationTemplate, NotFoundError> {

@@ -2,31 +2,11 @@ import { ProviderCheckResult } from "../../application/dtos/provider-check-resul
 import type { VerificationProvider } from "../../application/ports/verification-provider.js";
 
 /**
- * The shipped default `VerificationProvider`: a **null object** that answers
- * every check with `inconclusive`, deferring the decision to a human reviewer.
- *
- * ## Why this exists at all
- *
- * It keeps Verixa self-contained. A verification workflow that only works
- * once you have signed a contract with a commercial KYC vendor is not much of
- * an open-source project: a contributor cloning the repo, or an operator
- * evaluating it, would be unable to run the flow end to end. With this as the
- * default, every request simply lands in the reviewer queue, and the manual
- * review experience — the part this phase is actually about — is fully
- * exercisable with no third-party account and no API key.
- *
- * It is also the reference implementation for anyone writing a real adapter
- * (`docs/guides/verification-provider-integration.md`): it shows the port's
- * contract in the fewest lines that can still satisfy it, and it demonstrates
- * the one rule a vendor adapter most easily gets wrong — *never decide*.
- *
- * ## Why `inconclusive` and not `passed`
- *
- * A null object that returned `passed` would be a security hole wearing a
- * default's clothes: every deployment that forgot to configure a real vendor
- * would auto-pass every identity check. `inconclusive` is the honest answer
- * for "no automated judgment was made", and it is exactly the outcome the
- * workflow routes to a human. Doing nothing, visibly, is the safe default.
+ * Default `VerificationProvider`: a null object that answers every check with `inconclusive`, so
+ * every request goes to a human reviewer. It lets Verixa run end to end without a commercial
+ * vendor, and serves as the reference adapter (see
+ * docs/guides/verification-provider-integration.md). Returning `passed` here would auto-approve
+ * every check in any deployment without a vendor.
  */
 export class ManualReviewProvider implements VerificationProvider {
   /**

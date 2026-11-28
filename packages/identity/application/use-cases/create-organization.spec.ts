@@ -72,7 +72,7 @@ describe("CreateOrganization", () => {
 });
 
 /**
- * Added in Issue 417: kills create-organization.ts:43 (`.trim()` dropped from
+ * Kills create-organization.ts:43 (`.trim()` dropped from
  * the slug the duplicate check uses), which the mutation-testing spike found
  * surviving. Every existing duplicate case differed only in letter case.
  */

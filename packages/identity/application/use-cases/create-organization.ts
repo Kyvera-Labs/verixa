@@ -19,19 +19,9 @@ export interface CreateOrganizationResult {
 export type CreateOrganizationError = ValidationError | ConflictError;
 
 /**
- * Creates a new `Organization` together with the owner's initial
- * `OrganizationMembership` — the first example in this codebase of a use
- * case spanning **two aggregates in one transaction**. See
- * `docs/guides/use-cases.md` for why that's the use case's job, not either
- * aggregate's: an aggregate only enforces its own invariants, but "an org
- * always has its owner as a member" is a rule that spans both, so it lives
- * at the orchestration layer instead.
- *
- * Both writes run inside a {@link UnitOfWork}, so they commit together or
- * not at all (Issue 048). The use case never learns *how* that atomicity is
- * achieved — against Postgres it's a real transaction, against the in-memory
- * fake it's nothing at all — which is what keeps the application layer free
- * of persistence concepts.
+ * Creates an `Organization` together with the owner's initial `OrganizationMembership`. The rule
+ * "an organization always has its owner as a member" spans both aggregates, so it lives in this use
+ * case. Both writes run in a {@link UnitOfWork} and commit together (see docs/guides/use-cases.md).
  */
 export class CreateOrganization {
   constructor(private readonly unitOfWork: UnitOfWork) {}
