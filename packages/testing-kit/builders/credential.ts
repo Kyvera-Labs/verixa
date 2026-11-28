@@ -12,19 +12,10 @@ type CredentialStep = (credential: Credential, now: Date) => Credential;
 type PasswordHistoryPolicy = Parameters<Credential["rotatePassword"]>[1];
 
 /**
- * Fluent, immutable builder for the `Credential` entity (Issue 419).
- *
- * Starts from {@link makeCredential} (`Credential.create`) and reaches lockout,
- * password history and deletion through the entity's own operations —
- * `recordFailedAttempt(policy)`, `rotatePassword(hash, policy)`,
- * `invalidateForDeletedUser()` — instead of the factory's raw
- * `failedAttempts` / `lockedUntil` overrides. A lock produced this way has
- * exactly the duration `LockoutPolicy` would compute, so a test asserting on
- * "locked for one minute" is asserting on the real backoff, not a number typed
- * into a fixture.
- *
- * Unlike the other aggregates, `Credential` has no refusable transitions (every
- * operation is total), so no chain can fail at `build()`.
+ * Fluent, immutable builder for `Credential`. Starts from {@link makeCredential} and reaches
+ * lockout, password history and deletion through the entity's own operations
+ * (`recordFailedAttempt`, `rotatePassword`, `invalidateForDeletedUser`), so a lockout has exactly
+ * the duration `LockoutPolicy` computes. Every operation is total, so `build()` never fails.
  */
 export class CredentialBuilder {
   private constructor(

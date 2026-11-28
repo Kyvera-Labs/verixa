@@ -70,15 +70,11 @@ export class NotificationTransportError extends NotificationError {
 }
 
 /**
- * Port for outbound message dispatch across notification channels (email, SMS, webhooks).
- *
- * Method contracts:
- * - `send` takes a `NotificationMessage` and attempts delivery.
- * - On success, returns `Result.ok(DeliveryReceipt)`.
- * - Empty body or missing id returns `MalformedNotificationPayloadError`.
- * - Empty or unroutable recipient returns `InvalidRecipientError`.
- * - Delivery gateway timeouts return `NotificationTimeoutError`.
- * - Network failures or 5xx gateway responses return `NotificationTransportError`.
+ * Port for outbound notification delivery (email, SMS, webhooks). `send` returns
+ * `Result.ok(DeliveryReceipt)` on success, `MalformedNotificationPayloadError` for an empty body or
+ * missing ID, `InvalidRecipientError` for an empty or unroutable recipient,
+ * `NotificationTimeoutError` for gateway timeouts, and `NotificationTransportError` for network
+ * failures or 5xx responses.
  */
 export interface NotificationSender {
   /**

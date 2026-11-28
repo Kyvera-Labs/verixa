@@ -7,15 +7,9 @@ import { orThrowDomainError } from "./domain-result.js";
 type InvitationStep = (invitation: Invitation, now: Date) => Invitation;
 
 /**
- * Fluent, immutable builder for the `Invitation` entity (Issue 419).
- *
- * Starts from {@link makeInvitation} in `pending` and reaches every other
- * status through the entity's own transitions — `accept()` and `revoke()` —
- * rather than the factory's `status` override, which sets the field directly.
- * That is what lets `aPendingInvitation().expired().accepted()` fail with the
- * domain's `ValidationError` ("This invitation has expired.") instead of
- * quietly producing an accepted-after-expiry invitation no code path can
- * create.
+ * Fluent, immutable builder for `Invitation`. Starts from {@link makeInvitation} in `pending` and
+ * reaches other statuses through `accept()` and `revoke()`, so an impossible chain such as
+ * `aPendingInvitation().expired().accepted()` fails with the domain's `ValidationError`.
  */
 export class InvitationBuilder {
   private constructor(

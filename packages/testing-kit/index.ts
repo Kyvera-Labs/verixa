@@ -1,13 +1,7 @@
-// Curated public API of @verixa/testing-kit (Issue 420). Nothing outside this
-// package should import a deep path (`@verixa/testing-kit/factories/...`) —
-// the same boundary every context package keeps (Issue 038; see
-// docs/guides/domain-modeling.md, "Package encapsulation"), enforced by the
-// `no-restricted-imports` rule in eslint.config.mjs.
-//
-// Every name is listed explicitly rather than `export *`-ed from a folder
-// barrel, so adding a helper inside the package never publishes it by
-// accident. Each one is documented in docs/guides/tutorials/testing-the-platform.md
-// or a guide under docs/guides/testing/ — add the docs when adding a name.
+// Public API of @verixa/testing-kit. Deep imports are forbidden by `no-restricted-imports` in
+// eslint.config.mjs (see docs/guides/domain-modeling.md). Names are listed explicitly so new
+// helpers are never published by accident; document each one in
+// docs/guides/tutorials/testing-the-platform.md or docs/guides/testing/.
 
 // Builders: fluent, domain-valid test data with a history (Issue 419)
 export { aCredential } from "./builders/credential.js";

@@ -85,12 +85,12 @@ export async function* paginatePages<T>(
 }
 
 /**
- * Walks every page transparently and yields the individual items lazily.
+ * Walks every page and yields items lazily; breaking out stops further page fetches.
  *
  * ```ts
  * for await (const event of client.audit.queryEvents()) {
  *   console.log(event.id);
- *   if (event.id === target) break; // no further page is fetched
+ *   if (event.id === target) break;
  * }
  * ```
  */
