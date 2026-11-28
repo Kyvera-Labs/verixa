@@ -1,25 +1,12 @@
-// Re-exports the generated Prisma client as this package's public surface, so
-// consumers import `@verixa/database` rather than `@prisma/client` directly.
-// That indirection is what lets the ORM choice stay an infrastructure detail:
-// only this package and the repository adapters that implement Phase 02's
-// ports ever see Prisma types, and the domain/application layers never do.
+// Public surface of the generated Prisma client: consumers import `@verixa/database`, never
+// `@prisma/client`, so only this package and the repository adapters see Prisma types. The client
+// is generated, not committed; run `pnpm db:generate` after cloning and after schema changes (see
+// docs/guides/database.md).
 //
-// The client is generated, not committed — it is derived from the schema (and
-// bundles the query compiler for it), so `pnpm db:generate` must run after a
-// fresh clone and any time the schema changes. See docs/guides/database.md.
-// Loaded through createRequire rather than a static `export ... from`.
-//
-// The generated Prisma client is CommonJS, and Node's ESM loader can only
-// statically analyse named exports from CJS when they are assigned in a form
-// its lexer recognises. Prisma builds its exports dynamically, so the lexer
-// finds nothing and `export { PrismaClient } from "@prisma/client"` throws at
-// import time with "Named export not found".
-//
-// This never surfaced in tests — Vitest transforms modules rather than using
-// Node's ESM loader — nor in `pnpm build`, since it is purely a runtime
-// resolution concern. It appeared the moment a real `node dist/server.js`
-// imported this package, which is why wiring the composition root into the
-// server was worth doing on its own.
+// Loaded through `createRequire`: the generated client is CommonJS with dynamically built exports,
+// so Node's ESM loader cannot find its named exports and a static `export ... from
+// "@prisma/client"` throws at runtime. Vitest and `tsc` do not catch this, only a real `node
+// dist/server.js`.
 import { createRequire } from "node:module";
 
 // Ships a real ESM build (unlike the generated client), so a static import works.
@@ -92,14 +79,9 @@ export interface PgPoolConfig {
 }
 
 /**
- * Translates a connection string into node-postgres pool settings.
- *
- * Prisma 6's query engine read `connection_limit` and `pool_timeout` from the
- * URL. Since Prisma 7 the client connects through node-postgres (the pg
- * driver adapter), which neither understands those parameters nor reads pool
- * size from the URL at all. So they are lifted out of the URL here and mapped
- * to `max` and `connectionTimeoutMillis`. As before, values written in the URL
- * win over `defaults`, so a deployment can still override per environment.
+ * Translates a connection string into node-postgres pool settings. The pg driver adapter ignores
+ * Prisma's `connection_limit` and `pool_timeout` URL parameters, so they are removed from the URL
+ * and mapped to `max` and `connectionTimeoutMillis`. Values in the URL win over `defaults`.
  */
 export function pgPoolConfig(connectionString: string, defaults: PoolDefaults = {}): PgPoolConfig {
   const url = new URL(connectionString);

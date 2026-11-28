@@ -10,22 +10,10 @@ import {
 } from "./index.js";
 
 /**
- * These assert that the generated client exists and is exported correctly —
- * not that it can reach a database. Actual database behavior is covered by
- * the migration check in CI and, from Issue 046, the repository contract
- * tests running against a real Postgres.
- *
- * The failure this catches is a real and easy one to hit: the generated
- * client is git-ignored and platform-specific, so a fresh clone that skipped
- * `pnpm db:generate` has no client at all. Better to fail here, on an
- * obvious assertion, than several layers deep in an unrelated test.
- *
- * Deliberately does *not* call `new PrismaClient()`: the client is built from
- * layered proxies, and instantiating it inside Vitest trips the runner's
- * object inspection into unbounded recursion (`Maximum call stack size
- * exceeded`). Checking the exported shape proves generation succeeded, which
- * is all this test is for — a test that fights the runner to assert something
- * it already knows is worse than a narrower one that passes honestly.
+ * Asserts the generated client exists and is exported correctly, so a clone that skipped `pnpm
+ * db:generate` fails here with an obvious message. Database behaviour is covered by the migration
+ * check and the repository contract tests. It does not construct a `PrismaClient`, because Vitest's
+ * object inspection recurses endlessly through the client's proxies.
  */
 describe("@verixa/database", () => {
   it("exports PrismaClient as a constructor", () => {
@@ -45,18 +33,10 @@ describe("@verixa/database", () => {
 
 describe("UserStatus enum", () => {
   /**
-   * Pins the database enum to the four states the domain defines in
-   * packages/identity/domain/entities/user.ts. Adding a status there without
-   * a matching migration would let the domain produce a value Postgres
-   * rejects at write time — a failure that would otherwise surface as a
-   * runtime error in production rather than a failing test here.
-   *
-   * This is a *pin*, not yet an automatic cross-check: `@verixa/database`
-   * doesn't depend on `@verixa/identity` (the dependency runs the other way,
-   * starting with the repository adapter in Issue 046), so this list is
-   * duplicated by hand rather than imported. Issue 046 is where the two are
-   * genuinely reconciled — the mapper has to convert between them, so a
-   * mismatch becomes a type error there.
+   * Pins the database enum to the four user statuses in packages/identity/domain/entities/user.ts,
+   * so a new domain status without a migration fails here rather than at write time. The list is
+   * duplicated because this package does not depend on identity; the identity mapper is where a
+   * mismatch becomes a type error.
    */
   it("contains exactly the statuses the domain defines, with identical casing", () => {
     // Asserted as one whole-object comparison rather than a loop indexing

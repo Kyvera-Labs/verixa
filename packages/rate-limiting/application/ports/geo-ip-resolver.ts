@@ -65,18 +65,13 @@ export class GeoIpServiceError extends GeoIpError {
 }
 
 /**
- * Port for IP-to-geographic location resolution.
+ * Port for IP-to-location lookup used by anomaly checks such as impossible travel. Satisfied by
+ * real providers (MaxMind GeoIP2, ip-api, IP2Location) and in-memory stubs.
  *
- * Provides a location lookup seam for fraud and anomaly heuristics (e.g. impossible travel
- * detection in Issue 291). Real providers (MaxMind GeoIP2, ip-api, IP2Location) and in-memory
- * fixture stubs satisfy this same contract.
- *
- * Method contracts:
- * - `resolve` accepts a valid IPv4 or IPv6 address string.
- * - On success, returns `Result.ok(GeoLocation)` containing country code, latitude, and longitude.
- * - Malformed IP strings return `InvalidIpAddressError`.
- * - Network timeouts return `GeoIpTimeoutError`.
- * - Upstream provider errors return `GeoIpServiceError` or `MalformedGeoResponseError`.
+ * - `resolve` takes an IPv4 or IPv6 address and returns `Result.ok(GeoLocation)` with country code,
+ *   latitude and longitude.
+ * - Malformed input returns `InvalidIpAddressError`; timeouts return `GeoIpTimeoutError`; provider
+ *   failures return `GeoIpServiceError` or `MalformedGeoResponseError`.
  */
 export interface GeoIpResolver {
   /**

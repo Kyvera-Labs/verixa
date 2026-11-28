@@ -55,20 +55,12 @@ export class CaptchaServiceError extends CaptchaError {
 }
 
 /**
- * Port for third-party human-verification challenge checks (e.g., hCaptcha, reCAPTCHA, Turnstile).
+ * Vendor-neutral port for verifying human-challenge tokens (hCaptcha, reCAPTCHA, Turnstile).
  *
- * Provides a vendor-neutral seam for verifying challenge response tokens submitted by clients.
- * Allows switching between development stubs (no-op) and production vendor adapters without
- * coupling application use cases to vendor SDKs or network protocols.
- *
- * Method contracts:
- * - `verify` returns `Result.ok(undefined)` when the challenge token is confirmed valid.
- * - Expected verification failures (token expired, rejected by vendor, malformed token)
- *   return an `InvalidCaptchaTokenError`.
- * - Upstream failures (network timeout, unreachable endpoint, malformed vendor response)
- *   return specific `CaptchaError` subclasses (`CaptchaTimeoutError`, `CaptchaServiceError`,
- *   `MalformedCaptchaResponseError`) rather than throwing, allowing callers to apply fallback
- *   policies or retry strategies safely.
+ * - `verify` returns `Result.ok(undefined)` for a valid token.
+ * - Expired, rejected or malformed tokens return `InvalidCaptchaTokenError`.
+ * - Upstream failures return `CaptchaTimeoutError`, `CaptchaServiceError` or
+ *   `MalformedCaptchaResponseError` rather than throwing, so callers can apply a fallback or retry.
  */
 export interface CaptchaVerifier {
   /**
