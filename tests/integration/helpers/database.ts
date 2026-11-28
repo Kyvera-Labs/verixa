@@ -9,18 +9,9 @@ export function testDatabaseUrl(): string {
 }
 
 /**
- * Whether a Postgres instance is actually listening for the test database.
- *
- * Database-backed tests skip when this is `false`, so `pnpm test` passes on a
- * fresh clone with no Docker running — a contributor's first command
- * shouldn't fail for reasons that have nothing to do with their change.
- *
- * The obvious hazard with skip-on-unavailable is that coverage disappears
- * silently: if CI's Postgres service were misconfigured, every one of these
- * tests would skip and the pipeline would still go green, which is worse
- * than failing. {@link assertDatabaseAvailableWhenRequired} closes that hole
- * — CI sets `REQUIRE_DATABASE_TESTS=1`, which turns an unreachable database
- * from a skip into a hard failure.
+ * Whether Postgres is listening for the test database. Database tests skip when it is not, so `pnpm
+ * test` passes on a fresh clone; CI sets `REQUIRE_DATABASE_TESTS=1` so a missing database fails
+ * instead (see {@link assertDatabaseAvailableWhenRequired}).
  */
 export async function isDatabaseAvailable(): Promise<boolean> {
   const url = new URL(testDatabaseUrl());
@@ -28,20 +19,15 @@ export async function isDatabaseAvailable(): Promise<boolean> {
 }
 
 /**
- * Resolves database availability and enforces it where it's mandatory.
- * Call at module top level:
+ * Resolves database availability and enforces it where required. Call at module top level:
  *
  * ```ts
  * const available = await databaseAvailability();
  * describe.skipIf(!available)("...", () => { ... });
  * ```
  *
- * Top level specifically, not from `beforeAll`. Vitest skips a suite's hooks
- * along with its tests, so an assertion inside `beforeAll` of a
- * `describe.skipIf`-ed block never executes — which made an earlier version
- * of this guard silently do nothing in exactly the situation it existed to
- * catch. Throwing during module evaluation fails collection, and collection
- * always runs.
+ * Not from `beforeAll`: Vitest skips the hooks of a skipped suite, so the check would never run.
+ * Throwing during module evaluation fails collection, which always runs.
  */
 export async function databaseAvailability(): Promise<boolean> {
   const available = await isDatabaseAvailable();

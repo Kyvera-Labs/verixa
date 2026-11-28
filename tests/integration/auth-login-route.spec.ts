@@ -5,15 +5,8 @@ import { createTestPrismaClient, databaseAvailability } from "./helpers/database
 import { createHttpTestClient, type HttpTestClient } from "./helpers/http-client.js";
 
 /**
- * The login half of the vertical slice: real HTTP → route → use case →
- * repository → Postgres, against a user created through the register
- * endpoint rather than seeded directly.
- *
- * Registering through the API is the point. A fixture that inserted a row
- * with a hash of its own would test login against a credential no production
- * code path ever produces, and would keep passing if registration and login
- * disagreed about how a password is hashed or an email is normalized — which
- * is precisely the failure this suite exists to catch.
+ * Login end to end (HTTP, route, use case, repository, Postgres) against a user registered through
+ * the API, so registration and login must agree on password hashing and email normalization.
  */
 
 const available = await databaseAvailability();
@@ -259,16 +252,9 @@ describe.skipIf(!available)("POST /auth/login", () => {
     });
 
     it("is indistinguishable from any other failure on the wire", async () => {
-      // The assertion this whole design exists for. Lockout state only exists
-      // for accounts that exist, so a 423, a Retry-After header, or a
-      // different code would turn "fail five times and watch what changes"
-      // into an account enumeration oracle.
-      //
-      // Checked at the HTTP layer specifically: the use case returns a
-      // *distinct* error type here, and it is only the deliberate choice of
-      // identical code, status and message that keeps the response the same.
-      // A well-meaning refactor mapping AccountLockedError to its own status
-      // would reopen the hole with every unit test still green.
+      // A locked account must respond exactly like a wrong password (same status, code and
+      // message), or repeated failures would reveal which accounts exist. Checked at the HTTP layer
+      // because the use case returns a distinct error type internally.
       await registerAlice();
       await failFiveTimes();
 

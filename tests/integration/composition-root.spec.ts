@@ -5,16 +5,8 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { createTestPrismaClient, databaseAvailability } from "./helpers/database.js";
 
 /**
- * Exercises the composition root (Issue 050) end to end: a use case, wired to
- * a real Prisma repository, writing to a real Postgres.
- *
- * Every layer below has been tested in isolation — the domain against no
- * infrastructure, the use cases against in-memory fakes, the adapters against
- * the shared contract suite. What none of those can prove is that the wiring
- * is right: that `RegisterUser` was handed a working repository, that the
- * mapper round-trips through an actual table, that the object graph is
- * connected at all. A container that constructs the wrong thing typechecks
- * perfectly.
+ * Exercises the composition root end to end: a use case wired to a real Prisma repository writing
+ * to a real Postgres, proving the object graph is connected correctly.
  */
 
 const available = await databaseAvailability();

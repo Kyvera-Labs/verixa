@@ -6,20 +6,9 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { createTestPrismaClient, databaseAvailability } from "./helpers/database.js";
 
 /**
- * Exercises the `users` table created in Issue 043 against a real Postgres.
- *
- * These assert the guarantees the *database* makes, independent of the domain
- * layer — specifically the ones the domain cannot make on its own. The domain
- * lowercases every address in `Email.create()`, so a case-differing duplicate
- * can't arise through normal application code at all; what's under test here
- * is what happens when something bypasses that path (a raw insert, a data
- * migration, a bulk import). That's exactly the scenario `citext` exists for,
- * and the only way to verify it is to actually try the insert.
- *
- * Skips when no database is reachable so a fresh clone's `pnpm test` still
- * passes; CI sets REQUIRE_DATABASE_TESTS=1 so the skip can't hide a
- * misconfigured pipeline. Issue 047 replaces the shared test database with
- * per-run Testcontainers instances.
+ * Tests the guarantees the `users` table makes on its own, such as case-insensitive email
+ * uniqueness through `citext`, which matter when something bypasses `Email.create()` (raw inserts,
+ * migrations, imports). Skips without a database unless `REQUIRE_DATABASE_TESTS=1`.
  */
 
 const available = await databaseAvailability();

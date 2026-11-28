@@ -19,40 +19,17 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestPrismaClient, databaseAvailability } from "./helpers/database.js";
 
 /**
- * Concurrent appends against a real Postgres (Issue #128), and the query
- * planner's use of `audit_log_entries`' indexes (Issue 188).
+ * Concurrent audit appends and index usage against a real Postgres.
  *
- * `auditLogRepositoryContract` already asserts the serialization *protocol*
- * against both repository implementations, and `prisma-audit-repositories
- * .spec.ts` proves the adapter turns a unique-index violation into a retryable
- * conflict. What neither can prove is the thing only Postgres knows: that a
- * `READ COMMITTED` transaction does *not* stop two overlapping appends from
- * reading the same head, and that the unique index on `sequence` is therefore
- * doing the real work rather than the transaction.
+ * The first `describe` shows that under `READ COMMITTED` two overlapping appends can read the same
+ * head, so the unique index on `sequence`, not the transaction, prevents a fork (which is why the
+ * `P2002` translation exists). The second seeds thousands of rows to show `findWithFilters` uses
+ * indexes.
  *
- * That distinction decides why the code looks the way it does. If a transaction
- * alone were sufficient, the head re-check inside `appendMany` would be the
- * whole mechanism and the `P2002` translation would be dead code. The first
- * `describe` below is the evidence that it is not.
- *
- * The second `describe` seeds thousands of rows to prove `findWithFilters`
- * (Issue 187) is served by an index rather than a sequential scan. Both
- * `describe` blocks need *exclusive* use of `audit_log_entries` for the
- * whole of their run -- the first because a hash chain is only meaningful
- * from an empty table, the second because it deletes and reseeds the table
- * wholesale. They live in one file, not two, specifically so vitest's
- * ordinary in-file sequencing (one `describe` fully finishes before the
- * next starts) is what keeps them from colliding, rather than
- * `fileParallelism: false` -- which stops two *files* from running at once,
- * but does not promise that one file's `afterAll` finishes before the next
- * file's `beforeAll` starts. CI caught exactly that: this suite's own
- * chain-concurrency assertions reading back zero rows immediately after a
- * successful append, because the query-planner suite's `deleteMany({})` had
- * started.
- *
- * Skips when no database is reachable, like the rest of this suite; CI sets
- * `REQUIRE_DATABASE_TESTS=1` so the skip cannot silently hide a broken
- * pipeline.
+ * Both need exclusive use of `audit_log_entries`, so they share one file: Vitest finishes one
+ * `describe` before starting the next, whereas `fileParallelism: false` does not stop one file's
+ * teardown overlapping the next file's setup. Skips without a database unless
+ * `REQUIRE_DATABASE_TESTS=1`.
  */
 
 const available = await databaseAvailability();
@@ -162,33 +139,14 @@ describe.skipIf(!available)("audit chain concurrency (Issue #128)", () => {
 });
 
 /**
- * Verifies each filter path in `PrismaAuditLogRepository.findWithFilters`
- * (Issue 187) is served by an index rather than a sequential scan (Issue 188).
+ * Checks that each `findWithFilters` filter path uses an index rather than a sequential scan.
  *
- * ## Why this seeds thousands of rows
+ * Thousands of rows are seeded so the planner chooses the index on its own; on a tiny table a
+ * sequential scan is correctly cheaper, and forcing `enable_seqscan = off` would prove nothing.
+ * Each target value owns a small slice of the table so the predicate is selective.
  *
- * On a small table Postgres correctly prefers a sequential scan — reading a
- * few heap pages beats descending a B-tree and then visiting the heap anyway.
- * Asserting "index scan" against a hand-written three-row fixture would fail
- * for the right reason, and forcing the planner with `enable_seqscan = off`
- * would only prove Postgres obeys orders. Seeding past the point where a scan
- * stops being cheap is what makes the assertion a test of the schema: the
- * planner chooses the index freely.
- *
- * ## Why the target predicate is selective
- *
- * The same trap in the other direction: if the target actor owned every row,
- * `WHERE actor_id = $1` would match the whole table, a sequential scan would
- * be the faster plan, and demanding an index would demand the planner be
- * wrong. Each target value below owns a small slice of the table, so an index
- * is genuinely the better answer and selectivity — not luck — is what the
- * assertion rides on.
- *
- * The one filter path not asserted here is `organizationId`, which lives in
- * the JSON `metadata` column. `metadata->>'organizationId' = ?` cannot use a
- * plain B-tree, and Prisma's schema cannot express the functional index that
- * would cover it, so it stays a documented limitation rather than a passing
- * test — see docs/performance/audit-query-benchmarks.md.
+ * `organizationId` is not asserted: it lives in the JSON `metadata` column and needs a functional
+ * index Prisma cannot express (see docs/performance/audit-query-benchmarks.md).
  */
 const ROW_COUNT = 5000;
 const TARGET_ROWS = 50;
@@ -204,15 +162,9 @@ describe.skipIf(!available)("audit query index usage (Issue 188)", () => {
   const prisma = createTestPrismaClient();
 
   /**
-   * Runs EXPLAIN and returns the plan as one string.
-   *
-   * Every parameter carries an explicit `::type` cast. `$queryRawUnsafe` binds
-   * parameters as `text`; without a cast, `WHERE actor_id = $1` compares a
-   * `uuid` column against `text`, which Postgres resolves by casting the
-   * *column* — producing a plan that reads `(actor_id)::text = ...` and
-   * seq-scans because an index on `actor_id` cannot answer a query about
-   * `actor_id::text`. Casting the parameter instead of the column is what
-   * makes this measure the schema.
+   * Runs EXPLAIN and returns the plan as one string. Every parameter has an explicit `::type` cast,
+   * because `$queryRawUnsafe` binds text and an uncast comparison casts the column instead,
+   * defeating its index.
    */
   async function explain(statement: string, ...params: unknown[]): Promise<string> {
     const rows = await prisma.$queryRawUnsafe<PlanRow[]>(statement, ...params);

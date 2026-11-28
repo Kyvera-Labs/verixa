@@ -5,19 +5,9 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { createTestPrismaClient, databaseAvailability } from "./helpers/database.js";
 
 /**
- * Adversarial input against the one raw-query call site in shipped code
- * (Issue 210).
- *
- * `withTenantContext` builds `SELECT set_config($1, $2, true)` from a Prisma
- * tagged template, which is the safe form — but "safe" is a claim about how the
- * driver serializes the statement, and the only way to *know* it is to hand it
- * something that would do damage if it were ever pasted into SQL text instead
- * of bound beside it.
- *
- * The unit version of this (`packages/identity/infrastructure/persistence/
- * prisma-tenant-context.spec.ts`) asserts the `{ text, values }` split. This
- * asserts what Postgres actually did with it, which is the assertion that would
- * survive someone changing the ORM as well as the query.
+ * Adversarial input against `withTenantContext`, the one raw-query call site in shipped code. The
+ * unit test checks the `{ text, values }` split; this checks what Postgres actually did with
+ * hostile values.
  */
 
 const available = await databaseAvailability();

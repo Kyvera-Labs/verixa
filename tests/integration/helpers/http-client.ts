@@ -3,15 +3,9 @@ import type { Container } from "@verixa/api/composition-root";
 import supertest from "supertest";
 
 /**
- * Boots a real `apps/api` Fastify instance in-process (no network port bound
- * by us — Supertest talks to the underlying HTTP server directly over a
- * local socket) and returns a Supertest agent bound to it, plus a `close()`
- * that tears the instance down cleanly.
- *
- * Deliberately imports `@verixa/api/app` (which only builds the app) rather
- * than `@verixa/api` (which is `server.ts` — it loads config and calls
- * `listen()` as a module-load side effect, which is exactly what a test
- * harness must avoid).
+ * Boots an in-process `apps/api` Fastify instance and returns a Supertest agent plus `close()`.
+ * Imports `@verixa/api/app`, which only builds the app, not `@verixa/api`, whose `server.ts` loads
+ * config and listens on import.
  */
 export interface HttpTestClient {
   /** A Supertest agent — call `.get("/path")`, `.post("/path")`, etc. */

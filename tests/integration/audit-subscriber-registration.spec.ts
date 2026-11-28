@@ -12,26 +12,13 @@ import { createTestPrismaClient, databaseAvailability } from "./helpers/database
 import { createHttpTestClient, type HttpTestClient } from "./helpers/http-client.js";
 
 /**
- * Audit subscribers are attached during composition (Issue 135).
+ * Proves audit subscribers are attached during composition:
  *
- * Two things are being proved here, and neither can be proved by a unit test
- * of a subscriber:
+ * 1. Every subscriber is registered: each event name is asserted against a composed container.
+ * 2. Registration happens before anything can publish: events are published on a container that
+ *    never had `buildApp` called, so lazy registration would fail.
  *
- * 1. **Every subscriber is registered.** A subscriber that exists, is fully
- *    tested inside its own package, and is never wired up records nothing. It
- *    fails as a missing row months later, not as a red test. Each event name
- *    below is asserted against a composed container: the row that is not
- *    registered is the test that fails.
- * 2. **Registration happens before anything can publish.** These tests publish
- *    on a container that never had `buildApp` called on it. If registration
- *    were deferred to app construction — the tempting lazy version — the
- *    publisher would accept the subscription after the first event had already
- *    been dropped, and nothing here would notice. The first event a process
- *    publishes is the one a late registration loses.
- *
- * The login test covers the other direction: the route's own audit writes reach
- * Postgres and chain correctly, so the log a verification run reads is the log
- * the HTTP layer produced.
+ * The login test also checks that the route's own audit writes reach Postgres and chain correctly.
  */
 
 const available = await databaseAvailability();

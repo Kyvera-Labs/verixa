@@ -26,39 +26,23 @@ import {
 } from "../integration/helpers/database.js";
 
 /**
- * Load test for the audit write path (Issue #134).
+ * Load test for the audit write path. Excluded from CI because shared-runner numbers are not
+ * comparable (see docs/performance/baseline.md); run with `pnpm test:load`.
  *
- * Not part of the default CI run: it exists to produce numbers, and numbers
- * taken from a shared CI runner are not comparable to anything (`docs/
- * performance/baseline.md` makes that argument at length). Run it explicitly
- * with `pnpm test:load`.
+ * 1. Round trips against an instrumented repository with a modelled latency: deterministic, and
+ *    shows that batching reduces statement count. The ratio and counts are the finding.
+ * 2. Postgres, when reachable: the only suite whose timings are real.
  *
- * Two suites, because they answer different questions:
- *
- * 1. **Round trips**, measured against an instrumented repository with a stated
- *    per-statement latency. Deterministic, runs anywhere, and shows *why*
- *    batching wins: the cost is per round trip, and batching changes how many
- *    there are. The latency is a model, so the millisecond column is a model
- *    too — it is the ratio and the statement counts that are the finding.
- * 2. **Postgres**, when one is reachable. This is where a real number comes
- *    from, and it is the only suite whose timings belong in a document.
- *
- * Both suites assert chain integrity as well as throughput. A faster audit log
- * whose hash chain does not verify is not an optimization.
+ * Both also verify chain integrity.
  */
 
 const EVENTS = 2_000;
 const BATCH_SIZE = 50;
 
 /**
- * The assumed cost of one database round trip, in milliseconds.
- *
- * A model, not a measurement — see `docs/performance/baseline.md` for why no
- * single number is portable. Its only job is to make the *statement count*
- * difference show up in a timing, and the assertion that actually matters is on
- * the counts, which are exact. On Windows `setTimeout(1)` lands nearer 10 ms
- * than 1, so treat the millisecond column as indicative and the ratio as the
- * finding.
+ * Modelled cost of one database round trip, in milliseconds. It only makes statement-count
+ * differences visible in timings; the exact counts are what is asserted. On Windows `setTimeout(1)`
+ * takes nearer 10 ms.
  */
 const MODELLED_STATEMENT_LATENCY_MS = 1;
 
